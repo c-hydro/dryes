@@ -42,7 +42,7 @@ from lib_dryes_downloader_hsaf_nc import read_data_nc
 from lib_dryes_downloader_hsaf_add_variable import compute_weighted_mean
 from lib_dryes_downloader_hsaf_io import write_file_tiff
 
-logging.getLogger("gdal").setLevel(logging.WARNING)
+logging.getLogger("rasterio").setLevel(logging.WARNING)
 
 # -------------------------------------------------------------------------------------
 

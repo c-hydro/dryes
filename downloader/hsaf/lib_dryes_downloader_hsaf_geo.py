@@ -18,7 +18,7 @@ import matplotlib.pylab as plt
 from lib_dryes_downloader_hsaf_generic import create_darray_2d
 #################################################################################
 
-logging.getLogger("gdal").setLevel(logging.WARNING)
+logging.getLogger("rasterio").setLevel(logging.WARNING)
 
 # -------------------------------------------------------------------------------------
 # Method to read tiff file

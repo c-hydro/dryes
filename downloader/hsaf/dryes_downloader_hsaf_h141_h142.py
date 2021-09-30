@@ -43,7 +43,6 @@ from lib_dryes_downloader_hsaf_add_variable import compute_weighted_mean
 from lib_dryes_downloader_hsaf_io import write_file_tiff
 
 logging.getLogger("rasterio").setLevel(logging.WARNING)
-
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
@@ -53,9 +52,8 @@ alg_version = '1.0.0'
 alg_release = '2021-09-29'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
-
-
 # -------------------------------------------------------------------------------------
+
 
 # -------------------------------------------------------------------------------------
 # Script Main
@@ -190,31 +188,34 @@ def main():
                 ' ---> Dataset resampled over domain ... ')
 
             # Export layers as geotiff
-            for da_index, da_name in enumerate(var_dset_clipped.data_vars.variables.mapping):
-                file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
-                file_name = \
-                        fill_tags2string(file_name, data_settings['algorithm']['template'],
-                             {'layer': da_name,
-                              'domain': data_settings['algorithm']['ancillary']['domain'],
-                              'outcome_datetime': time_run_step})
-                transform = (geo_target_transform.c, geo_target_transform.a, geo_target_transform.b,
-                             geo_target_transform.f, geo_target_transform.d, geo_target_transform.e)
-                write_file_tiff(file_name, var_dset_clipped[da_name].values,
-                                geo_target_wide, geo_target_high, transform, geo_target_proj)
-                logging.info(
-                    ' ---> Exported ... ' + file_name)
+            file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
+            file_name = \
+                fill_tags2string(file_name, data_settings['algorithm']['template'],
+                                 {'domain': data_settings['algorithm']['ancillary']['domain'],
+                                  'outcome_datetime': time_run_step})
+            file_data = None
+            file_metadata = None
+            for da_index, da_name in enumerate(list(var_dset_clipped.data_vars)):
+                if file_data is None:
+                    file_data = [var_dset_clipped[da_name].values]
+                    file_metadata = [{'var_name': da_name}]
+                else:
+                    file_data.append(var_dset_clipped[da_name].values)
+                    file_metadata.append({'var_name': da_name})
+
+            write_file_tiff(file_name, file_data,
+                            geo_target_wide, geo_target_high, geo_target_transform, geo_target_proj,
+                            file_metadata)
+            logging.info(' ---> Written ' + file_name + ' ... ')
 
             # Delete source file
             if data_settings['algorithm']['flags']['cleaning_dynamic_data_source']:
                 os.remove(path_source_global_w_filename)
-                logging.info(
-                ' ---> Deleted ' + path_source_global_w_filename + ' ... ')
+                logging.info(' ---> Deleted ' + path_source_global_w_filename + ' ... ')
 
     # close connection
     host.close()
-    logging.info(
-        ' ---> CLOSED connection to ' + str(urs_url) + ' ... ')
-
+    logging.info(' ---> CLOSED connection to ' + str(urs_url) + ' ... ')
     logging.info(' ---> TIME STEP: ' + str(time_run_step) + ' ... DONE')
 
     # -------------------------------------------------------------------------------------

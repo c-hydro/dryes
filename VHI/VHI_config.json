@@ -1,0 +1,27 @@
+{
+
+"NDVI_folder": "/home/sequia/drought/data/MODIS/MOD13A2/",
+"NDVI_prefix": "MODIS-NDVI",
+"NDVI_Stats_folder": "/home/sequia/drought/statistics/NDVI/",
+"NDVI_Monthly_folder": "/home/sequia/drought/products/VHI/NDVI-Monthly-Files/",
+"NDVI_valid_min": -0.2,
+"NDVI_valid_max": 1.0,
+
+"LST_folder": "/home/sequia/drought/data/MODIS/MOD11A2/",
+"LST_prefix": "MODIS-LST",
+"LST_Stats_folder": "/home/sequia/drought/statistics/LST/",
+"LST_Monthly_folder": "/home/sequia/drought/products/VHI/LST-Monthly-Files/",
+"LST_valid_min": 200,
+"LST_valid_max": 350,
+
+"Index_folder": "/home/sequia/drought/products/VHI",
+"Index_prefix": "VHI",
+
+"StartDate": "200101",
+"EndDate": "202202",
+
+"mask_file": "mask_bolivia.tif",
+
+"Agg_months": [1,2,3,6]
+
+}

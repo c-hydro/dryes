@@ -1,0 +1,19 @@
+{
+"DataBase": "/datos/stations/Amazonas_AC.accdb",
+"MaxStartYear": 1990,
+"MinEndYear": 2019,
+"MinDataDens": 0.8,
+"Q95Table": "/datos/STATS/LFI/Amazonas_Q95.csv",
+"EventTablesFolder": "/datos/STATS/LFI/Events",
+"Index_folder": "/datos/productos/LFI",
+"Qday_folder": "/datos/productos/Q",
+"Q95_folder": "/datos/productos/Q95",
+"StartMonth4LFI" : 1,
+"StartYear4LFI": 1990,
+"EndMonth4LFI" : 5,
+"EndYear4LFI": 2020,
+"StartMonthReport" : 1,
+"StartYearReport": 2011,
+"EndMonthReport" : 5,
+"EndYearReport": 2020
+}

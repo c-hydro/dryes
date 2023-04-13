@@ -1,0 +1,17 @@
+{
+
+"Products_folder": "/home/sequia/drought/products",
+
+"StartDate": "200702",
+
+"EndDate": "202204",
+
+"Soilmoisture_source": "HSAF",
+
+"INDEX":         ["SPEI","SWDI","VHI", "FAPAR"],
+
+"accumulation": [ "03",  "02", "01",  "01" ],
+
+"threshold":  [ -1.3,    -1,  0.2,  -1.5]
+
+}

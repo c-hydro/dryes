@@ -1,0 +1,9 @@
+{
+"origFld": "/home/sequia/drought/data/HSAF/soil_moisture_unmask",
+"input_name": "hsaf-toplayer_",
+"destFld": "/home/sequia/drought/data/HSAF/soil_moisture",
+"output_name": "hsaf-toplayer_",
+"mask": "/home/sequia/drought/code/support_geofiles/ReferenceGrid_BOL_SalaresMask.tif",
+"start_date": 20140101,
+"end_date": 20210930
+}

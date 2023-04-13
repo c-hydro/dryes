@@ -1,0 +1,21 @@
+{
+
+"Prec_folder": "/home/sequia/drought/data/PERSIANN-MERGE",
+
+"Prec_prefix": "PERSIANN",
+
+"Stats_folder": "/home/sequia/drought/statistics/SPI",
+
+"Index_folder": "/home/sequia/drought/products/SPI",
+
+"Index_prefix": "SPI",
+
+"mask_file": "mask_bolivia.tif",
+
+"StartDate": "198306",
+
+"EndDate": "202204",
+
+"Agg_months": [1,2,3,4,6,12]
+
+}

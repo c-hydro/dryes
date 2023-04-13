@@ -1,0 +1,1 @@
+{"origFld": "/home/sequia/drought/data/HSAF/h27","input_name": "bol-h27_","destFld": "/home/sequia/drought/data/HSAF/h27","output_name": "h27-SM_","start_date": 20070101,"end_date": 20141231,"reference_grid": "ReferenceGrid_BOL.tif","interp_method": "nearest","CLEAN_TEMP": 1}

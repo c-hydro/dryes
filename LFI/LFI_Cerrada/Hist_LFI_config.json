@@ -1,0 +1,13 @@
+{
+"DataBase": "/home/sequia/drought/data/STATIONS/HYDRACCESS/Bdh_Cerrada.mdb",
+"MaxStartYear": 1990,
+"MinEndYear": 2016,
+"MinDataDens": 0.9,
+"Q95Table": "/home/sequia/drought/code/LFI/LFI_Cerrada/datos/STATS/LFI/Cerrada_Q95.csv",
+"EventTablesFolder": "/home/sequia/drought/code/LFI/LFI_Cerrada/datos/STATS/LFI/Events",
+"Index_folder": "/home/sequia/drought/products/LFI/Cerrada",
+"StartMonth4LFI" : 2,
+"StartYear4LFI": 2011,
+"EndMonth4LFI" : 8,
+"EndYear4LFI": 2011
+}

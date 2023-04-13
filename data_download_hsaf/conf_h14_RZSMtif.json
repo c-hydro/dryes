@@ -1,0 +1,12 @@
+{
+"origFld": "/home/sequia/drought/data/HSAF/h14",
+"input_name": "bol-h14_",
+"destFld": "/home/sequia/drought/data/HSAF/h14",
+"output_name": "h14-SM_",
+"start_date": 20210216,
+"end_date": 20210930,
+"reference_grid": "ReferenceGrid_BOL.tif",
+"mask": "/home/sequia/drought/code/support_geofiles/ReferenceGrid_BOL_SalaresMask.tif",
+"interp_method": "nearest",
+"CLEAN_TEMP": 1
+}

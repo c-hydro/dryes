@@ -1,0 +1,25 @@
+{
+
+"SoilMoisture_folder": "/home/sequia/drought/data/HSAF/soil_moisture",
+
+"SoilMoisture_prefix": "hsaf-SM",
+
+"Index_folder": "/home/sequia/drought/products/SWDI",
+
+"Stats_folder": "/home/sequia/drought/statistics/SWDI-HSAF",
+
+"Geo_folder": "/home/sequia/drought/code/support_geofiles",
+
+"Source_prefix": "HSAF",
+
+"Index_prefix": "HSAF-soil-moisture",
+
+"Index2_prefix": "SWDI",
+
+"StartDate": "200701",
+
+"EndDate": "202204",
+
+"Agg_months": [1,2,3,6]
+
+}

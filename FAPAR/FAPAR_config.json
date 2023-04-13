@@ -1,0 +1,14 @@
+{
+"FAPAR_folder": "/home/sequia/drought/data/MODIS/MOD15A2H/",
+"FAPAR_prefix": "MODIS-FAPAR",
+"Stats_folder": "/home/sequia/drought/statistics/FAPAR/",
+"Monthly_folder": "/home/sequia/drought/products/FAPAR/FAPAR-Monthly-Files",
+"Valid_min": 0.0,
+"Valid_max": 1.0,
+"Index_folder": "/home/sequia/drought/products/FAPAR",
+"Index_prefix": "FAPAR",
+"mask_file": "mask_bolivia.tif",
+"StartDate": "200101",
+"EndDate": "202204",
+"Agg_months": [1,2,3,6]
+}

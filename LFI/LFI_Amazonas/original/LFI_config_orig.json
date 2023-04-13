@@ -1,0 +1,13 @@
+{
+"DataBase": "/home/andrea/CIMA/UTILITY_PycharmProjects/CIMA/PROJ_bolivia_siccita/LFI/Bdh_Amazonas2.accdb",
+"MaxStartYear": 1990,
+"MinEndYear": 2016,
+"MinDataDens": 0.9,
+"Q95Table": "/home/andrea/CIMA/UTILITY_PycharmProjects/CIMA/PROJ_bolivia_siccita/LFI/datos/STATS/LFI/Amazonas_Q95.csv",
+"EventTablesFolder": "/home/andrea/CIMA/UTILITY_PycharmProjects/CIMA/PROJ_bolivia_siccita/LFI/datos/STATS/LFI/Events",
+"Index_folder": "/home/andrea/CIMA/UTILITY_PycharmProjects/CIMA/PROJ_bolivia_siccita/LFI/datos/productos/LFI",
+"StartMonth4LFI" : 2,
+"StartYear4LFI": 2011,
+"EndMonth4LFI" : 8,
+"EndYear4LFI": 2011
+}

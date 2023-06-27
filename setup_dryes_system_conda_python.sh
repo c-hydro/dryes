@@ -3,8 +3,8 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='FP ENVIRONMENT - PYTHON3 LIBRARIES FOR DRYES PACKAGE - CONDA'
-script_version="1.6.4"
-script_date='2023/04/13'
+script_version="1.6.5"
+script_date='2023/06/27'
 
 # Define file reference path according with https link(s) --> https://repo.anaconda.com/miniconda/
 fp_env_file_miniconda='https://repo.continuum.io/miniconda/Miniconda3-py39_23.1.0-1-Linux-x86_64.sh'
@@ -12,7 +12,7 @@ fp_env_file_miniconda='https://repo.continuum.io/miniconda/Miniconda3-py39_23.1.
 # Argument(s) default definition(s)
 fp_env_tag_default='dryes'
 
-fp_env_folder_root_default=$HOME'/conda_env/'
+fp_env_folder_root_default=$HOME'/drought/DRYES/envs/'
 fp_env_file_reference_default='%ENV_TAG_settings'
 fp_env_folder_libraries_default='%ENV_TAG_libraries'
 
@@ -175,15 +175,19 @@ else
 	echo " =====> CONDA INSTALLATION ... "
 	
 	echo " ======> CONDA-DEFAULT CHANNEL INSTALLATION ... "
-	conda create --yes --name $fp_env_folder_libraries numpy scipy pandas rasterio netCDF4 cython xarray=0.18.0 bottleneck dask pip python=3.9
+	conda create --yes --name $fp_env_folder_libraries numpy scipy pandas gdal matplotlib rasterio netCDF4 cython xarray=0.18.0 bottleneck dask pip python=3.9
 	echo " ======> CONDA-DEFAULT CHANNEL INSTALLATION ... DONE"
 
-
 	echo " =====> CONDA INSTALLATION ... DONE"
-	
+
 fi
 
 echo " ====> INSTALL PYTHON LIBRARIES ... DONE!"
+# ----------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------
+# Add env parent directory to conda envs_dirs
+conda config --append envs_dirs $fp_env_folder_root
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------

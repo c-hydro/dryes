@@ -1,0 +1,94 @@
+{
+  "ancillary": {
+    "tag_name_list":
+	["MCM"]
+  },
+  "template_string": {
+    "tag_name": "tag_name_string"
+  },
+  "template_time": {
+    "dset_datetime_src": "%Y%m%d%H%M%S",
+    "dset_sub_path_src": "%Y/%m/%d",
+    "dset_datetime_dst": "%Y%m%d%H%M%S",
+    "dset_sub_path_dst": "%Y/%m/%d"
+  },
+  "method": {
+    "__comment__": "mode: [local2remote, remote2local, local2local]",
+    "mode": "remote2local",
+    "ftp": {
+      "settings": {
+        "machine_host": "",
+        "machine_user": "",
+        "machine_pwd": "",
+        "machine_folder": ""
+      },
+      "command_ancillary": "",
+      "command_exec": "",
+      "command_line": ""
+    },
+    "rsync": {
+      "settings": {
+      	"machine_host": "",
+        "machine_user": ""
+      },
+      "command_ancillary": {
+        "create_folder": "ssh {machine_user}@{machine_host} mkdir -p {folder_name_dst}",
+        "find_file": "ssh {machine_user}@{machine_host} test -f {folder_name_dst}/{file_name_dst}",
+        "uncompress_file": "ssh {machine_user}@{machine_host} gzip -fd {folder_name_dst}/{file_name_dst}",
+        "remove_file": "ssh {machine_user}@{machine_host} rm {folder_name_dst}/{file_name_dst}"
+      },
+      "command_exec": "rsync -avr --progress",
+      "command_line": "{folder_name_src}/{file_name_src} {machine_user}@{machine_host}:{folder_name_dst}/{file_name_dst}"
+    },
+    "scp": {
+      "settings": {
+      	"machine_host": "",
+        "machine_user": ""
+      },
+      "command_ancillary": {
+        "find_file": "ssh {machine_user}@{machine_host} test -f {folder_name_dst}/{file_name_dst}",
+        "uncompress_file": "",
+        "remove_file": ""
+      },
+      "command_exec": "scp",
+      "command_line": "{machine_user}@{machine_host}:{folder_name_src}/{file_name_src} {folder_name_dst}/{file_name_dst}"
+    }
+  },
+  "time": {
+    "time_start": null,
+    "time_end": null,
+    "time_period": 24,
+    "time_run" : null,
+    "time_frequency": "H",
+    "time_rounding": "D",
+    "time_mcm_change": "2020-07-01 00:00"
+  },
+  "log": {
+  	"folder_name": "/share/drought/DRYES/data/Italia/input/P/log",
+  	"file_name": "mcm_datatransfer_{date}_log.txt"
+  },
+  "source": {
+    "datasets_mcm_first": {
+      "datasets_mcm": {
+        "folder_name": "/home/silvestro/MCM/geotiff_storiaBUFR/{dset_sub_path_src}",
+        "file_name": "MCM_BUFR_{dset_datetime_src}.tif",
+        "method": "scp",
+        "resample": "True"
+      }
+    },
+    "datasets_mcm_latest": {
+      "datasets_mcm": {
+        "folder_name": "/home/silvestro/MCM/geotiff/{dset_sub_path_src}",
+        "file_name": "MCM_{dset_datetime_src}.tif",
+        "method": "scp",
+        "resample": "False"
+      }
+    }
+  },
+  "destination": {
+    "datasets_mcm": {
+      "folder_name": "/share/drought/DRYES/data/Italia/input/P/hourly/{dset_sub_path_dst}",
+      "file_name": "MCM_{dset_datetime_dst}.tif"
+    }
+  }
+}

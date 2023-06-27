@@ -1,0 +1,107 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Tool MCM processing converter",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230627]",
+      "project-info": "DRYES",
+      "algorithm": "MCM converter tool"
+    },
+    "ancillary": {},
+    "flags": {
+      "cleaning_dynamic_ancillary": true,
+      "cleaning_dynamic_data": true,
+      "cleaning_dynamic_tmp": true
+    },
+    "template": {
+      "source_file_datetime_generic": "%Y%m%d%H%M%S",
+      "source_folder_datetime_generic": "%Y/%m/%d/",
+      "source_ancillary_file_datetime_generic": "%Y%m%d%H%M%S",
+      "source_ancillary_folder_datetime_generic": "%Y/%m/%d/",
+      "destination_ancillary_file_datetime_generic": "%Y%m%d",
+      "destination_ancillary_folder_datetime_generic": "%Y/%m",
+      "destination_file_datetime_generic": "%Y%m%d",
+      "destination_folder_datetime_generic": "%Y/%m/"
+    }
+  },
+  "data": {
+    "static" : {
+      "source": {
+        "Terrain": {
+          "folder_name": "/share/drought/DRYES/data/Italia/static/P/",
+          "file_name": "MCM_mask.tif",
+          "file_type" : "tiff"
+        },
+        "Grid": {
+          "xll": null,
+          "yll": null,
+          "res": null,
+          "nrows": null,
+          "ncols": null
+        }
+      },
+      "destination": {
+        "Terrain": {
+          "folder_name": "/share/drought/DRYES/data/Italia/static/P/",
+          "file_name": "MCM_mask.tif",
+          "file_type" : "tiff"
+        },
+        "Grid": {
+          "xll": null,
+          "yll": null,
+          "res": null,
+          "nrows": null,
+          "ncols": null
+        }
+      }
+    },
+    "dynamic": {
+      "source": {
+        "__comment__": "file_type: binary, netcdf, tiff",
+        "Rain": {
+          "var_compute": true,
+          "var_name": "MCM",
+          "var_scale_factor": 1,
+          "folder_name": "/share/drought/DRYES/data/Italia/input/P/hourly/{source_folder_datetime_generic}",
+          "file_name": "MCM_{source_file_datetime_generic}.tif",
+          "file_compression": false,
+          "file_geo_reference": "Terrain",
+          "file_type": "tiff",
+          "file_coords": null,
+          "file_frequency": "H"
+        }
+      },
+      "ancillary": {
+        "hourly": {
+          "folder_name": "/share/drought/DRYES/data/Italia/input/P/ancillary/hourly/{source_ancillary_folder_datetime_generic}",
+          "file_name": "mcm.hourly.{source_ancillary_file_datetime_generic}.workspace"
+        },
+        "accumulated": {
+          "folder_name": "/share/drought/DRYES/data/Italia/input/P/ancillary/hourly/daily/{destination_ancillary_folder_datetime_generic}",
+          "file_name": "mcm.daily.{destination_ancillary_file_datetime_generic}.workspace"
+        }
+      },
+      "destination": {
+        "folder_name": "/share/drought/DRYES/data/Italia/output/P/{destination_folder_datetime_generic}",
+        "file_name": "MCM_{destination_file_datetime_generic}.tif",
+        "file_geo_reference": "Terrain",
+        "file_compression": false
+      }
+    }
+  },
+  "log": {
+    "folder_name": "/share/drought/DRYES/data/Italia/input/P/log",
+    "file_name": "mcm_converter_{date}_log.txt",
+    "file_history": true
+  },
+  "time": {
+    "time_start": null,
+    "time_end": null,
+    "time_run": null,
+    "time_period": 360,
+    "time_frequency": "H",
+    "time_rounding": "D"
+  }
+}
+

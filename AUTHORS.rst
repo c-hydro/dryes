@@ -9,4 +9,5 @@ Developers
 * Fabio Delogu <fabio.delogu@cimafoundation.org>
 * Giulia Bruno <giulia.bruno@cimafoundation.org>
 * Simone Gabellani <simone.gabellani@cimafoundation.org>
+* Michel Isabellon <michel.isabellon@cimafoundation.org>
 

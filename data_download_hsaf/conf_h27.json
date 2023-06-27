@@ -1,1 +1,0 @@
-{"destFld": "/home/sequia/drought/data/HSAF/h27","start_date": 20120701,"end_date": 20141231,"output_name": ["bol-h27_"],"bbox": [-70.5,-57,-24,-9],"FTP_URL": "ftphsaf.meteoam.it","FTP_USR": "sgabellani_r","FTP_PWD": "gabellaniS334","FTP_DIR": "/products/h27/h27","LOG_DIR": "/home/sequia/drought/code/data_download_hsaf/log","CLEAN_GRIB": 1}

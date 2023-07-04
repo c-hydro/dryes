@@ -1,0 +1,56 @@
+{
+  "algorithm": {
+    "flags":{
+      },
+    "general": {
+      "title": "Snow-covered area anomaly by mountain regions",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230629]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d%H%M",
+      "source_datetime": "%Y%m%d",
+      "outcome_sub_path_time": "%Y/%m/%d",
+      "outcome_sub_path_time_yr": "%Y/",
+      "outcome_datetime": "%Y%m%d",
+      "layer": "string_layer",
+      "domain": "string_domain",
+      "aggregation": "string_aggregation",
+      "month": "string_month"
+    }
+  },
+  "data": {
+    "input": {
+      "folder": "/home/SCA_h10/{source_gridded_sub_path_time}",
+      "filename": "h10_{source_datetime}_day_merged.H5.gz",
+      "layer_data_name": "SC",
+      "layer_data_lat": "LAT",
+      "layer_data_lon": "LON",
+      "lat_lon_scale_factor": 100,
+      "no_data_flag_input": 233,
+      "snow_flag_input": 0,
+      "ground_flag_input": 85,
+      "mountain_mask": "/home/MASK.tif",
+      "table_mountain_groups": "/home/LIST.csv"
+    },
+    "outcome": {
+      "folder_SCA_resampled": "/home/SCA_h10/{outcome_sub_path_time_yr}",
+      "filename_SCA_resampled": "h10_resampled_{outcome_datetime}.tif",
+      "path_output_results": "/home/output/{outcome_sub_path_time}/SCA_anomaly_{domain}_{outcome_datetime}_h10_Europe.png"
+    },
+    "log": {
+      "filename": "dryes_SCA_realtime.txt",
+      "folder": "/home/log/"
+    }
+  },
+  "index_info": {
+    "days_moving_mean_SCA": 10,
+    "min_data_for_mocing_mean": 3,
+    "month_start_WY": 9,
+    "max_no_data_in_mount_region": 0.3
+  }
+}

@@ -13,7 +13,7 @@ General command line:
 python dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
-20230621 (1.0.0) --> Development started on the first release
+20230621 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ from dryes_SSMI_tiff import write_file_tiff
 alg_project = 'DRYES'
 alg_name = 'SSMI DROUGHT METRIC'
 alg_version = '1.0.0'
-alg_release = '2023-06-21'
+alg_release = '2023-06-22'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'

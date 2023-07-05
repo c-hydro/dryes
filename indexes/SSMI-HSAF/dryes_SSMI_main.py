@@ -13,7 +13,7 @@ General command line:
 python dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
-20230622 (1.0.0) --> First release
+20230621 (1.0.0) --> Development started on the first release
 """
 # -------------------------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ from dryes_SSMI_tiff import write_file_tiff
 alg_project = 'DRYES'
 alg_name = 'SSMI DROUGHT METRIC'
 alg_version = '1.0.0'
-alg_release = '2023-06-22'
+alg_release = '2023-06-21'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -246,12 +246,12 @@ def main():
                                     var_name_geo_y='lat',
                                     search_radius_fill_nan = data_settings['index_info']['search_radius_fill_nan'])
         SSMI_filled = SSMI_filled.values
-        logging.info(' --> SSMI nan filled for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)
+        logging.info(' --> SSMI nan filled for aggregation ' + str(agg_window))
 
         # smoothing
         kernel = Gaussian2DKernel(x_stddev=data_settings['index_info']['stddev_kernel_smoothing'])
         SSMI_filled_smoothed = convolve(SSMI_filled, kernel)
-        logging.info(' --> SSMI smoothed for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)
+        logging.info(' --> SSMI smoothed for aggregation ' + str(agg_window))
         # plt.figure()
         # plt.imshow(SSMI_filled_smoothed)
         # plt.colorbar()
@@ -261,7 +261,7 @@ def main():
         # mask before saving (if needed)
         if data_settings['algorithm']['flags']['mask_results']:
             SSMI_filled_smoothed = SSMI_filled_smoothed*da_domain_in.values
-            logging.info(' --> SSMI masked for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)
+            logging.info(' --> SSMI masked for aggregation ' + str(agg_window))
 
         # plt.figure()
         # plt.imshow(SSMI_filled_smoothed)

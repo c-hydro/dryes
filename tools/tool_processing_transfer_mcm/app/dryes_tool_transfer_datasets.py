@@ -27,11 +27,11 @@ import glob
 from copy import deepcopy
 from datetime import datetime
 
-from lib.lib_utils_time import set_time
-from lib.lib_info_args import logger_name, time_format_algorithm
-from lib.lib_info_args import get_args
-from lib.lib_utils_logging import set_logging_file
-from lib.lib_data_io_json import read_file_settings
+from tools.tool_processing_transfer_mcm.lib.lib_utils_time import set_time
+from tools.tool_processing_transfer_mcm.lib.lib_info_args import logger_name, time_format_algorithm
+from tools.tool_processing_transfer_mcm.lib.lib_info_args import get_args
+from tools.tool_processing_transfer_mcm.lib.lib_utils_logging import set_logging_file
+from tools.tool_processing_transfer_mcm.lib.lib_data_io_json import read_file_settings
 
 # Logging
 log_stream = logging.getLogger(logger_name)

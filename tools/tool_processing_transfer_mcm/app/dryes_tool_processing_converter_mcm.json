@@ -78,7 +78,7 @@
           "file_name": "mcm.hourly.{source_ancillary_file_datetime_generic}.workspace"
         },
         "accumulated": {
-          "folder_name": "/share/drought/DRYES/data/Italia/input/P/ancillary/hourly/daily/{destination_ancillary_folder_datetime_generic}",
+          "folder_name": "/share/drought/DRYES/data/Italia/input/P/ancillary/daily/{destination_ancillary_folder_datetime_generic}",
           "file_name": "mcm.daily.{destination_ancillary_file_datetime_generic}.workspace"
         }
       },
@@ -91,7 +91,7 @@
     }
   },
   "log": {
-    "folder_name": "/share/drought/DRYES/data/Italia/input/P/log",
+    "folder_name": "/home/drought/DRYES/log/Italia/P/",
     "file_name": "mcm_converter_{date}_log.txt",
     "file_history": true
   },

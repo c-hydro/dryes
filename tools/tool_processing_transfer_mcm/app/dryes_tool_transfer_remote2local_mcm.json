@@ -46,7 +46,7 @@
         "machine_user": ""
       },
       "command_ancillary": {
-        "find_file": "ssh {machine_user}@{machine_host} test -f {folder_name_dst}/{file_name_dst}",
+        "find_file": "",
         "uncompress_file": "",
         "remove_file": ""
       },
@@ -64,7 +64,7 @@
     "time_mcm_change": "2020-07-01 00:00"
   },
   "log": {
-  	"folder_name": "/share/drought/DRYES/data/Italia/input/P/log",
+  	"folder_name": "/home/drought/DRYES/log/Italia/P/",
   	"file_name": "mcm_datatransfer_{date}_log.txt"
   },
   "source": {

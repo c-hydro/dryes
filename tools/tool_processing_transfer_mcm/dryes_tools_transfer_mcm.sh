@@ -7,13 +7,13 @@ script_version="1.0.0"
 script_date='2023/06/15'
 
 # Virtualenv default definition(s)
-virtualenv_folder='/home/michel/workspace/python/DRYES/conda_env/'
+virtualenv_folder=$HOME/DRYES/envs/
 virtualenv_name='dryes_libraries'
 
 # Default script folder(s)
-script_folder='/home/michel/workspace/python/DRYES/dryes_dev/dryes/tools/tool_processing_transfer_mcm/app/'
+script_folder=$HOME/DRYES/script/
 configuration_folder=$script_folder # '/home/dte/utils/'
-package_folder='/home/michel/workspace/python/DRYES/dryes_dev/dryes/'
+package_folder=$HOME/DRYES/libraries/dryes/
 
 # Execution example:
 # ./dryes_tools_transfer_mcm.sh -t 2020-01-01

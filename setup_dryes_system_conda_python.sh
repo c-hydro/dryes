@@ -12,7 +12,7 @@ fp_env_file_miniconda='https://repo.continuum.io/miniconda/Miniconda3-py39_23.1.
 # Argument(s) default definition(s)
 fp_env_tag_default='dryes'
 
-fp_env_folder_root_default=$HOME'/DRYES/envs/'
+fp_env_folder_root_default=$HOME/DRYES/envs/
 fp_env_file_reference_default='%ENV_TAG_settings'
 fp_env_folder_libraries_default='%ENV_TAG_libraries'
 

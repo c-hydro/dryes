@@ -3,8 +3,8 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='FP ENVIRONMENT - PYTHON3 LIBRARIES FOR DRYES PACKAGE - CONDA'
-script_version="1.6.5"
-script_date='2023/06/27'
+script_version="1.6.6"
+script_date='2023/07/11'
 
 # Define file reference path according with https link(s) --> https://repo.anaconda.com/miniconda/
 fp_env_file_miniconda='https://repo.continuum.io/miniconda/Miniconda3-py39_23.1.0-1-Linux-x86_64.sh'
@@ -12,7 +12,7 @@ fp_env_file_miniconda='https://repo.continuum.io/miniconda/Miniconda3-py39_23.1.
 # Argument(s) default definition(s)
 fp_env_tag_default='dryes'
 
-fp_env_folder_root_default=$HOME/DRYES/envs/
+fp_env_folder_root_default='/home/drought/DRYES/envs/dryes_python3/'
 fp_env_file_reference_default='%ENV_TAG_settings'
 fp_env_folder_libraries_default='%ENV_TAG_libraries'
 
@@ -187,7 +187,7 @@ echo " ====> INSTALL PYTHON LIBRARIES ... DONE!"
 
 # ----------------------------------------------------------------------------------------
 # Add env parent directory to conda envs_dirs
-conda config --append envs_dirs $fp_env_folder_root
+# conda config --append envs_dirs $fp_env_folder_root
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------

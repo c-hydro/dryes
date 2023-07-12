@@ -22,7 +22,7 @@ package_folder=$HOME/DRYES/libraries/dryes/
 #-----------------------------------------------------------------------------------------
 # Get file information
 script_file_transfer=${script_folder}'dryes_tool_transfer_datasets.py'
-settings_file_transfer=${configuration_folder}'dryes_tool_transfer_remote2local_mcm.json'
+settings_file_transfer=${configuration_folder}'dryes_tool_transfer_remote2local_mcm_local.json'
 
 script_file_converter=${script_folder}'dryes_tool_processing_converter.py'
 settings_file_converter=${configuration_folder}'dryes_tool_processing_converter_mcm.json'

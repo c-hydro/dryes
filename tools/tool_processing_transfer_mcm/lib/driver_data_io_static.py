@@ -13,12 +13,12 @@ import logging
 import os
 from copy import deepcopy
 
-from lib.lib_data_io_ascii import read_data_grid, \
+from tools.tool_processing_transfer_mcm.lib.lib_data_io_ascii import read_data_grid, \
     create_data_grid, extract_data_grid
-from lib.lib_data_io_tiff import read_data_tiff, extract_tiff_grid
-from lib.lib_data_io_nc import read_data_nc, parser_data_nc
+from tools.tool_processing_transfer_mcm.lib.lib_data_io_tiff import read_data_tiff, extract_tiff_grid
+from tools.tool_processing_transfer_mcm.lib.lib_data_io_nc import read_data_nc, parser_data_nc
 from tools.tool_processing_transfer_mcm.lib.lib_info_args import logger_name, zip_extension
-from lib.lib_utils_gzip import unzip_filename
+from tools.tool_processing_transfer_mcm.lib.lib_utils_gzip import unzip_filename
 
 # Logging
 log_stream = logging.getLogger(logger_name)

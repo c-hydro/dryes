@@ -16,11 +16,11 @@ from copy import deepcopy
 import numpy as np
 import pandas as pd
 import xarray as xr
-from lib.lib_data_io_tiff import read_data_tiff, set_file_tiff, write_file_tiff
+from tools.tool_processing_transfer_mcm.lib.lib_data_io_tiff import read_data_tiff, set_file_tiff, write_file_tiff
 from tools.tool_processing_transfer_mcm.lib.lib_info_args import logger_name, \
     time_format_algorithm
-from lib.lib_utils_interp import active_var_interp, apply_var_interp
-from lib.lib_utils_io import read_obj, write_obj, create_dset
+from tools.tool_processing_transfer_mcm.lib.lib_utils_interp import active_var_interp, apply_var_interp
+from tools.tool_processing_transfer_mcm.lib.lib_utils_io import read_obj, write_obj, create_dset
 from tools.tool_processing_transfer_mcm.lib.lib_utils_system import fill_tags2string, make_folder
 
 # Logging

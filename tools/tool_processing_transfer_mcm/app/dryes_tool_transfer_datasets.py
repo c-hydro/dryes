@@ -105,10 +105,14 @@ def main():
     time_change = settings_data['time']['time_mcm_change']
 
     time_change = datetime.strptime(time_change, '%Y-%m-%d %H:%M')
-    time_run = datetime.strptime(time_run_args, '%Y-%m-%d %H:%M')
+
+    if time_end is not None:
+        time_check = datetime.strptime(time_end, '%Y-%m-%d')
+    else:
+        time_check = datetime.strptime(time_run_args, '%Y-%m-%d %H:%M')
 
     # Configure datasets information
-    if time_run > time_change:
+    if time_check > time_change:
         dataset_type = 'datasets_mcm_latest'
     else:
         dataset_type = 'datasets_mcm_first'

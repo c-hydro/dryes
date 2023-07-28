@@ -1,0 +1,55 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Algorithm to compute fractional-snow-cover anomaly from H12",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230727]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation",
+      "path_cdo": "/home/cdo"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_datetime": "%Y%m%d",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d%H%M"
+    }
+  },
+  "data": {
+    "input": {
+      "folder": "/home/FSC_h12/{source_gridded_sub_path_time}",
+      "filename": "h12_{source_datetime}_day_merged.grib2.gz",
+      "layer_data_name": "rssc",
+      "____note": "layer_data_name is NOT the same as the original grib file, but the automatically generated name in the temp nc file created by CDO",
+      "layer_data_lat": "lat",
+      "layer_data_lon": "lon",
+      "lat_lon_scale_factor": 1,
+      "valid_range": [0, 100],
+      "folder_FSC_resampled": "/home/{outcome_sub_path_time}",
+      "filename_FSC_resampled": "h12_resampled_{outcome_datetime}.tif"
+    },
+    "outcome": {
+      "grid_out": "/home/MASK.tif",
+      "path_output_results": "/home/output_maps/{outcome_sub_path_time}",
+      "filename_output_results": "h12_anomay_{outcome_datetime}.tif",
+      "limits_anomaly_output": [-1000, 1000]
+    },
+    "log": {
+      "filename": "dryes_FSC_realtime.txt",
+      "folder": "/home/log/"
+    }
+  },
+   "time": {
+    "time_run": null,
+    "time_start": null,
+    "time_end": null,
+    "time_period": 2,
+    "time_frequency": "D",
+    "time_rounding": "D",
+     "time_reverse": false
+  },
+  "index_info": {
+    "days_moving_mean_FSC": 15
+  }
+}

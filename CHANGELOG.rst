@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.2.0 [2023-07-27]
+**************************
+- Updated aggregator for daily MCM precipitation under tools/tool_processing_transfer_mcm
+- Added a new version of the H-SAF fractional snow cover (FSC) index
+
 Version 2.1.0 [2023-07-04]
 **************************
 - Major directory restructuring

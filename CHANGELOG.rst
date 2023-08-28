@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.3.0 [2023-08-28]
+**************************
+- Added a spatialization tool for air temperature based on linear regression of in-situ data over elevation by homogeneous regions
+
 Version 2.2.0 [2023-07-27]
 **************************
 - Updated aggregator for daily MCM precipitation under tools/tool_processing_transfer_mcm

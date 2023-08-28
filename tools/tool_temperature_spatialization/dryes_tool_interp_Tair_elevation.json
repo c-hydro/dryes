@@ -1,0 +1,72 @@
+{
+  "algorithm": {
+    "info_drops":{
+      "url": "",
+      "aggregation_seconds": 3600,
+      "sensor_class": "",
+      "timedelta_spinup_extraction": 2,
+      "group": "",
+      "invalid_flags": [-9998, -9999],
+      "ntry": 20,
+      "sec_sleep": 5
+    },
+    "general": {
+      "title": "Algorithm to spatialize in-situ air temperature",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230828]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_climatology_sub_path_time": "%m",
+      "source_gridded_datetime": "%Y%m%d%H%M",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d%H%M",
+      "layer": "string_layer",
+      "domain": "string_domain"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "input_dem": "",
+      "input_homogeneous_regions": "",
+      "__note__": "homogeneous regions are defined as positive int values. All other values will be filtered out!",
+      "__note2__": "all above rasters are assumed to have the same grid and resolution",
+      "filters": {
+        "threshold_climatology": 25,
+        "threshold_elevation": 20,
+        "path_climatologic_maps": "",
+        "minimum_number_sensors_in_region": 10,
+        "minimum_r2": 0.25
+      },
+      "residuals": {
+        "path_map_tmp": "",
+        "interp_method": "idw",
+        "interp_radius_x": 1,
+        "interp_radius_y": 1,
+        "n_cpu": 3,
+        "stddev_kernel_smoothing": 2
+      }
+    },
+    "outcome": {
+      "folder": "",
+      "filename": ""
+    },
+    "log": {
+      "filename": "",
+      "folder": ""
+    }
+  },
+   "time": {
+    "time_run": null,
+    "time_start": null,
+    "time_end": null,
+    "time_period": 6600,
+    "time_frequency": "H",
+    "time_rounding": "H",
+     "time_reverse": false
+  }
+}

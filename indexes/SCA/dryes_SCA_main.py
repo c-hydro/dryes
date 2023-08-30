@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - Snow-Covered Area Anomaly by mountain regions
-__date__ = '20230629'
-__version__ = '1.0.0'
+__date__ = '20230830'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_SCA_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20230830 (1.0.1) --> Corrected minor bug in the management of leap yrs
 20230629 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -43,8 +44,8 @@ from dryes_SCA_utils_generic import fill_tags2string
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'SCA DROUGHT METRIC'
-alg_version = '1.0.0'
-alg_release = '2023-06-29'
+alg_version = '1.0.1'
+alg_release = '2023-08-30'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -147,7 +148,7 @@ def main():
         if list_mountains.name_mm.str.contains(columnName).any():
             # we check if columnName is one of the mountain groups for which we want to compute statistics
 
-            if (time_arg_now_pd.month == 2) &  (time_arg_now_pd.day == 2) is False:
+            if (time_arg_now_pd.month == 2) &  (time_arg_now_pd.day == 29) is False:
                 # if it's 29/2, we skip computations (we do not support 29/2 during leap yrs)
 
                 logging.info(' --> Working on ... ' + columnName)

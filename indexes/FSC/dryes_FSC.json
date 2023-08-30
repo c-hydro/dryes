@@ -4,7 +4,7 @@
       "title": "Algorithm to compute fractional-snow-cover anomaly from H12",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20230727]",
+      "history": "1.0.1 [20230830]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation",
       "path_cdo": "/home/cdo"

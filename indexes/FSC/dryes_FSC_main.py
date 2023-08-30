@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - Fractional snow-cover anomaly from H12
-__date__ = '20230727'
-__version__ = '1.0.0'
+__date__ = '20230830'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_FSC_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -year_history_start "yyyy" -year_history_end "yyyy"
 
 Version(s):
+20230830 (1.0.1) --> Minor updates to stop computations on February 29
 20230727 (1.0.0) --> First release!
 """
 # -------------------------------------------------------------------------------------
@@ -45,8 +46,8 @@ from dryes_FSC_utils_generic import fill_tags2string
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'FSC ANOMALY'
-alg_version = '1.0.0'
-alg_release = '2023-07-27'
+alg_version = '1.0.1'
+alg_release = '2023-08-30'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -116,26 +117,77 @@ def main():
     input_settings = data_settings['data']['input']
     for time_i, time_date in enumerate(time_range):
 
-        # load historical data for this date and n previous days according to days_moving_mean_FSC
-        years_history = np.arange(int(year_history_start), int(year_history_end) + 1, 1)
-        h12_history = np.empty(shape= (high_domain_target, wide_domain_target, len(years_history)))*np.nan
+        if (time_date.month == 2) &  (time_date.day == 29) is False:
+            # if it's 29/2, we skip computations (we do not support 29/2 during leap yrs)
 
-        for year_i, year in enumerate(years_history):
+            # load historical data for this date and n previous days according to days_moving_mean_FSC
+            years_history = np.arange(int(year_history_start), int(year_history_end) + 1, 1)
+            h12_history = np.empty(shape= (high_domain_target, wide_domain_target, len(years_history)))*np.nan
 
-            logging.info(' --> Load historical h12 data for year ...' + str(year))
+            for year_i, year in enumerate(years_history):
 
-            time_now_pd = pd.to_datetime(time_date).round("D")
-            time_this_year_pd = time_now_pd.replace(year=int(year))
-            period_this_year = pd.date_range(end= time_this_year_pd,
-                                             periods= data_settings['index_info']['days_moving_mean_FSC'])
+                logging.info(' --> Load historical h12 data for year ...' + str(year))
 
-            h12_this_yr_cum = np.empty(shape=(high_domain_target, wide_domain_target, period_this_year.__len__())) * np.nan
-            for time_i, time_this_day in enumerate(period_this_year):
+                time_now_pd = pd.to_datetime(time_date).round("D")
+                time_this_year_pd = time_now_pd.replace(year=int(year))
+                period_this_year = pd.date_range(end= time_this_year_pd,
+                                                 periods= data_settings['index_info']['days_moving_mean_FSC'])
 
-                logging.info(' --> Load historical h12 data for day ...' + time_this_day.strftime("%Y/%m/%d"))
+                h12_this_yr_cum = np.empty(shape=(high_domain_target, wide_domain_target, period_this_year.__len__())) * np.nan
+                for time_i, time_this_day in enumerate(period_this_year):
+
+                    logging.info(' --> Load historical h12 data for day ...' + time_this_day.strftime("%Y/%m/%d"))
+
+                    path_file_tiff = os.path.join(data_settings['data']['input']['folder_FSC_resampled'],
+                                             data_settings['data']['input']['filename_FSC_resampled'])
+                    tag_filled = {'outcome_sub_path_time': time_this_day,
+                                  'outcome_datetime': time_this_day}
+                    path_file_tiff = fill_tags2string(path_file_tiff, data_settings['algorithm']['template'], tag_filled)
+
+                    path_file_grib = os.path.join(data_settings['data']['input']['folder'],
+                                                  data_settings['data']['input']['filename'])
+                    tag_filled = {'source_gridded_sub_path_time': time_this_day,
+                                  'source_datetime': time_this_day}
+                    path_file_grib = fill_tags2string(path_file_grib, data_settings['algorithm']['template'], tag_filled)
+
+                    if os.path.isfile(path_file_tiff):
+
+                        logging.info(' --> Loading from resampled tif at ' + path_file_tiff)
+                        h12_this_day = xr.open_rasterio(path_file_tiff)
+                        h12_this_day = h12_this_day.values
+                        h12_this_day = np.squeeze(h12_this_day)
+
+                    elif os.path.isfile(path_file_grib):
+
+                        logging.info(' --> Loading from grib at ' + path_file_grib)
+
+                        h12_this_day = h12_converter(path_file_grib, path_file_tiff, da_domain_target, crs_domain_target,
+                                                     transform_domain_target,
+                                                     data_settings['algorithm']['general']['path_cdo'],
+                                                     input_settings['layer_data_name'],
+                                                     input_settings['layer_data_lon'],
+                                                     input_settings['layer_data_lat'],
+                                                     input_settings['lat_lon_scale_factor'],
+                                                     input_settings['valid_range'])
+                    else:
+                        logging.warning(' --> grib file not available at ' + path_file_grib)
+                        h12_this_day = np.empty(shape=(high_domain_target, wide_domain_target)) * np.nan
+
+                    h12_this_yr_cum[:, :, time_i] = h12_this_day
+
+                h12_this_yr_avg = np.nanmean(h12_this_yr_cum, axis=2)
+                h12_history[:, :, year_i] = h12_this_yr_avg
+
+            #now load data for this year ...
+            period_current_year = pd.date_range(end=time_now_pd,
+                                                periods=data_settings['index_info']['days_moving_mean_FSC'])
+            h12_current_yr_cum = np.empty(shape=(high_domain_target, wide_domain_target,
+                                                 period_current_year.__len__())) * np.nan
+            for time_i, time_this_day in enumerate(period_current_year):
+                logging.info(' --> Load current-yr h12 data for day ...' + time_this_day.strftime("%Y/%m/%d"))
 
                 path_file_tiff = os.path.join(data_settings['data']['input']['folder_FSC_resampled'],
-                                         data_settings['data']['input']['filename_FSC_resampled'])
+                                              data_settings['data']['input']['filename_FSC_resampled'])
                 tag_filled = {'outcome_sub_path_time': time_this_day,
                               'outcome_datetime': time_this_day}
                 path_file_tiff = fill_tags2string(path_file_tiff, data_settings['algorithm']['template'], tag_filled)
@@ -149,6 +201,7 @@ def main():
                 if os.path.isfile(path_file_tiff):
 
                     logging.info(' --> Loading from resampled tif at ' + path_file_tiff)
+
                     h12_this_day = xr.open_rasterio(path_file_tiff)
                     h12_this_day = h12_this_day.values
                     h12_this_day = np.squeeze(h12_this_day)
@@ -169,84 +222,39 @@ def main():
                     logging.warning(' --> grib file not available at ' + path_file_grib)
                     h12_this_day = np.empty(shape=(high_domain_target, wide_domain_target)) * np.nan
 
-                h12_this_yr_cum[:, :, time_i] = h12_this_day
+                h12_current_yr_cum[:, :, time_i] = h12_this_day
 
-            h12_this_yr_avg = np.nanmean(h12_this_yr_cum, axis=2)
-            h12_history[:, :, year_i] = h12_this_yr_avg
+            h12_current_yr_avg = np.nanmean(h12_current_yr_cum, axis=2)
 
-        #now load data for this year ...
-        period_current_year = pd.date_range(end=time_now_pd,
-                                            periods=data_settings['index_info']['days_moving_mean_FSC'])
-        h12_current_yr_cum = np.empty(shape=(high_domain_target, wide_domain_target,
-                                             period_current_year.__len__())) * np.nan
-        for time_i, time_this_day in enumerate(period_current_year):
-            logging.info(' --> Load current-yr h12 data for day ...' + time_this_day.strftime("%Y/%m/%d"))
+            # compute anomaly
+            logging.info(' --> Computing anomaly for day ... ' + time_date.strftime("%Y/%m/%d"))
 
-            path_file_tiff = os.path.join(data_settings['data']['input']['folder_FSC_resampled'],
-                                          data_settings['data']['input']['filename_FSC_resampled'])
-            tag_filled = {'outcome_sub_path_time': time_this_day,
-                          'outcome_datetime': time_this_day}
-            path_file_tiff = fill_tags2string(path_file_tiff, data_settings['algorithm']['template'], tag_filled)
+            h12_history_avg = np.nanmean(h12_history, axis=2)
+            anomaly_tmp = (h12_current_yr_avg - h12_history_avg)/h12_history_avg*100
+            anomaly_tmp[anomaly_tmp <= data_settings['data']['outcome']['limits_anomaly_output'][0]] = np.nan
+            anomaly_tmp[anomaly_tmp >= data_settings['data']['outcome']['limits_anomaly_output'][1]] = np.nan
 
-            path_file_grib = os.path.join(data_settings['data']['input']['folder'],
-                                          data_settings['data']['input']['filename'])
-            tag_filled = {'source_gridded_sub_path_time': time_this_day,
-                          'source_datetime': time_this_day}
-            path_file_grib = fill_tags2string(path_file_grib, data_settings['algorithm']['template'], tag_filled)
+            # save geotiff
+            path_output_tiff = os.path.join(data_settings['data']['outcome']['path_output_results'],
+                                          data_settings['data']['outcome']['filename_output_results'])
+            tag_filled = {'outcome_sub_path_time': time_date,
+                          'outcome_datetime': time_date}
+            path_output_tiff = fill_tags2string(path_output_tiff, data_settings['algorithm']['template'], tag_filled)
+            dir_output_tiff, name_output_tiff = os.path.split(path_output_tiff)
+            if os.path.isdir(dir_output_tiff) is False:
+                os.makedirs(dir_output_tiff)
+            layer_out = anomaly_tmp.astype(np.float32)
+            with rasterio.open(path_output_tiff, 'w', height=da_domain_target.shape[0],
+                               width=da_domain_target.shape[1], count=1, dtype='float32',
+                               crs=crs_domain_target, transform=transform_domain_target, driver='GTiff',
+                               nodata=-9999,
+                               compress='lzw') as out:
+                out.write(layer_out, 1)
+            logging.info(' --> Anomaly saved at ' + path_output_tiff)
 
-            if os.path.isfile(path_file_tiff):
-
-                logging.info(' --> Loading from resampled tif at ' + path_file_tiff)
-
-                h12_this_day = xr.open_rasterio(path_file_tiff)
-                h12_this_day = h12_this_day.values
-                h12_this_day = np.squeeze(h12_this_day)
-
-            elif os.path.isfile(path_file_grib):
-
-                logging.info(' --> Loading from grib at ' + path_file_grib)
-
-                h12_this_day = h12_converter(path_file_grib, path_file_tiff, da_domain_target, crs_domain_target,
-                                             transform_domain_target,
-                                             data_settings['algorithm']['general']['path_cdo'],
-                                             input_settings['layer_data_name'],
-                                             input_settings['layer_data_lon'],
-                                             input_settings['layer_data_lat'],
-                                             input_settings['lat_lon_scale_factor'],
-                                             input_settings['valid_range'])
-            else:
-                logging.warning(' --> grib file not available at ' + path_file_grib)
-                h12_this_day = np.empty(shape=(high_domain_target, wide_domain_target)) * np.nan
-
-            h12_current_yr_cum[:, :, time_i] = h12_this_day
-
-        h12_current_yr_avg = np.nanmean(h12_current_yr_cum, axis=2)
-
-        # compute anomaly
-        logging.info(' --> Computing anomaly for day ... ' + time_date.strftime("%Y/%m/%d"))
-
-        h12_history_avg = np.nanmean(h12_history, axis=2)
-        anomaly_tmp = (h12_current_yr_avg - h12_history_avg)/h12_history_avg*100
-        anomaly_tmp[anomaly_tmp <= data_settings['data']['outcome']['limits_anomaly_output'][0]] = np.nan
-        anomaly_tmp[anomaly_tmp >= data_settings['data']['outcome']['limits_anomaly_output'][1]] = np.nan
-
-        # save geotiff
-        path_output_tiff = os.path.join(data_settings['data']['outcome']['path_output_results'],
-                                      data_settings['data']['outcome']['filename_output_results'])
-        tag_filled = {'outcome_sub_path_time': time_date,
-                      'outcome_datetime': time_date}
-        path_output_tiff = fill_tags2string(path_output_tiff, data_settings['algorithm']['template'], tag_filled)
-        dir_output_tiff, name_output_tiff = os.path.split(path_output_tiff)
-        if os.path.isdir(dir_output_tiff) is False:
-            os.makedirs(dir_output_tiff)
-        layer_out = anomaly_tmp.astype(np.float32)
-        with rasterio.open(path_output_tiff, 'w', height=da_domain_target.shape[0],
-                           width=da_domain_target.shape[1], count=1, dtype='float32',
-                           crs=crs_domain_target, transform=transform_domain_target, driver='GTiff',
-                           nodata=-9999,
-                           compress='lzw') as out:
-            out.write(layer_out, 1)
-        logging.info(' --> Anomalt saved at ' + path_output_tiff)
+        else:
+            logging.warning(' --> Computation for ' + time_date.strftime("%Y-%m-%d %H:%M")
+                            + ' SKIPPED to avoid spurious results')
 
 #   # -------------------------------------------------------------------------------------
     #Info algorithm

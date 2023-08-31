@@ -10,7 +10,7 @@ __author__ =
 __library__ = 'dryes'
 
 General command line:
-python dryes_tool_daily_aggregator.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM"
+python dryes_tool_daily_aggregator.py -settings_file "configuration.json" -time_now "yyyy-mm-dd 00:00"
 
 Version(s):
 20230831 (1.0.0) --> First release

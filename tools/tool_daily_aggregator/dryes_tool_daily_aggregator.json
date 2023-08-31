@@ -19,7 +19,7 @@
     "input": {
       "input_grid": "",
       "folder": "{source_gridded_sub_path_time}",
-      "filename": {source_gridded_datetime}.tif"
+      "filename": "{source_gridded_datetime}.tif"
     },
     "outcome": {
       "path": "{outcome_sub_path_time}/{outcome_datetime}.tif",

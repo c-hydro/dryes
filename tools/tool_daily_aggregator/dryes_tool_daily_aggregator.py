@@ -141,10 +141,10 @@ def main():
                 data_this_hour = xr.open_rasterio(path_data)
                 data_this_hour = np.squeeze(data_this_hour.values)
                 data_hourly_cum = np.nansum(np.dstack((data_hourly_cum, data_this_hour)), 2)  # we add data to container ignoring nan
-                logging.info(' --> ' + time_date.strftime("%Y-%m-%d %H:%M") + ' loaded from ' + path_data)
+                logging.info(' --> ' + hour_date.strftime("%Y-%m-%d %H:%M") + ' loaded from ' + path_data)
 
             else:
-                logging.warning(' --> ' + time_date.strftime("%Y-%m-%d %H:%M") + ' MISSING at ' + path_data)
+                logging.warning(' --> ' + hour_date.strftime("%Y-%m-%d %H:%M") + ' MISSING at ' + path_data)
                 #do nothing
 
 

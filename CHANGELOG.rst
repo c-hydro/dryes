@@ -4,6 +4,7 @@ Changelog
 
 Version 2.4.0 [2023-08-31]
 **************************
+- Added generic aggregator of hourly rasters to daily summary 
 - Added tool for computation of monthly air temperature anomaly
 
 Version 2.3.0 [2023-08-28]

@@ -1,0 +1,44 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Algorithm to aggregate hourly rasters to daily",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230831]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d%H%M",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "folder": "{source_gridded_sub_path_time}",
+      "filename": {source_gridded_datetime}.tif"
+    },
+    "outcome": {
+      "path": "{outcome_sub_path_time}/{outcome_datetime}.tif",
+      "aggregation_method": "mean",
+      "mask": true
+    },
+    "log": {
+      "filename": "",
+      "folder": ""
+    }
+  },
+   "time": {
+    "time_run": null,
+    "time_start": null,
+    "time_end": null,
+    "time_period": 10,
+    "time_frequency": "D",
+    "time_rounding": "D",
+     "time_reverse": false,
+     "__note__": "this tool ONLY WORKS with daily output and hourly input timesteps!"
+  }
+}

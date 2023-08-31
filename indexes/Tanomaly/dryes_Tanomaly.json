@@ -1,0 +1,47 @@
+{
+  "algorithm": {
+    "flags":{
+      "mask_results": true,
+      "compute_long_term_mean": false
+      },
+    "general": {
+      "title": "Monthly Temperature Anomaly",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230831]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d%H%M",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "layer": "string_layer",
+      "domain": "string_domain",
+      "aggregation": "string_aggregation",
+      "month": "string_month",
+      "history_start": "string_history_start",
+      "history_end": "string_history_end"
+    }
+  },
+  "data": {
+    "input": {
+      "folder": "{source_gridded_sub_path_time}",
+      "filename": "{source_gridded_datetime}_italy.tif",
+      "input_grid": ""
+    },
+    "outcome": {
+      "path_output_long_term_means": "{aggregation}_month{month}_period_{history_start}_{history_end}.tif",
+      "path_output_results": "{outcome_datetime}_agg{aggregation}_history_{history_start}_{history_end}.tif"
+    },
+    "log": {
+      "filename": "log.txt",
+      "folder": ""
+    }
+  },
+  "index_info": {
+    "aggregation_months": [1],
+    "stddev_kernel_smoothing": 1
+  }
+}

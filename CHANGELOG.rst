@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.0 [2023-08-31]
+**************************
+- Added tool for computation of monthly air temperature anomaly
+
 Version 2.3.0 [2023-08-28]
 **************************
 - Added a spatialization tool for air temperature based on linear regression of in-situ data over elevation by homogeneous regions

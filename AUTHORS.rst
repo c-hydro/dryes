@@ -10,5 +10,6 @@ Developers
 * Anna Mapelli <anna.mapelli@cimafoundation.org>
 * Giulia Bruno <giulia.bruno@cimafoundation.org>
 * Simone Gabellani <simone.gabellani@cimafoundation.org>
+* Matilde Torrassa <matilde.torrassa@edu.unito.it>
 
 

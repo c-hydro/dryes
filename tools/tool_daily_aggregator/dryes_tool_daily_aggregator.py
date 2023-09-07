@@ -1,11 +1,12 @@
 """
 DRYES Drought Metrics Tool - Tool to aggregate hourly rasters to daily scale
-__date__ = '20230831'
-__version__ = '1.0.0'
+__date__ = '20230907'
+__version__ = '1.1.0'
 __author__ =
-        'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
-        'Fabio Delogu' (fabio.delogu@cimafoundation.org',
-        'Michel Isabellon (michel.isabellon@cimafoundation.org'
+        'Francesco Avanzi (francesco.avanzi@cimafoundation.org'),
+        'Matilde Torrassa (matilde.torrassa@edu.unito.it)'
+        'Fabio Delogu (fabio.delogu@cimafoundation.org'),
+        'Michel Isabellon (michel.isabellon@cimafoundation.org)'
 
 __library__ = 'dryes'
 
@@ -13,6 +14,7 @@ General command line:
 python dryes_tool_daily_aggregator.py -settings_file "configuration.json" -time_now "yyyy-mm-dd 00:00"
 
 Version(s):
+20230907 (1.1.0) --> Added min and max as aggregation options + minor changes
 20230831 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -27,9 +29,12 @@ import xarray as xr
 import numpy as np
 import sys
 import os
-import matplotlib.pylab as plt
+# import matplotlib.pylab as plt
 from time import time, strftime, gmtime
 import matplotlib as mpl
+import warnings
+import rasterio
+
 if os.environ.get('DISPLAY','') == '':
     print('no display found. Using non-interactive Agg backend')
     mpl.use('Agg')
@@ -46,8 +51,8 @@ from dryes_tool_daily_aggregator_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'DAILY AGGREGATOR'
-alg_version = '1.0.0'
-alg_release = '2023-08-31'
+alg_version = '1.1.0'
+alg_release = '2023-09-07'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -58,7 +63,9 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # Get algorithm settings
-    [file_script, file_settings, time_arg] = get_args()
+    # [file_script, file_settings, time_arg] = get_args()
+    file_settings = "dryes_tool_daily_aggregator.json"
+    time_arg = "2022-07-31"
 
     # Set algorithm settings
     data_settings = read_file_json(file_settings)
@@ -137,25 +144,36 @@ def main():
             path_data = fill_tags2string(path_data, data_settings['algorithm']['template'], tag_filled)
 
             if os.path.isfile(path_data):
-
-                data_this_hour = xr.open_rasterio(path_data)
-                data_this_hour = np.squeeze(data_this_hour.values)
-                data_hourly_cum = np.nansum(np.dstack((data_hourly_cum, data_this_hour)), 2)  # we add data to container ignoring nan
+                with rasterio.open(path_data) as src: 
+                    data_this_hour = src.read()
+                    data_this_hour = np.squeeze(data_this_hour)
+                data_hourly_cum = np.dstack((data_hourly_cum, data_this_hour))  # we add data to container
                 logging.info(' --> ' + hour_date.strftime("%Y-%m-%d %H:%M") + ' loaded from ' + path_data)
 
             else:
                 logging.warning(' --> ' + hour_date.strftime("%Y-%m-%d %H:%M") + ' MISSING at ' + path_data)
                 #do nothing
 
-
-        # we compute daily aggregation
+        # we compute daily aggregation # modified
         if data_settings['data']['outcome']['aggregation_method'] == 'mean':
-            data_daily = data_hourly_cum/24
+            with warnings.catch_warnings():
+                warnings.filterwarnings(action='ignore', message='Mean of empty slice')
+                data_daily = np.nanmean(data_hourly_cum, 2)
         elif data_settings['data']['outcome']['aggregation_method'] == 'sum':
-            data_daily = data_hourly_cum
+            with warnings.catch_warnings():
+                warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
+                data_daily = np.nansum(data_hourly_cum, 2)
+        elif data_settings['data']['outcome']['aggregation_method'] == 'min':
+            with warnings.catch_warnings():
+                warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
+                data_daily = np.nanmin(data_hourly_cum, 2)
+        elif data_settings['data']['outcome']['aggregation_method'] == 'max':
+            with warnings.catch_warnings():
+                warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
+                data_daily = np.nanmax(data_hourly_cum, 2)
         else:
-            logging.error(' ===> Aggregation method can only be mean or sum!')
-            raise ValueError(' ===> Aggregation method can only be mean or sum!')
+            logging.error(' ===> Aggregation method can only be mean, sum, min or max!')
+            raise ValueError(' ===> Aggregation method can only be mean, sum, min or max!')
 
         # mask
         if data_settings['data']['outcome']['mask']:

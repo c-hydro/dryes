@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.1 [2023-09-07]
+**************************
+- Modified generic aggregator of hourly rasters to daily summary to include min and max
+
 Version 2.4.0 [2023-08-31]
 **************************
 - Added generic aggregator of hourly rasters to daily summary 

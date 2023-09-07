@@ -4,7 +4,7 @@
       "title": "Algorithm to aggregate hourly rasters to daily",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20230831]",
+      "history": "1.1.0 [20230907]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },

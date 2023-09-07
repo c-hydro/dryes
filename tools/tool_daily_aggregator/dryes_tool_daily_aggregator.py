@@ -63,9 +63,7 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # Get algorithm settings
-    # [file_script, file_settings, time_arg] = get_args()
-    file_settings = "dryes_tool_daily_aggregator.json"
-    time_arg = "2022-07-31"
+    [file_script, file_settings, time_arg] = get_args()
 
     # Set algorithm settings
     data_settings = read_file_json(file_settings)

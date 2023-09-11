@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.2 [2023-09-11]
+**************************
+- Added new tool to aggregate geotiff by regions (e.g., nuts)
+
 Version 2.4.1 [2023-09-07]
 **************************
 - Modified generic aggregator of hourly rasters to daily summary to include min and max

@@ -1,0 +1,37 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Algorithm to aggregate rasters according to regions (e.g., NUTS)",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230911]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "layer": "string_layer",
+      "domain": "string_domain"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "input_list_regions_csv": "",
+      "region_names_in_csv": "Name",
+      "region_IDs_in_csv": "ID",
+      "folder_data_to_be_aggregated": "",
+      "filename_data_to_be_aggregated": "{source_gridded_datetime}.tif"
+    },
+    "outcome": {
+      "path": "{outcome_sub_path_time}/{outcome_datetime}.csv"
+    },
+    "log": {
+      "filename": "",
+      "folder": ""
+    }
+  }
+}

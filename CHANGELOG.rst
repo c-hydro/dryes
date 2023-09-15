@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.3 [2023-09-11]
+**************************
+- Added new tool to compute an additive bias correction for rasters based on monthly mean differences with a benchmark dataset
+
 Version 2.4.2 [2023-09-11]
 **************************
 - Added new tool to aggregate geotiff by regions (e.g., nuts)

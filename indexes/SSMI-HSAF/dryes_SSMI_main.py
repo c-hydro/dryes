@@ -318,10 +318,11 @@ def main():
         # plt.savefig('SSMI_filled_smoothed_dynamic_masked.png')
         # plt.close()
 
-        # static mask before saving (if needed)
         if data_settings['algorithm']['flags']['mask_results_static']:
-            SSMI_filled_smoothed = SSMI_filled_smoothed*da_domain_in.values
+            SSMI_filled_smoothed[da_domain_in.values == 0] = np.nan
+            SSMI_filled_smoothed[np.isnan(da_domain_in.values)] = np.nan
             logging.info(' --> SSMI masked for aggregation ' + str(agg_window))
+            
         # plt.figure()
         # plt.imshow(SSMI_filled_smoothed)
         # plt.colorbar()

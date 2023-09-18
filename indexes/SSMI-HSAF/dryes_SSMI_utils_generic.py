@@ -18,7 +18,10 @@ import matplotlib.pylab as plt
 
 
 # --------------------------------------------------------------------------------
-def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly,data_settings):
+def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly,
+                                       folder_in, filename_in, template,
+                                       aggregation_method, check_range, range):
+
     # Load daily data and compute monthly means at the end of each month
     data_month_values = np.zeros(
         shape=(da_domain_in.shape[0], da_domain_in.shape[1])) * np.nan  # initialize container for monthly cumulative values
@@ -28,19 +31,41 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
     for time_i, time_date in enumerate(period_daily):
 
         # load daily data
-        path_data = os.path.join(data_settings['data']['input']['folder'],
-                                 data_settings['data']['input']['filename'])
+        path_data = os.path.join(folder_in, filename_in)
         tag_filled = {'source_gridded_sub_path_time': time_date,
-                      'source_gridded_datetime': time_date}
-        path_data = fill_tags2string(path_data, data_settings['algorithm']['template'], tag_filled)
+                      'source_gridded_datetime': time_date,
+                      'dynamic_mask_gridded_sub_path_time': time_date,
+                      'dynamic_mask_gridded_datetime': time_date}
+        path_data = fill_tags2string(path_data, template, tag_filled)
 
         if os.path.isfile(path_data):
             data_this_day = xr.open_rasterio(path_data)
-            data_this_day_values = np.squeeze(data_this_day.values)
+            data_this_day = np.squeeze(data_this_day)
+
+            #resampling
+            if data_this_day.shape != da_domain_in.shape:
+                coordinates_target = {
+                    data_this_day.dims[0]: da_domain_in[da_domain_in.dims[0]].values,
+                    data_this_day.dims[1]: da_domain_in[da_domain_in.dims[1]].values}
+                data_this_day = data_this_day.interp(coordinates_target, method='nearest')
+                logging.info(' --> Resampling ' + time_date.strftime("%Y-%m-%d %H:%M"))
+
+            data_this_day_values = data_this_day.values
+
+            # check range if needed
+            if check_range:
+                data_this_day_values[data_this_day_values < range[0]] = range[0]
+                data_this_day_values[data_this_day_values > range[1]] = range[1]
+
             logging.info(' --> ' + time_date.strftime("%Y-%m-%d %H:%M") + ' loaded from ' + path_data)
         else:
             data_this_day_values = np.zeros(shape=(da_domain_in.shape[0], da_domain_in.shape[1])) * np.nan
             logging.warning(' ==> ' + time_date.strftime("%Y-%m-%d %H:%M") + ' not found!')
+
+        # plt.figure()
+        # plt.imshow(data_this_day_values)
+        # plt.savefig('data_this_day_values.png')
+        # plt.close()
 
         # accumulate monthly values
         data_month_values = np.nansum(np.dstack((data_month_values, data_this_day_values)),
@@ -48,16 +73,15 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
 
         # if end of month, save statistics and reset monthly cumulative matrix
         if time_date.is_month_end:
-            if data_settings['index_info']['aggregation_method'] == 'mean':
+            if aggregation_method == 'mean':
                 data_month_values = data_month_values / time_date.daysinmonth  # compute avg monthly stat
-                logging.info(' --> Avg soil moisture computer for ' + time_date.strftime("%Y-%m-%d %H:%M"))
-            elif data_settings['index_info']['aggregation_method'] == 'sum':
+                logging.info(' --> Avg value computed for ' + time_date.strftime("%Y-%m-%d %H:%M"))
+            elif aggregation_method == 'sum':
                 data_month_values = data_month_values  # keep cumulative values
-                logging.info(' --> Cum. soil moisture computer for ' + time_date.strftime("%Y-%m-%d %H:%M"))
+                logging.info(' --> Cum. value computed for ' + time_date.strftime("%Y-%m-%d %H:%M"))
             else:
-                data_month_values = data_month_values / time_date.daysinmonth  # compute avg monthly stat
-                logging.warning(' ==> Aggregation method not supported. Mean enforced!')
-                logging.info(' --> Avg soil moisture computer for ' + time_date.strftime("%Y-%m-%d %H:%M"))
+                logging.error(' ===> Aggregation method not supported!')
+                raise ValueError(' ===> Aggregation method not supported!')
 
             data_month_values_ALL[:, :, period_monthly.get_loc(time_date)] = data_month_values
             logging.info(
@@ -65,7 +89,6 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
 
             # plt.figure()
             # plt.imshow(data_month_values)
-            # plt.clim(0,1)
             # plt.colorbar()
             # plt.savefig(time_date.strftime("%Y%m%d") + 'avg_sm.png')
             # plt.close()

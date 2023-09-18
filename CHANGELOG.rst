@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.4 [2023-09-18]
+**************************
+- Modified HSAF SSMI index to handle a dynamic mask (e.g., SWE)
+
 Version 2.4.3 [2023-09-11]
 **************************
 - Added new tool to compute an additive bias correction for rasters based on monthly mean differences with a benchmark dataset
@@ -35,7 +39,6 @@ Version 2.1.0 [2023-07-04]
 - Added a new version of the SSMI index
 - Added a new version of the H-SAF snow-covered-area (SCA) index
 - Updated virtual environment with new packages
-
 
 Version 1.0.0 [2023-04-13]
 **************************

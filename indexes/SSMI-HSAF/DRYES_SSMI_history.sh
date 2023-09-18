@@ -3,11 +3,11 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='DRYES SSMI'
-script_version="1.0.0"
-script_date='2023/06/22'
+script_version="1.1.0"
+script_date='2023/09/18'
 
-virtualenv_folder='/home/envs/dryes_python3/'
-virtualenv_name='fp_virtualenv_python3_dryes_libraries'
+virtualenv_folder=''
+virtualenv_name=''
 script_folder=''
 
 # Execution example:

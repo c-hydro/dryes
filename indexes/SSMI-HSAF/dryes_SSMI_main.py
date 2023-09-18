@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - SSMI Standardized Soil Moisture Index
-__date__ = '20230622'
-__version__ = '1.0.0'
+__date__ = '20230918'
+__version__ = '1.1.0'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20230621 (1.1.0) --> Added dynamic masking (e.g., using SWE) and additional minor changes to code
 20230621 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -46,8 +47,8 @@ from dryes_SSMI_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'SSMI DROUGHT METRIC'
-alg_version = '1.0.0'
-alg_release = '2023-06-22'
+alg_version = '1.1.0'
+alg_release = '2023-09-18'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -122,7 +123,13 @@ def main():
         logging.info(' --> Parameter estimation ... START!')
 
         data_month_values_ALL_da = \
-            load_monthly_avg_data_from_geotiff(da_domain_in, period_history_daily, period_history_monthly, data_settings)
+            load_monthly_avg_data_from_geotiff(da_domain_in, period_history_daily, period_history_monthly,
+                                               data_settings['data']['input']['folder'],
+                                               data_settings['data']['input']['filename'],
+                                               data_settings['algorithm']['template'],
+                                               data_settings['index_info']['aggregation_method'],
+                                               data_settings['data']['input']['check_range'],
+                                               data_settings['data']['input']['range'])
 
         # we loop on aggregation times, aggregate & compute monthly parameters
         for i_agg, agg_window in enumerate(data_settings['index_info']['aggregation_months']):
@@ -201,7 +208,30 @@ def main():
     # load current data for computing SSMI
     logging.info(' --> SSMI computation ... START!')
 
-    data_month_values_now_ALL_da =  load_monthly_avg_data_from_geotiff(da_domain_in, period_now_daily, period_now_monthly, data_settings)
+    data_month_values_now_ALL_da =  load_monthly_avg_data_from_geotiff(da_domain_in, period_now_daily, period_now_monthly,
+                                                                       data_settings['data']['input']['folder'],
+                                                                       data_settings['data']['input']['filename'],
+                                                                       data_settings['algorithm']['template'],
+                                                                       data_settings['index_info'][
+                                                                           'aggregation_method'],
+                                                                       data_settings['data']['input']['check_range'],
+                                                                       data_settings['data']['input']['range'])
+
+    # if dynamic masking is activated, then load data for that
+    if data_settings['algorithm']['flags']['mask_results_dynamic']:
+
+        logging.info(' --> Collecting dynamic mask data .. START!')
+
+        data_dynamic_mask_da = \
+            load_monthly_avg_data_from_geotiff(da_domain_in, period_now_daily,
+                                               period_now_monthly, data_settings['data']['input']['dynamic_mask_settings']['folder'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['filename'],
+                                               data_settings['algorithm']['template'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['aggregation_method'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['check_range'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['range_mask'])
+
+        logging.info(' --> Collecting dynamic mask data .. DONE!')
 
     # we loop on aggregation times to compute statistics
     for i_agg, agg_window in enumerate(data_settings['index_info']['aggregation_months']):
@@ -209,14 +239,20 @@ def main():
 
         if data_settings['index_info']['aggregation_method'] == 'mean':
             data_month_values_now_ALL_agg = data_month_values_now_ALL_da.rolling(time=int(agg_window)).mean()
+            if data_settings['algorithm']['flags']['mask_results_dynamic']:
+                data_dynamic_mask_da_agg = data_dynamic_mask_da.rolling(time=int(agg_window)).mean()
         elif data_settings['index_info']['aggregation_method'] == 'sum':
             data_month_values_now_ALL_agg = data_month_values_now_ALL_da.rolling(time=int(agg_window)).sum()
+            if data_settings['algorithm']['flags']['mask_results_dynamic']:
+                data_dynamic_mask_da_agg = data_dynamic_mask_da.rolling(time=int(agg_window)).sum()
         else:
-            data_month_values_now_ALL_agg = data_month_values_now_ALL_da.rolling(time=int(agg_window)).mean()
-            logging.warning(' ==> Aggregation method not supported. Mean enforced!')
+            logging.error(' ===> Aggregation method not supported!')
+            raise ValueError(' ===> Aggregation method not supported!')
 
         #we take the last value (for which we want to compute SSMI)
         data_this_month = data_month_values_now_ALL_agg.values[:,:,-1]
+        if data_settings['algorithm']['flags']['mask_results_dynamic']:
+            data_dynamic_mask_da_agg_this_month = data_dynamic_mask_da_agg.values[:,:,-1]
 
         # we load parameter values for this month and this aggregation
         path_geotiff_parameters = data_settings['data']['outcome']['path_output_parameters']
@@ -235,6 +271,12 @@ def main():
         SSMI = stat.norm.ppf(probVal, loc=0, scale=1)
         logging.info(' --> SSMI computed for aggregation ' + str(agg_window))
 
+        # plt.figure()
+        # plt.imshow(SSMI)
+        # plt.colorbar()
+        # plt.savefig('SSMI.png')
+        # plt.close()
+
         # resample to fill NaN
         SSMI_dframe = pd.DataFrame(columns=['data', 'lon', 'lat'])
         SSMI_dframe['data'] = SSMI.flatten()
@@ -248,6 +290,12 @@ def main():
         SSMI_filled = SSMI_filled.values
         logging.info(' --> SSMI nan filled for aggregation ' + str(agg_window))
 
+        # plt.figure()
+        # plt.imshow(SSMI_filled)
+        # plt.colorbar()
+        # plt.savefig('SSMI_filled.png')
+        # plt.close()
+
         # smoothing
         kernel = Gaussian2DKernel(x_stddev=data_settings['index_info']['stddev_kernel_smoothing'])
         SSMI_filled_smoothed = convolve(SSMI_filled, kernel)
@@ -258,15 +306,26 @@ def main():
         # plt.savefig('SSMI_filled_smoothed.png')
         # plt.close()
 
-        # mask before saving (if needed)
-        if data_settings['algorithm']['flags']['mask_results']:
-            SSMI_filled_smoothed = SSMI_filled_smoothed*da_domain_in.values
-            logging.info(' --> SSMI masked for aggregation ' + str(agg_window))
-
+        # dynamic mask
+        if data_settings['algorithm']['flags']['mask_results_dynamic']:
+            threshold = data_settings['data']['input']['dynamic_mask_settings']['threshold_0_1']
+            data_dynamic_mask_da_agg_this_month[data_dynamic_mask_da_agg_this_month > threshold] = np.nan
+            data_dynamic_mask_da_agg_this_month[data_dynamic_mask_da_agg_this_month < threshold] = 1
+            SSMI_filled_smoothed = SSMI_filled_smoothed*data_dynamic_mask_da_agg_this_month
         # plt.figure()
         # plt.imshow(SSMI_filled_smoothed)
         # plt.colorbar()
-        # plt.savefig('SSMI_filled_smoothed_masked.png')
+        # plt.savefig('SSMI_filled_smoothed_dynamic_masked.png')
+        # plt.close()
+
+        # static mask before saving (if needed)
+        if data_settings['algorithm']['flags']['mask_results_static']:
+            SSMI_filled_smoothed = SSMI_filled_smoothed*da_domain_in.values
+            logging.info(' --> SSMI masked for aggregation ' + str(agg_window))
+        # plt.figure()
+        # plt.imshow(SSMI_filled_smoothed)
+        # plt.colorbar()
+        # plt.savefig('SSMI_filled_smoothed_static_masked.png')
         # plt.close()
 
         # export to tiff

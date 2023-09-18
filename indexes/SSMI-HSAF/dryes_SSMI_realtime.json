@@ -1,0 +1,64 @@
+{
+  "algorithm": {
+    "flags":{
+      "compute_parameters": false,
+      "perform_kstest": true,
+      "mask_results_static": true,
+      "mask_results_dynamic": true,
+      "__note__": "mask_results_static multiplies SSMI by input_grid, assuming the latter is a 0-1 mask",
+      "__note2__": "mask_results_dynamic computes a nan-1 masks using an avg of a dynamic layer (e.g., snow), see below"
+      },
+    "general": {
+      "title": "SSMI Standardized Soil Moisture Index",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.1.0 [20230918]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d%H%M",
+      "dynamic_mask_gridded_sub_path_time": "%Y/%m/%d/",
+      "dynamic_mask_gridded_datetime": "%Y%m%d1100",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "layer": "string_layer",
+      "domain": "string_domain",
+      "aggregation": "string_aggregation",
+      "month": "string_month"
+    }
+  },
+  "data": {
+    "input": {
+      "folder": "{source_gridded_sub_path_time}",
+      "filename": "{source_gridded_datetime}.tiff",
+      "input_grid": "",
+      "check_range": false,
+      "range": [0, 1],
+      "dynamic_mask_settings": {
+        "folder":"{dynamic_mask_gridded_sub_path_time}",
+        "filename": "{dynamic_mask_gridded_datetime}00.tif",
+        "aggregation_method": "mean",
+        "threshold_0_1": 5,
+        "check_range": true,
+        "range_mask": [0, 10000]
+      }
+    },
+    "outcome": {
+      "path_output_parameters": "distr_param_agg{aggregation}_month{month}.tif",
+      "path_output_results": "{outcome_datetime}_agg{aggregation}.tif"
+    },
+    "log": {
+      "filename": "dryes_SSMI_realtime.txt",
+      "folder": ""
+    }
+  },
+  "index_info": {
+    "aggregation_months": [1, 2, 3, 6, 12],
+    "aggregation_method": "mean",
+    "p_value_threshold": 0.6,
+    "search_radius_fill_nan": 10,
+    "stddev_kernel_smoothing": 4
+  }
+}

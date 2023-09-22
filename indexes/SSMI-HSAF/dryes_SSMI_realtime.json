@@ -12,7 +12,7 @@
       "title": "SSMI Standardized Soil Moisture Index",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.1.0 [20230918]",
+      "history": "1.1.1 [20230922]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },

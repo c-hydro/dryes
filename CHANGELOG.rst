@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.4.5 [2023-09-22]
+**************************
+- Minor changes to HSAF SSMI
+
 Version 2.4.4 [2023-09-18]
 **************************
 - Modified HSAF SSMI index to handle a dynamic mask (e.g., SWE)

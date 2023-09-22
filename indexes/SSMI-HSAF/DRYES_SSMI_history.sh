@@ -3,8 +3,8 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='DRYES SSMI'
-script_version="1.1.0"
-script_date='2023/09/18'
+script_version="1.1.1"
+script_date='2023/09/22'
 
 virtualenv_folder=''
 virtualenv_name=''

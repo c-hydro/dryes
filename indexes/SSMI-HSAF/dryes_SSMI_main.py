@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - SSMI Standardized Soil Moisture Index
-__date__ = '20230918'
-__version__ = '1.1.0'
+__date__ = '20230922'
+__version__ = '1.1.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20230621 (1.1.1) --> Modified output path for maps to include yy/mm/dd folders (if needed)
 20230621 (1.1.0) --> Added dynamic masking (e.g., using SWE) and additional minor changes to code
 20230621 (1.0.0) --> First release
 """
@@ -47,7 +48,7 @@ from dryes_SSMI_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'SSMI DROUGHT METRIC'
-alg_version = '1.1.0'
+alg_version = '1.1.1'
 alg_release = '2023-09-18'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
@@ -318,11 +319,11 @@ def main():
         # plt.savefig('SSMI_filled_smoothed_dynamic_masked.png')
         # plt.close()
 
+        # static mask before saving (if needed)
         if data_settings['algorithm']['flags']['mask_results_static']:
             SSMI_filled_smoothed[da_domain_in.values == 0] = np.nan
             SSMI_filled_smoothed[np.isnan(da_domain_in.values)] = np.nan
             logging.info(' --> SSMI masked for aggregation ' + str(agg_window))
-            
         # plt.figure()
         # plt.imshow(SSMI_filled_smoothed)
         # plt.colorbar()
@@ -332,9 +333,13 @@ def main():
         # export to tiff
         path_geotiff_output = data_settings['data']['outcome']['path_output_results']
         tag_filled = {'aggregation': str(agg_window),
-                      'outcome_datetime': pd.to_datetime(time_arg_now)}
+                      'outcome_datetime': pd.to_datetime(time_arg_now),
+                      'outcome_sub_path_time': pd.to_datetime(time_arg_now)}
         path_geotiff_output = \
             fill_tags2string(path_geotiff_output, data_settings['algorithm']['template'], tag_filled)
+        dir, filename = os.path.split(path_geotiff_output)
+        if os.path.isdir(dir) is False:
+            os.makedirs(dir)
         write_file_tiff(path_geotiff_output, SSMI_filled_smoothed, wide_domain_in, high_domain_in,
                         transform_domain_in, 'EPSG:4326')
         logging.info(' --> SSMI saved at for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)

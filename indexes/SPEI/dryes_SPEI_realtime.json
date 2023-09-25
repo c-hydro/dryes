@@ -1,0 +1,75 @@
+{
+  "algorithm": {
+    "flags":{
+      "compute_parameters": true,
+      "perform_kstest": true,
+      "mask_results_static": true,
+      "__note__": "mask_results_static multiplies SPEI by input_grid, assuming the latter is a 0-1 mask"
+      },
+    "general": {
+      "title": "SPEI Standardized Precipitation Evapotranspiration Index",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230925]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_P_sub_path_time": "%Y/%m",
+      "source_gridded_P_datetime": "%Y%m%d",
+      "source_gridded_climatology_P_datetime": "%m",
+      "source_gridded_PET_sub_path_time": "%Y/%m/%d",
+      "source_gridded_PET_datetime": "%Y%m%d",
+      "source_gridded_climatology_PET_datetime": "%m",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "aggregation": "string_aggregation",
+      "month": "string_month"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "P": {
+        "folder": "{source_gridded_P_sub_path_time}",
+        "filename": "{source_gridded_P_datetime}.tif",
+        "check_range": true,
+        "range": [0, 1000],
+        "check_climatology_MAX": true,
+        "path_climatology_MAX": "{source_gridded_climatology_P_datetime}.tif",
+        "threshold_climatology_MAX": 1,
+        "multidaily_cumulative": false,
+        "number_days_cumulative": 8,
+        "__note__": "at this stage, this script only looks FORWARD to find the cumulative over number_days_cumulative -1 PREVIOUS days + the current one"
+      },
+      "PET": {
+        "folder": "{source_gridded_PET_sub_path_time}",
+        "filename": "{source_gridded_PET_datetime}",
+        "check_range": true,
+        "range": [0, 1000],
+        "check_climatology_MAX": false,
+        "path_climatology_MAX": "",
+        "threshold_climatology_MAX": 2,
+        "multidaily_cumulative": true,
+        "number_days_cumulative": 8,
+        "__note__": "at this stage, this script only looks FORWARD to find the cumulative over number_days_cumulative -1 PREVIOUS days + the current one"
+      },
+      "__note__": "theshold_climatology here are meant as multiplying factors"
+    },
+    "outcome": {
+      "path_output_parameters": "{aggregation}_month{month}.tif",
+      "path_output_results": "{outcome_datetime}_agg{aggregation}_smoothed.tif"
+    },
+    "log": {
+      "filename": "dryes_SPEI_realtime.txt",
+      "folder": ""
+    }
+  },
+  "index_info": {
+    "aggregation_months": [2],
+    "aggregation_method": "sum",
+    "p_value_threshold": 0.6,
+    "search_radius_fill_nan": 20000,
+    "stddev_kernel_smoothing": 1
+  }
+}

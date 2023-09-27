@@ -1,0 +1,54 @@
+{
+  "algorithm": {
+    "flags":{
+      "mask_results_static": true,
+      "__note__": "mask_results_static multiplies CDI by input_grid, assuming the latter is a 0-1 mask"
+      },
+    "general": {
+      "title": "CDI Combined Drought Index",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20230927]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_var1_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_var1_datetime": "%Y%m%d",
+      "source_gridded_var2_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_var2_datetime": "%Y%m%d",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "aggregation": "string_aggregation",
+      "month": "string_month"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "var_1": {
+        "folder": "",
+        "filename": "{source_gridded_var1_datetime}",
+        "__note__": "according to Rossi et al., var1 is the row variable in Fig 7"
+      },
+      "var_2": {
+        "folder": "",
+        "filename": "{source_gridded_var2_datetime}",
+        "__note__": "according to Rossi et al., var1 is the column variable in Fig 7"
+      }
+    },
+    "outcome": {
+      "path_output_results": "{outcome_datetime}"
+    },
+    "log": {
+      "filename": "",
+      "folder": ""
+    }
+  },
+  "index_info": {
+    "threshold_var1": [-1000, -1.65, -1.28, -0.84, 0, 1000],
+    "threshold_var2": [1000, 0, -0.84, -1.28, -1.65, -1000],
+    "scores": [[1, 2, 3, 3, 4], [1, 2, 2, 3, 3], [1, 1, 2, 2, 3], [0,  1, 1, 2, 2], [0, 0, 1, 1, 1]],
+    "__note__": "Pay attention to the order of values in threshold_var1 and threshold_var2, as they reflect matrix in Fig 7 of Rossi et al.: https://doi.org/10.1016/j.ejrh.2023.101404"
+  }
+}

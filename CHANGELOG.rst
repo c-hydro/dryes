@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.0 [2023-09-25]
+**************************
+- Added a new version of the CDI 2D index
+
 Version 2.5.0 [2023-09-25]
 **************************
 - Added a new version of the SPEI index

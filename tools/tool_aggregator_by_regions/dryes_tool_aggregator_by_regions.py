@@ -1,11 +1,12 @@
 """
 DRYES Drought Metrics Tool - Tool to aggregate rasters by regions
-__date__ = '20230911'
-__version__ = '1.0.0'
+__date__ = '20230928'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi (francesco.avanzi@cimafoundation.org)',
         'Fabio Delogu (fabio.delogu@cimafoundation.org)',
-        'Michel Isabellon (michel.isabellon@cimafoundation.org)'
+        'Michel Isabellon (michel.isabellon@cimafoundation.org)',
+        'Edoardo Cremonese (edoardo.cremonese@cimafoundation.org)'
 
 __library__ = 'dryes'
 
@@ -13,6 +14,7 @@ General command line:
 python dryes_tool_aggregator_by_regions.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM"
 
 Version(s):
+20230928 (1.0.1) --> Added min, mazx and mode
 20230911 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -26,6 +28,7 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+from scipy import stats
 import matplotlib.pylab as plt
 from time import time, strftime, gmtime
 import matplotlib as mpl
@@ -43,8 +46,8 @@ from dryes_daily_aggregator_by_regions_generic import fill_tags2string
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'AGGREGATOR BY REGIONS'
-alg_version = '1.0.0'
-alg_release = '2023-09-11'
+alg_version = '1.0.1'
+alg_release = '2023-09-28'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -137,7 +140,7 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # Loop on list_regions and compute statistics
-    summary_by_regions = pd.DataFrame(index=(['Q1', 'Q2', 'Q3']),
+    summary_by_regions = pd.DataFrame(index=(['Q1', 'Q2', 'Q3', 'Min', 'Max', 'Mode']),
                                       columns=list_regions[data_settings['data']['input']['region_names_in_csv']].values)
     for index_list_regions, row_list_regions in list_regions.iterrows():
 
@@ -156,17 +159,18 @@ def main():
                                               == row_list_regions[data_settings['data']['input']['region_IDs_in_csv']]],
                              75)
 
-        logging.info(' --> Q1 ... ' +
-                     str(np.round(summary_by_regions.loc['Q1', row_list_regions[data_settings['data']['input']['region_names_in_csv']]], 2)))
-        logging.info(' --> Q2 ... ' +
-                     str(np.round(summary_by_regions.loc[
-                                      'Q2', row_list_regions[data_settings['data']['input']['region_names_in_csv']]],
-                                  2)))
-        logging.info(' --> Q3 ... ' +
-                     str(np.round(summary_by_regions.loc[
-                                      'Q3', row_list_regions[data_settings['data']['input']['region_names_in_csv']]],
-                                  2)))
+        summary_by_regions.loc['Min', row_list_regions[data_settings['data']['input']['region_names_in_csv']]] = \
+            np.nanmin(da_raster.values[da_regions_target_resampled.values
+                                              == row_list_regions[data_settings['data']['input']['region_IDs_in_csv']]])
 
+        summary_by_regions.loc['Max', row_list_regions[data_settings['data']['input']['region_names_in_csv']]] = \
+            np.nanmax(da_raster.values[da_regions_target_resampled.values
+                                       == row_list_regions[data_settings['data']['input']['region_IDs_in_csv']]])
+
+        summary_by_regions.loc['Mode', row_list_regions[data_settings['data']['input']['region_names_in_csv']]] = \
+            stats.mode(da_raster.values[da_regions_target_resampled.values
+                                       == row_list_regions[data_settings['data']['input']['region_IDs_in_csv']]],
+                       nan_policy='omit')[0][0]
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------

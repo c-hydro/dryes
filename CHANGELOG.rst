@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.1 [2023-09-28]
+**************************
+- Modified tool to aggregate geotiff by regions (e.g., nuts) including min, max e mode
+
 Version 2.6.0 [2023-09-25]
 **************************
 - Added a new version of the CDI 2D index

@@ -3,8 +3,8 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='DRYES Algorithm to aggregate rasters according to regions (e.g., NUTS)'
-script_version="1.0.0"
-script_date='2023/09/11'
+script_version="1.0.1"
+script_date='2023/09/28'
 
 virtualenv_folder=''
 virtualenv_name=''

@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.3 [2023-10-02]
+**************************
+- Added a new version of the SPI index
+
 Version 2.6.2 [2023-10-02]
 **************************
 - Modified SPEI and CDI tool to add mkdir in output path (if needed)

@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.2 [2023-10-02]
+**************************
+- Modified SPEI and CDI tool to add mkdir in output path (if needed)
+
 Version 2.6.1 [2023-09-28]
 **************************
 - Modified tool to aggregate geotiff by regions (e.g., nuts) including min, max e mode

@@ -3,8 +3,8 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='DRYES CDI'
-script_version="1.0.0"
-script_date='2023/09/27'
+script_version="1.0.1"
+script_date='2023/10/02'
 
 virtualenv_folder=''
 virtualenv_name=''

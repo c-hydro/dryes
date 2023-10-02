@@ -1,11 +1,12 @@
 """
 DRYES Drought Metrics Tool - SPEI Standardized Precipitation Evapotranspiration Index
-__date__ = '20230925'
-__version__ = '1.0.0'
+__date__ = '20231002'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
-        'Michel Isabellon (michel.isabellon@cimafoundation.org'
+        'Michel Isabellon (michel.isabellon@cimafoundation.org',
+        'Edoardo Cremonese (edoardo.cremonese@cimafoundation.org)
 
 __library__ = 'dryes'
 
@@ -13,6 +14,7 @@ General command line:
 python dryes_SPEI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20231002 (1.0.1) --> Added mkdir in output folder
 20230925 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -47,8 +49,8 @@ from dryes_SPEI_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'SPEI DROUGHT METRIC'
-alg_version = '1.0.0'
-alg_release = '2023-09-25'
+alg_version = '1.0.1'
+alg_release = '2023-10-02'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -328,9 +330,13 @@ def main():
         # export to tiff
         path_geotiff_output = data_settings['data']['outcome']['path_output_results']
         tag_filled = {'aggregation': str(agg_window),
-                      'outcome_datetime': pd.to_datetime(time_arg_now)}
+                      'outcome_datetime': pd.to_datetime(time_arg_now),
+                      'outcome_sub_path_time': pd.to_datetime(time_arg_now)}
         path_geotiff_output = \
             fill_tags2string(path_geotiff_output, data_settings['algorithm']['template'], tag_filled)
+        dir, filename = os.path.split(path_geotiff_output)
+        if os.path.isdir(dir) is False:
+            os.makedirs(dir)
         write_file_tiff(path_geotiff_output, SPEI_filled_smoothed, wide_domain_in, high_domain_in,
                         transform_domain_in, 'EPSG:4326')
         logging.info(' --> SPEI saved at for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)

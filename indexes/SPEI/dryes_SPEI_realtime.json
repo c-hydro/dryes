@@ -10,7 +10,7 @@
       "title": "SPEI Standardized Precipitation Evapotranspiration Index",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20230925]",
+      "history": "1.0.1 [20231002]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },

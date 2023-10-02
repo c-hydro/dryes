@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - CDI Combined Drought Index following https://doi.org/10.1016/j.ejrh.2023.101404
-__date__ = '20230927'
-__version__ = '1.0.0'
+__date__ = '20231002'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org),
         'Fabio Delogu' (fabio.delogu@cimafoundation.org),
@@ -14,6 +14,7 @@ General command line:
 python dryes_CDI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM"
 
 Version(s):
+20231002 (1.0.1) --> Added mkdir in output folder
 20230927 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -44,8 +45,8 @@ from dryes_CDI_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'CDI DROUGHT METRIC'
-alg_version = '1.0.0'
-alg_release = '2023-09-27'
+alg_version = '1.0.1'
+alg_release = '2023-10-02'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -189,9 +190,13 @@ def main():
     # -------------------------------------------------------------------------------------
     # export to tiff
     path_geotiff_output = data_settings['data']['outcome']['path_output_results']
-    tag_filled = {'outcome_datetime': pd.to_datetime(time_arg_now)}
+    tag_filled = {'outcome_datetime': pd.to_datetime(time_arg_now),
+                  'outcome_sub_path_time': pd.to_datetime(time_arg_now)}
     path_geotiff_output = \
                 fill_tags2string(path_geotiff_output, data_settings['algorithm']['template'], tag_filled)
+    dir, filename = os.path.split(path_geotiff_output)
+    if os.path.isdir(dir) is False:
+        os.makedirs(dir)
     write_file_tiff(path_geotiff_output, CDI, wide_domain_in, high_domain_in, transform_domain_in, 'EPSG:4326')
     logging.info(' --> CDI saved at ' + path_geotiff_output)
     # -------------------------------------------------------------------------------------

@@ -8,7 +8,7 @@
       "title": "CDI Combined Drought Index",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20230927]",
+      "history": "1.0.1 [20231002]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },

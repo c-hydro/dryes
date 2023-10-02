@@ -1,0 +1,56 @@
+{
+  "algorithm": {
+    "flags":{
+      "compute_parameters": true,
+      "perform_kstest": true,
+      "mask_results": true
+      },
+    "general": {
+      "title": "SPI Standardized Precipitation Index",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20231002]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/",
+      "source_gridded_datetime": "%Y%m%d",
+      "source_gridded_climatology_P_datetime": "%m",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d",
+      "layer": "string_layer",
+      "domain": "string_domain",
+      "aggregation": "string_aggregation",
+      "month": "string_month"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "folder": "{source_gridded_sub_path_time}",
+      "filename": "{source_gridded_datetime}",
+      "check_range": true,
+      "range": [0, 1000],
+      "check_climatology": true,
+      "path_climatology": "{source_gridded_climatology_P_datetime}",
+      "threshold_climatology": 5
+    },
+    "outcome": {
+      "path_output_parameters": "/par/distr_param_agg{aggregation}_month{month}.tif",
+      "path_output_results": "/data/{outcome_sub_path_time}SPI_agg{aggregation}_{domain}_{outcome_datetime}.tif"
+    },
+    "log": {
+      "filename": "dryes_SPI_realtime.txt",
+      "folder": ""
+    }
+  },
+  "index_info": {
+    "domain": "Italy",
+    "aggregation_months": [3],
+    "aggregation_method": "sum",
+    "p_value_threshold": 0.6,
+    "search_radius_fill_nan": 20000,
+    "stddev_kernel_smoothing": 4
+  }
+}

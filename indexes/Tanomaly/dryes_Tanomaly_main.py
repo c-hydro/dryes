@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - Temperature anomaly
-__date__ = '20230831'
-__version__ = '1.0.0'
+__date__ = '20231003'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_Tanomaly_main.py -settings_file "dryes_Tanomaly.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20231003 (1.0.1) --> Added mkdir in output file (if needed)
 20230831 (1.0.0) --> First release
 """
 # -------------------------------------------------------------------------------------
@@ -44,8 +45,8 @@ from dryes_Tanomaly_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'T ANOMALY DROUGHT METRIC'
-alg_version = '1.0.0'
-alg_release = '2023-08-31'
+alg_version = '1.0.1'
+alg_release = '2023-10-03'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -214,10 +215,14 @@ def main():
         path_geotiff_output = data_settings['data']['outcome']['path_output_results']
         tag_filled = {'aggregation': str(agg_window),
                       'outcome_datetime': pd.to_datetime(time_arg_now),
+                      'outcome_sub_path_time': pd.to_datetime(time_arg_now),
                       'history_start': time_arg_history_start[0:4],
                       'history_end': time_arg_history_end[0:4]}
         path_geotiff_output = \
             fill_tags2string(path_geotiff_output, data_settings['algorithm']['template'], tag_filled)
+        dir, filename = os.path.split(path_geotiff_output)
+        if os.path.isdir(dir) is False:
+            os.makedirs(dir)
         write_file_tiff(path_geotiff_output, anomaly_smoothed, wide_domain_in, high_domain_in,
                         transform_domain_in, 'EPSG:4326')
         logging.info(' --> Anomaly saved for aggregation ' + str(agg_window) + ' at ' + path_geotiff_output)

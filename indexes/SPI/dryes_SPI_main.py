@@ -31,6 +31,7 @@ from time import time, strftime, gmtime
 import matplotlib as mpl
 import scipy.stats as stat
 from astropy.convolution import convolve, Gaussian2DKernel
+from pandas.tseries.offsets import DateOffset
 
 from dryes_SPI_utils_json import read_file_json
 from dryes_SPI_utils_generic import *
@@ -249,8 +250,8 @@ def main():
         path_geotiff_output = data_settings['data']['outcome']['path_output_results']
         tag_filled = {'aggregation': str(agg_window),
                       'domain' : data_settings['index_info']['domain'],
-                      'outcome_datetime': pd.to_datetime(time_arg_now),
-                      'outcome_sub_path_time': pd.to_datetime(time_arg_now)}
+                      'outcome_datetime': pd.to_datetime(time_arg_now) - DateOffset(months=1),
+                      'outcome_sub_path_time': pd.to_datetime(time_arg_now) - DateOffset(months=1)}
         path_geotiff_output = \
             fill_tags2string(path_geotiff_output, data_settings['algorithm']['template'], tag_filled)
         dir, filename = os.path.split(path_geotiff_output)

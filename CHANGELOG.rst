@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.4 [2023-10-03]
+**************************
+- Modified SPI tool to substract one month in output path
+
 Version 2.6.3 [2023-10-02]
 **************************
 - Added a new version of the SPI index

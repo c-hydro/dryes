@@ -4,7 +4,7 @@
 # Script information
 script_name='DRYES Tanomaly'
 script_version="1.0.0"
-script_date='2023/08/31'
+script_date='2023/10/03'
 
 virtualenv_folder=''
 virtualenv_name=''

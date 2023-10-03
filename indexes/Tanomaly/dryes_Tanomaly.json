@@ -8,7 +8,7 @@
       "title": "Monthly Temperature Anomaly",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20230831]",
+      "history": "1.0.1 [20231003]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },

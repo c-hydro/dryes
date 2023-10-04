@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.7 [2023-10-04]
+**************************
+- Modified SPI tool to avoid errors in parameters calculation
+
 Version 2.6.6 [2023-10-03]
 **************************
 - Modified tool for monthly air temperature anomaly to add mkdir in output path (if needed)

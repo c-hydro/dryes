@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.8 [2023-10-12]
+**************************
+- Added new tool to classify tiff objects by defined thresholds and classes
+
 Version 2.6.7 [2023-10-04]
 **************************
 - Modified SPI tool to avoid errors in parameters calculation

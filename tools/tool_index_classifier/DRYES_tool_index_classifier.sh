@@ -3,12 +3,16 @@
 #-----------------------------------------------------------------------------------------
 # Script information
 script_name='DRYES Algorithm to classify tiff objects by defined thresholds and classes'
-script_version="1.0.0"
-script_date='2023/10/12'
+script_version="1.0.1"
+script_date='2023/10/17'
 
-virtualenv_folder=''
-virtualenv_name=''
+# Virtualenv default definition(s)
+virtualenv_folder='/home/drought/DRYES/envs/dryes_python3/'
+virtualenv_name='dryes_libraries'
+
+# Default script folder(s)
 script_folder=''
+configuration_folder=''
 
 # Execution example:
 # python3 dryes_index_classifier.py -settings_file "dryes_tool_index_classifier.json" -time_now "yyyy-mm-dd HH:MM"

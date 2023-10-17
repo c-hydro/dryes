@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - Tool to convert continuous values to given classes
-__date__ = '20231012'
-__version__ = '1.0.0'
+__date__ = '20231017'
+__version__ = '1.0.1'
 __author__ =
         'Francesco Avanzi (francesco.avanzi@cimafoundation.org)',
         'Fabio Delogu (fabio.delogu@cimafoundation.org)',
@@ -42,8 +42,8 @@ from dryes_tool_classifier_time import set_time
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'INDEX CLASSIFIER'
-alg_version = '1.0.0'
-alg_release = '2023-10-12'
+alg_version = '1.0.1'
+alg_release = '2023-10-17'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -93,9 +93,9 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # check on settings
-    if data_settings['time']['time_frequency'] != 'D':
-        logging.error(' ===> Output time frequency MUST be daily. Check time_frequency in JSON file')
-        raise ValueError(' ===> Output time frequency MUST be daily. Check time_frequency in JSON file')
+    if data_settings['time']['time_frequency'] not in ['D', 'M']:
+        logging.error(' ===> Output time frequency MUST be daily or monthly. Check time_frequency in JSON file')
+        raise ValueError(' ===> Output time frequency MUST be daily or monthly. Check time_frequency in JSON file')
 
     if data_settings['time']['time_rounding'] != 'D':
         logging.error(' ===> Output time rounding MUST be daily. Check time_rounding in JSON file')
@@ -155,6 +155,18 @@ def main():
         # plt.imshow(da_raster.values)
         # plt.colorbar()
         # plt.show()
+
+        # -------------------------------------------------------------------------------------
+        # Replace na values
+        na_val = data_settings['data']['input']['na_values']
+        if na_val is not None:
+            da_raster = da_raster.where(da_raster.values != na_val)
+
+        # -------------------------------------------------------------------------------------
+        # Apply scale factor if needed
+        scale_f = data_settings['data']['input']['scale_factor']
+        if scale_f is not None:
+            da_raster = da_raster*scale_f
 
         # -------------------------------------------------------------------------------------
         # Reclassify the raster data

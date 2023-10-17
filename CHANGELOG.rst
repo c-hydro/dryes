@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 2.6.9 [2023-10-17]
+**************************
+- Minor changes to classifier tool for tiff objects by defined thresholds and classes
+
 Version 2.6.8 [2023-10-12]
 **************************
 - Added new tool to classify tiff objects by defined thresholds and classes

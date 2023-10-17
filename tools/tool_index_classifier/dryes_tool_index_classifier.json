@@ -4,7 +4,7 @@
       "title": "Algorithm to convert continuous values to given classes",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.0.0 [20231012]",
+      "history": "1.0.1 [20231017]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },
@@ -21,10 +21,23 @@
     }
   },
   "classes": {
-    "thresholds": [0, 0.2, 0.4, 0.6, 0.8, 1],
-    "classes" : [1, 2, 3, 4, 5]
+    "thresholds": [
+      1000,
+      0,
+      -0.84,
+      -1.26,
+      -1.65,
+      -1000
+    ],
+    "classes": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
   },
-   "time": {
+  "time": {
     "time_run": null,
     "time_start": null,
     "time_end": null,
@@ -37,14 +50,16 @@
     "input": {
       "input_grid": "",
       "folder": "{source_gridded_sub_path_time}",
-      "filename": "{source_gridded_datetime}.tif"
+      "filename": "{source_gridded_datetime}.tif",
+      "scale_factor": null,
+      "na_values": null
     },
     "outcome": {
       "folder": "{outcome_sub_path_time}",
-      "filename": "{outcome_datetime}.tif"
+      "filename": "{outcome_datetime}"
     },
     "log": {
-      "filename": "classifier.txt",
+      "filename": "",
       "folder": ""
     }
   }

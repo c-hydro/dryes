@@ -2,28 +2,30 @@
 
 #-----------------------------------------------------------------------------------------
 # Script information
-script_name='DRYES SSMI'
-script_version="1.1.2"
+script_name='DRYES Algorithm to classify tiff objects by defined thresholds and classes'
+script_version="1.0.1"
 script_date='2023/10/17'
 
-virtualenv_folder=''
-virtualenv_name=''
+# Virtualenv default definition(s)
+virtualenv_folder='/home/drought/DRYES/envs/dryes_python3/'
+virtualenv_name='dryes_libraries'
+
+# Default script folder(s)
 script_folder=''
+configuration_folder=''
 
 # Execution example:
-# python3 dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
+# python3 dryes_index_classifier.py -settings_file "dryes_tool_index_classifier.json" -time_now "yyyy-mm-dd HH:MM"
 #-----------------------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------------------
 # Get file information
-script_file='/home/dryes_SSMI_main.py'
-settings_file='/home/dryes_SSMI.json'
+script_file='dryes_index_classifier.py'
+settings_file='dryes_tool_index_classifier.json'
 
 # Get information (-u to get gmt time)
-#time_now=$(date -u +"%Y-%m-%d %H:00")
-time_now='2023-06-01 00:00' # DEBUG 
-time_history_start='1992-01-01 00:00' # DEBUG 
-time_history_end='2021-12-31 00:00' # DEBUG 
+time_now=$(date -u +"%Y-%m-%d %H:00")
+#time_now='2023-08-01 00:00' # DEBUG
 #-----------------------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------------------
@@ -43,7 +45,7 @@ echo " ==> START ..."
 echo " ==> COMMAND LINE: " python3 $script_file -settings_file $settings_file -time $time_now
 
 # Run python script (using setting and time)
-python3 $script_file -settings_file $settings_file -time_now "$time_now" -time_history_start "$time_history_start" -time_history_end "$time_history_end"
+python3 $script_file -settings_file $settings_file -time_now "$time_now"
 
 # Info script end
 echo " ==> "$script_name" (Version: "$script_version" Release_Date: "$script_date")"

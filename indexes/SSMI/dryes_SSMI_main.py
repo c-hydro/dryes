@@ -1,7 +1,7 @@
 """
 DRYES Drought Metrics Tool - SSMI Standardized Soil Moisture Index
-__date__ = '20230922'
-__version__ = '1.1.1'
+__date__ = '20231017'
+__version__ = '1.1.2'
 __author__ =
         'Francesco Avanzi' (francesco.avanzi@cimafoundation.org',
         'Fabio Delogu' (fabio.delogu@cimafoundation.org',
@@ -13,6 +13,7 @@ General command line:
 python dryes_SSMI_main.py -settings_file "configuration.json" -time_now "yyyy-mm-dd HH:MM" -time_history_start "yyyy-mm-dd HH:MM" -time_history_end  "yyyy-mm-dd HH:MM"
 
 Version(s):
+20230621 (1.1.2) --> Added support for multi-band input files
 20230621 (1.1.1) --> Modified output path for maps to include yy/mm/dd folders (if needed)
 20230621 (1.1.0) --> Added dynamic masking (e.g., using SWE) and additional minor changes to code
 20230621 (1.0.0) --> First release
@@ -48,8 +49,8 @@ from dryes_SSMI_tiff import write_file_tiff
 # Algorithm information
 alg_project = 'DRYES'
 alg_name = 'SSMI DROUGHT METRIC'
-alg_version = '1.1.1'
-alg_release = '2023-09-18'
+alg_version = '1.1.2'
+alg_release = '2023-10-17'
 alg_type = 'DroughtMetrics'
 # Algorithm parameter(s)
 time_format_algorithm = '%Y-%m-%d %H:%M'
@@ -130,7 +131,9 @@ def main():
                                                data_settings['algorithm']['template'],
                                                data_settings['index_info']['aggregation_method'],
                                                data_settings['data']['input']['check_range'],
-                                               data_settings['data']['input']['range'])
+                                               data_settings['data']['input']['range'],
+                                               data_settings['data']['input']['multiband'],
+                                               data_settings['data']['input']['band'])
 
         # we loop on aggregation times, aggregate & compute monthly parameters
         for i_agg, agg_window in enumerate(data_settings['index_info']['aggregation_months']):
@@ -216,7 +219,9 @@ def main():
                                                                        data_settings['index_info'][
                                                                            'aggregation_method'],
                                                                        data_settings['data']['input']['check_range'],
-                                                                       data_settings['data']['input']['range'])
+                                                                       data_settings['data']['input']['range'],
+                                                                       data_settings['data']['input']['multiband'],
+                                                                       data_settings['data']['input']['band'])
 
     # if dynamic masking is activated, then load data for that
     if data_settings['algorithm']['flags']['mask_results_dynamic']:
@@ -230,7 +235,9 @@ def main():
                                                data_settings['algorithm']['template'],
                                                data_settings['data']['input']['dynamic_mask_settings']['aggregation_method'],
                                                data_settings['data']['input']['dynamic_mask_settings']['check_range'],
-                                               data_settings['data']['input']['dynamic_mask_settings']['range_mask'])
+                                               data_settings['data']['input']['dynamic_mask_settings']['range_mask'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['multiband'],
+                                               data_settings['data']['input']['dynamic_mask_settings']['band'])
 
         logging.info(' --> Collecting dynamic mask data .. DONE!')
 

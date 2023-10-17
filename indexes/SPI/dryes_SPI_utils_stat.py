@@ -21,7 +21,10 @@ def compute_gamma(x, par, p_val_th):
     if len(dpd) < 4:
         return np.nan
 
-    fit_dict = distr.gam.lmom_fit(dpd)
+    try:
+        fit_dict = distr.gam.lmom_fit(dpd)
+    except:
+        return np.nan
 
     fit = (fit_dict['a'],fit_dict['loc'],fit_dict['scale'])
 

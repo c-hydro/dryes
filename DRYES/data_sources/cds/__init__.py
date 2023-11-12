@@ -1,12 +1,11 @@
 # functions to be used for all CDS data sources
-
 import cdsapi
-import sys
-import os
+from .. import DRYESDataSource
 
-class CDSDownloader:
+class CDSDownloader(DRYESDataSource):
     def __init__(self) -> None:
-        self.cds = cdsapi.Client()
+        super().__init__()
+        self.cds = cdsapi.Client(progress=False, quiet=True)
 
     def download(self, dataset: str, request: dict, output: str) -> None:
         """
@@ -16,7 +15,4 @@ class CDSDownloader:
         output: the name of the output file
         """
         # send request to the CDS withouth printing the output
-        original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
         self.cds.retrieve(dataset, request, output)
-        sys.stdout = original_stdout

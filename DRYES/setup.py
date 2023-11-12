@@ -24,7 +24,10 @@ setup(
         'scipy',
         'cdsapi',
         'netCDF4',
-        'xarray'
+        'xarray',
+        'cfgrib',
+        'rioxarray',
+        'scipy'
         # add any additional packages that your project depends on
     ],
 )

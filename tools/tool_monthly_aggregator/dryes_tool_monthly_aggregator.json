@@ -1,0 +1,45 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Algorithm to aggregate daily rasters to monthly",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20231017]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d",
+      "source_gridded_climatology_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_climatology_datetime": "%m",
+      "outcome_sub_path_time": "%Y/%m/",
+      "outcome_datetime": "%Y%m"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "",
+      "folder": "{source_gridded_sub_path_time}",
+      "filename": "{source_gridded_datetime}_italy.tif",
+      "check_range": false,
+      "range": [0, 1000],
+      "check_climatology_MAX": false,
+      "path_climatology_MAX": "",
+      "threshold_climatology_MAX": 5,
+      "multidaily_cumulative": false,
+      "number_days_cumulative": 8,
+      "__note__": "at this stage, this script only looks FORWARD to find the cumulative over number_days_cumulative -1 PREVIOUS days + the current one"
+    },
+    "outcome": {
+      "path": "{outcome_sub_path_time}/{outcome_datetime}.tif",
+      "aggregation_method": "mean",
+      "mask": true,
+      "number_months_to_compute": 4
+    },
+    "log": {
+      "filename": "",
+      "folder": ""
+    }
+  }
+}

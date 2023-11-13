@@ -12,13 +12,13 @@
       "title": "SSMI Standardized Soil Moisture Index",
       "web-site": "",
       "source": "Python library developed by CIMA Research Foundation",
-      "history": "1.1.1 [20230922]",
+      "history": "1.1.2 [20231017]",
       "project-info": "DRYES Drought Metrics Tool",
       "algorithm": "Tools by CIMA Research Foundation"
     },
     "template": {
-      "source_gridded_sub_path_time": "%Y/%m/%d/",
-      "source_gridded_datetime": "%Y%m%d%H%M",
+      "source_gridded_sub_path_time": "%Y/%m/",
+      "source_gridded_datetime": "%Y%m%d",
       "dynamic_mask_gridded_sub_path_time": "%Y/%m/%d/",
       "dynamic_mask_gridded_datetime": "%Y%m%d1100",
       "outcome_sub_path_time": "%Y/%m/%d/",
@@ -32,7 +32,9 @@
   "data": {
     "input": {
       "folder": "{source_gridded_sub_path_time}",
-      "filename": "{source_gridded_datetime}.tiff",
+      "filename": "sm_{source_gridded_datetime}00.tiff",
+      "multiband": true,
+      "band": 2,
       "input_grid": "",
       "check_range": false,
       "range": [0, 1],
@@ -40,25 +42,27 @@
         "folder":"{dynamic_mask_gridded_sub_path_time}",
         "filename": "{dynamic_mask_gridded_datetime}00.tif",
         "aggregation_method": "mean",
-        "threshold_0_1": 5,
+        "threshold_0_1": 50,
         "check_range": true,
-        "range_mask": [0, 10000]
+        "range_mask": [0, 10000],
+        "multiband": false,
+        "band": 1
       }
     },
     "outcome": {
-      "path_output_parameters": "distr_param_agg{aggregation}_month{month}.tif",
-      "path_output_results": "{outcome_datetime}_agg{aggregation}.tif"
+      "path_output_parameters": "{aggregation}_month{month}_italy.tif",
+      "path_output_results": "SmoothedItaly_{outcome_datetime}000000.tif"
     },
     "log": {
-      "filename": "dryes_SSMI_realtime.txt",
+      "filename": "",
       "folder": ""
     }
   },
   "index_info": {
     "aggregation_months": [1, 2, 3, 6, 12],
     "aggregation_method": "mean",
-    "p_value_threshold": 0.6,
+    "p_value_threshold": 0.05,
     "search_radius_fill_nan": 10,
-    "stddev_kernel_smoothing": 4
+    "stddev_kernel_smoothing": 1
   }
 }

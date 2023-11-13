@@ -1,4 +1,4 @@
-#######################################################################################
+#########################################################
 # Libraries
 import logging
 import tempfile
@@ -21,7 +21,8 @@ import matplotlib.pylab as plt
 # --------------------------------------------------------------------------------
 def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly,
                                        folder_in, filename_in, template,
-                                       aggregation_method, check_range, range):
+                                       aggregation_method, check_range, range,
+                                       multiband, band):
 
     # Load daily data and compute monthly means at the end of each month
     data_month_values = np.zeros(
@@ -43,6 +44,9 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
             data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day = np.squeeze(data_this_day)
 
+            if multiband:
+                data_this_day = data_this_day[band - 1, :, :]
+
             #resampling
             if data_this_day.shape != da_domain_in.shape:
                 coordinates_target = {
@@ -52,6 +56,12 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
                 logging.info(' --> Resampling ' + time_date.strftime("%Y-%m-%d %H:%M"))
 
             data_this_day_values = data_this_day.values
+
+            #plt.figure()
+            #plt.imshow(data_this_day_values)
+            #plt.colorbar()
+            #plt.savefig('data_this_day_values.png')
+            #plt.close()
 
             # check range if needed
             if check_range:

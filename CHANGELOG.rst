@@ -3,6 +3,10 @@ Changelog
 =========
 
 =======
+Version 2.6.11 [2023-11-13]
+***************************
+- Switched from xarray.open_rasterio to rioxarray.open_rasterio post xarray v0.20
+
 Version 2.6.10 [2023-10-17]
 **************************
 - Added support for multiband inputs in SSMI

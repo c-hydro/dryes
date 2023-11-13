@@ -26,6 +26,7 @@ from os.path import join
 from argparse import ArgumentParser
 import pandas as pd
 import xarray as xr
+import rioxarray
 import numpy as np
 import sys
 import os
@@ -104,7 +105,7 @@ def main():
 
     if os.path.isfile(path_data_var1):
 
-        data_var1 = xr.open_rasterio(path_data_var1)
+        data_var1 = rioxarray.open_rasterio(path_data_var1)
         data_var1 = np.squeeze(data_var1)
 
         logging.info(' --> Loaded var1 from ' + path_data_var1)
@@ -135,7 +136,7 @@ def main():
 
     if os.path.isfile(path_data_var2):
 
-        data_var2 = xr.open_rasterio(path_data_var2)
+        data_var2 = rioxarray.open_rasterio(path_data_var2)
         data_var2 = np.squeeze(data_var2)
 
         logging.info(' --> Loaded var2 from ' + path_data_var2)

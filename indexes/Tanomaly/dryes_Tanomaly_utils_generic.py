@@ -9,6 +9,7 @@ import rasterio
 from datetime import datetime
 import numpy as np
 import xarray as xr
+import rioxarray
 import gzip
 
 from copy import deepcopy
@@ -35,7 +36,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_hourly, period_monthl
         path_data = fill_tags2string(path_data, data_settings['algorithm']['template'], tag_filled)
 
         if os.path.isfile(path_data):
-            data_this_day = xr.open_rasterio(path_data)
+            data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day_values = np.squeeze(data_this_day.values)
             logging.info(' --> ' + time_date.strftime("%Y-%m-%d %H:%M") + ' loaded from ' + path_data)
         else:

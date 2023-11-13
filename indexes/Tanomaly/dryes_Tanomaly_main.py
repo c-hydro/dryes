@@ -25,6 +25,7 @@ from os.path import join
 from argparse import ArgumentParser
 import pandas as pd
 import xarray as xr
+import rioxarray
 import numpy as np
 import sys
 import os
@@ -193,7 +194,7 @@ def main():
                       'history_end': time_arg_history_end[0:4]}
         path_geotiff_long_term = \
             fill_tags2string(path_geotiff_long_term, data_settings['algorithm']['template'], tag_filled)
-        long_term_mean = xr.open_rasterio(path_geotiff_long_term)
+        long_term_mean = rioxarray.open_rasterio(path_geotiff_long_term)
         long_term_mean = np.squeeze(long_term_mean.values)
         logging.info(' --> Long-term mean loaded from ' + path_geotiff_long_term)
 

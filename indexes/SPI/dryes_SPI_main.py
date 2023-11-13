@@ -24,6 +24,7 @@ from os.path import join
 import logging
 import pandas as pd
 import xarray as xr
+import rioxarray
 import sys
 
 import matplotlib.pylab as plt
@@ -211,7 +212,7 @@ def main():
                       'month': str(period_now_daily[-1].month)}
         path_geotiff_parameters = \
             fill_tags2string(path_geotiff_parameters, data_settings['algorithm']['template'], tag_filled)
-        parameters = xr.open_rasterio(path_geotiff_parameters)
+        parameters = rioxarray.open_rasterio(path_geotiff_parameters)
         logging.info(' --> Parameter loaded from ' + path_geotiff_parameters)
 
         # compute SPI

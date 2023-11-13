@@ -26,6 +26,7 @@ from argparse import ArgumentParser
 import matplotlib.pylab as plt
 import pandas as pd
 import xarray as xr
+import rioxarray
 import numpy as np
 import sys
 import os
@@ -153,7 +154,7 @@ def main():
                     if os.path.isfile(path_file_tiff):
 
                         logging.info(' --> Loading from resampled tif at ' + path_file_tiff)
-                        h12_this_day = xr.open_rasterio(path_file_tiff)
+                        h12_this_day = rioxarray.open_rasterio(path_file_tiff)
                         h12_this_day = h12_this_day.values
                         h12_this_day = np.squeeze(h12_this_day)
 
@@ -202,7 +203,7 @@ def main():
 
                     logging.info(' --> Loading from resampled tif at ' + path_file_tiff)
 
-                    h12_this_day = xr.open_rasterio(path_file_tiff)
+                    h12_this_day = rioxarray.open_rasterio(path_file_tiff)
                     h12_this_day = h12_this_day.values
                     h12_this_day = np.squeeze(h12_this_day)
 

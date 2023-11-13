@@ -13,6 +13,7 @@ from pytesmo.grid.resample import resample_to_grid
 import pandas as pd
 from time import strftime
 import xarray as xr
+import rioxarray
 
 from dryes_SCA_utils_generic import create_darray_2d, fill_tags2string
 
@@ -51,7 +52,7 @@ def avg_SCA_by_mountain_region(period, data_settings, list_mountains, da_domain_
                                 + 'MISSING from SOURCE: ' + filename_in_h10)
                 SCA_this_day = np.empty(np.shape(da_domain_in)) * np.nan
         else:
-            SCA_this_day = xr.open_rasterio(path_geotiff_resampled)
+            SCA_this_day = rioxarray.open_rasterio(path_geotiff_resampled)
             SCA_this_day = np.squeeze(SCA_this_day)
             logging.info(' --> SCA for ' + time_date.strftime(format='%Y/%m/%d') +
                          ' loaded from TIFF: ' + path_geotiff_resampled)

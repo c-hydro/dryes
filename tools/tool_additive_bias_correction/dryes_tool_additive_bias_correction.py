@@ -28,6 +28,7 @@ from rasterio.transform import from_origin
 import pandas as pd
 import numpy as np  # gridded data
 import xarray as xr
+import rioxarray
 import os  # file management
 from shutil import copyfile
 import matplotlib.pyplot as plt
@@ -60,7 +61,7 @@ enforce_range_post_bc = True
 range_enforced_post_bc = [0,1]
 
 grid = \
-    xr.open_rasterio('')
+    rioxarray.open_rasterio('')
 grid = np.squeeze(grid)
 # -------------------------------------------------------------------------------------
 

@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import numpy as np
 import xarray as xr
+import rioxarray
 import gzip
 import pandas as pd
 
@@ -64,7 +65,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
             logging.info(' --> Looking for daily data at ' + path_data)
 
         if os.path.isfile(path_data):
-            data_this_day = xr.open_rasterio(path_data)
+            data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day = np.squeeze(data_this_day)
 
             if multidaily_cumulative:
@@ -123,7 +124,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
                               'source_gridded_climatology_P_datetime': time_date,
                               'source_gridded_climatology_PET_datetime': time_date}
                 path_climatology = fill_tags2string(path_climatology_max_in, template, tag_filled)
-                data_climatology = xr.open_rasterio(path_climatology)
+                data_climatology = rioxarray.open_rasterio(path_climatology)
                 data_climatology = np.squeeze(data_climatology)
 
                 # regrid

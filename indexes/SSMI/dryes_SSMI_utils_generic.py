@@ -9,6 +9,7 @@ import rasterio
 from datetime import datetime
 import numpy as np
 import xarray as xr
+import rioxarray
 import gzip
 
 from copy import deepcopy
@@ -40,7 +41,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
         path_data = fill_tags2string(path_data, template, tag_filled)
 
         if os.path.isfile(path_data):
-            data_this_day = xr.open_rasterio(path_data)
+            data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day = np.squeeze(data_this_day)
 
             if multiband:

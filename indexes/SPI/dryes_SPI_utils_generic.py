@@ -6,6 +6,7 @@ import rasterio
 from datetime import datetime
 import numpy as np
 import xarray as xr
+import rioxarray
 import gzip
 from argparse import ArgumentParser
 
@@ -104,7 +105,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in, period_daily, period_monthl
         path_data = fill_tags2string(path_data, template, tag_filled)
 
         if os.path.isfile(path_data):
-            data_this_day = xr.open_rasterio(path_data)
+            data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day = np.squeeze(data_this_day)
             data_this_day_values = data_this_day.values
             # data_this_day_values[data_this_day_values == -9999] = np.nan
@@ -145,7 +146,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in, period_daily, period_monthl
                               'source_gridded_datetime': time_date,
                               'source_gridded_climatology_P_datetime': time_date}
                 path_climatology = fill_tags2string(path_climatology_in, template, tag_filled)
-                data_climatology = xr.open_rasterio(path_climatology)
+                data_climatology = rioxarray.open_rasterio(path_climatology)
                 data_climatology = np.squeeze(data_climatology)
 
                 # regrid

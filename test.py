@@ -1,61 +1,73 @@
 from datetime import datetime
 from DRYES.data_sources.cds import efas
 import os
+import numpy as np
 
 from DRYES.data_processes import *
-from DRYES.data_store import DRYESDataStore
-from DRYES.lib.log import setup_logging
+from DRYES.data_chains import DRYESDataChain, DRYESVariable
+
+log_file = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/log.txt'
 
 grid_file = '/home/drought/share/DRYES/data/Italia/static/ET/MCM_mask.tif'
 
 output_path = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/output'
 output_static = os.path.join(output_path, 'static')
-output_dynamic = os.path.join(output_path, '{time:%Y}/{time:%m}/{time:%d}')
+output_dynamic = os.path.join(output_path, '%Y/%m/%d')
 
-log_file = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/log.txt'
+# Create the data chain
+EDO_SMAnomaly = DRYESDataChain('EDO_SMAnomaly', log_file = log_file)
 
-if __name__ == '__main__':
+# # Set the data chain parameters
+# # TODO: what if the reference period changes (this is the case for EDO SMA anomaly)
+# EDO_SMAnomaly.set_reference_period = TimeRange(datetime(1992, 1, 1), datetime(1993, 1, 1))
+# EDO_SMAnomaly.set_timestepping = 'dekads'
+# EDO_SMAnomaly.set_timeagg = {
+#     "Agg1d" : time_aggregation_mean(time = 1, unit = 'dekads'),
+#     "Agg1m" : time_aggregation_mean(time = 1, unit = 'months'),
+# }
 
-    setup_logging(log_file)
+# EDO_SMAnomaly.set_grid = Grid(grid_file)
 
-    grid       = Grid(grid_file)
-    date_start = datetime.datetime(1992, 1, 1)
-    date_end   = datetime.datetime(1993, 1, 1)
-    timesteps  = TimeRange(date_start, date_end)
+# Make the variables available to the data chain
+field_capacity = DRYESVariable.from_data_source(
+    data_source = efas.EFASDownloader('field_capacity').average_soil_layers(save_before=True),
+    variable = 'field_capacity_avg', type = 'static',
+    destination = output_static
+)
 
-    field_capacity = efas.EFASDownloader('field_capacity').average_soil_layers(save_before=True)
-    field_capacity.make_local(
-                grid = grid, timesteps = None,
-                name = 'LISFLOOD',
-                path = output_static)
+wilting_point = DRYESVariable.from_data_source(
+    data_source = efas.EFASDownloader('wilting_point').average_soil_layers(save_before=True),
+    variable = 'wilting_point_avg', type = 'static',
+    destination = output_static
+)
 
-    wilting_point = efas.EFASDownloader('wilting_point').average_soil_layers(save_before=True)
-    wilting_point.make_local(
-                grid = grid, timesteps = None,
-                name = 'LISFLOOD',
-                path = output_static)
+soil_moisture = DRYESVariable.from_data_source(
+    data_source = efas.EFASDownloader('volumetric_soil_moisture').average_soil_layers(save_before=True),
+    variable = 'volumetric_soil_moisture_avg', type = 'dynamic',
+    destination = output_dynamic
+)
 
-    soil_moisture = efas.EFASDownloader('volumetric_soil_moisture').average_soil_layers(save_before=True)
-    soil_moisture.make_local(
-                grid = grid, timesteps = timesteps,
-                name = 'LISFLOOD',
-                path = output_dynamic)
+def calc_smi(sm:xr.DataArray, fc:xr.DataArray, wp:xr.DataArray) -> xr.DataArray:
 
+    fc_d = fc.values
+    wp_d = wp.values
 
+    stacked = np.stack([fc_d, wp_d], axis=0)
+    theta50 = np.median(stacked, axis=0)
 
+    smi = sm.copy()
+    smi.data = 1 - 1 / (1 + (sm.values / theta50)**(6))
+    smi.name = 'smi'
 
-    # soil_moisture_downloader = efas.EFASDownloader('volumetric_soil_moisture')
-    # soil_moisture = soil_moisture_downloader.get_data(grid, datetime(1992, 1, 1))
+    return smi
 
-    # timeagg = partial(aggregate_average, aggtime = 1, aggunit = 'month')
-    # timesteps = create_timesteps(date_start, date_end, n_intervals=12)
+SMI = DRYESVariable.from_other_variables(
+    variables = {'sm' : soil_moisture, 'fc': field_capacity, 'wp' : wilting_point},
+    function = calc_smi, 
+    name = 'SMI', type = 'dynamic',
+    destination = output_dynamic
+)
 
-    # i = 1
-    # t0 = time.time()
-    # for data in aggregate_time(soil_moisture, timesteps, timeagg):
-    #     print(f'timestep {i} of {len(timesteps)}')
-    #     i += 1
-    #     save_to_geotiff(data, os.path.join(output_path, output_pattern))
-    #     t1 = time.time()
-    #     print(f'elapsed time: {t1 - t0}')
-    #     t0 = time.time()
+field_capacity.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+soil_moisture.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+SMI.compute(time_range=TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))

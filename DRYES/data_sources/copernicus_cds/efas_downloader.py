@@ -6,15 +6,15 @@ import numpy as np
 
 from typing import Optional
 from tempfile import TemporaryDirectory
+from .cds_downloader import CDSDownloader
 
-from . import CDSDownloader
-from ...data_processes import Grid
+from ...lib.space import Grid
 from ...lib.log import log
 
 class EFASDownloader(CDSDownloader):
 
     dataset = 'efas-historical'
-    _timerange = (datetime.datetime(1992, 1, 1), datetime.datetime(2022, 12, 31))
+    _start = datetime.datetime(1992, 1, 1)
 
     # list of available variables -> those not implementeed/tested yet are commented out
     # for each variable the list indicates [model_levels, time] -> time is False if the variable is static
@@ -74,12 +74,12 @@ class EFASDownloader(CDSDownloader):
     def request(self):
         return self._request
     
-    def get_timerange(self) -> Optional[tuple[datetime.datetime, datetime.datetime]]:
+    def get_start(self) -> Optional[datetime.datetime]:
         """
         Returns the timerange of the dataset.
         """
         if self._varopts['time']:
-            return self._timerange
+            return self._start
         else:
             return None
 

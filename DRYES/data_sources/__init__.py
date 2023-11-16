@@ -4,7 +4,7 @@ import xarray as xr
 from typing import Optional
 from abc import ABC, abstractmethod
 
-from ..data_processes import Grid
+from ..lib.space import Grid
 
 class DRYESDataSource(ABC):
 
@@ -23,8 +23,8 @@ class DRYESDataSource(ABC):
         """
 
     @abstractmethod
-    def get_timerange(self) -> tuple[datetime.datetime, datetime.datetime]:
+    def get_start(self) -> datetime.datetime:
         """
-        Get the timerange of validity of the data source.
+        Get the start of the data source.
         This is a mandatory method for all subclasses.
         """

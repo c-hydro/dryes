@@ -1,50 +1,46 @@
 from datetime import datetime
-from DRYES.data_sources.cds import efas
 import os
 import numpy as np
+import xarray as xr
 
-from DRYES.data_processes import *
-from DRYES.data_chains import DRYESDataChain, DRYESVariable
+from DRYES.data_sources import copernicus_cds as cds
+from DRYES.variables import DRYESVariable
+from DRYES.time_aggregation import TimeAggregation, average_of_window
 
-log_file = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/log.txt'
+from DRYES.lib.time import TimeRange
+from DRYES.lib.log import setup_logging
 
-grid_file = '/home/drought/share/DRYES/data/Italia/static/ET/MCM_mask.tif'
+LOG_FILE = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/log.txt'
+setup_logging(LOG_FILE)
 
-output_path = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/output'
-output_static = os.path.join(output_path, 'static')
-output_dynamic = os.path.join(output_path, '%Y/%m/%d')
+GRID_FILE = '/home/drought/share/DRYES/data/Italia/static/ET/MCM_mask.tif'
 
-# Create the data chain
-EDO_SMAnomaly = DRYESDataChain('EDO_SMAnomaly', log_file = log_file)
+OUT = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/output'
+OUT_STATIC  = os.path.join(OUT, 'static')
+OUT_DYNAMIC = os.path.join(OUT, '%Y/%m/%d')
 
-# # Set the data chain parameters
-# # TODO: what if the reference period changes (this is the case for EDO SMA anomaly)
-# EDO_SMAnomaly.set_reference_period = TimeRange(datetime(1992, 1, 1), datetime(1993, 1, 1))
-# EDO_SMAnomaly.set_timestepping = 'dekads'
-# EDO_SMAnomaly.set_timeagg = {
-#     "Agg1d" : time_aggregation_mean(time = 1, unit = 'dekads'),
-#     "Agg1m" : time_aggregation_mean(time = 1, unit = 'months'),
-# }
+ARCHIVE = '/home/drought/DRYES/analyses/luca_workspace/tests/CDS_SM_lisflood/Italia/archive'
+ARCHIVE_PAR  = os.path.join(ARCHIVE, 'parameters')
+ARCHIVE_DATA = os.path.join(ARCHIVE, 'data/%Y/%m/%d')
+ARCHIVE_OUT  = os.path.join(ARCHIVE, 'maps/%Y/%m/%d')
 
-# EDO_SMAnomaly.set_grid = Grid(grid_file)
-
-# Make the variables available to the data chain
+# Make the variables needed to calculate the index
 field_capacity = DRYESVariable.from_data_source(
-    data_source = efas.EFASDownloader('field_capacity').average_soil_layers(save_before=True),
+    data_source = cds.EFASDownloader('field_capacity').average_soil_layers(save_before=True),
     variable = 'field_capacity_avg', type = 'static',
-    destination = output_static
+    destination = OUT_STATIC
 )
 
 wilting_point = DRYESVariable.from_data_source(
-    data_source = efas.EFASDownloader('wilting_point').average_soil_layers(save_before=True),
+    data_source = cds.EFASDownloader('wilting_point').average_soil_layers(save_before=True),
     variable = 'wilting_point_avg', type = 'static',
-    destination = output_static
+    destination = OUT_STATIC
 )
 
 soil_moisture = DRYESVariable.from_data_source(
-    data_source = efas.EFASDownloader('volumetric_soil_moisture').average_soil_layers(save_before=True),
+    data_source = cds.EFASDownloader('volumetric_soil_moisture').average_soil_layers(save_before=True),
     variable = 'volumetric_soil_moisture_avg', type = 'dynamic',
-    destination = output_dynamic
+    destination = OUT_DYNAMIC
 )
 
 def calc_smi(sm:xr.DataArray, fc:xr.DataArray, wp:xr.DataArray) -> xr.DataArray:
@@ -61,13 +57,34 @@ def calc_smi(sm:xr.DataArray, fc:xr.DataArray, wp:xr.DataArray) -> xr.DataArray:
 
     return smi
 
-SMI = DRYESVariable.from_other_variables(
+smi = DRYESVariable.from_other_variables(
     variables = {'sm' : soil_moisture, 'fc': field_capacity, 'wp' : wilting_point},
     function = calc_smi, 
     name = 'SMI', type = 'dynamic',
-    destination = output_dynamic
+    destination = OUT_DYNAMIC
 )
 
-field_capacity.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
-soil_moisture.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
-SMI.compute(time_range=TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+# define the time aggregation
+time_agg = TimeAggregation(timesteps_per_year = 36).\
+    add_aggregation(name = "Agg1dk", function = average_of_window(size = 1, unit = 'dekads'))
+
+#field_capacity.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+#soil_moisture.gather(grid = Grid(grid_file), time_range = TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+#SMI.compute(time_range=TimeRange(datetime.datetime(1992,1,1), datetime.datetime(1993,1,1)))
+smi_aggregated = time_agg(smi, TimeRange(datetime(1992, 1, 1), datetime(1993, 1, 1)))
+breakpoint()
+
+# Create the index object
+# EDO_SMAnomaly = DRYESAnomaly(log_file = LOG_FILE)
+
+# # # Set the data chain parameters
+# # # TODO: what if the reference period changes (this is the case for EDO SMA anomaly)
+# EDO_SMAnomaly.reference_period = TimeRange(datetime(1992, 1, 1), datetime(1993, 1, 1))
+# EDO_SMAnomaly.timesteps_per_year = 36 
+# EDO_SMAnomaly.time_aggregation
+
+# # EDO_SMAnomaly.set_grid = Grid(grid_file)
+
+# aggregate_time(variable = smi, time_range = TimeRange(datetime(1992, 1, 1), datetime(1993, 1, 1)),
+#                timesteps_per_year   = EDO_SMAnomaly.timesteps_per_year, 
+#                aggregation_function = EDO_SMAnomaly.time_aggregation)

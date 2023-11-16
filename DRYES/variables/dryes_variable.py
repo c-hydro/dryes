@@ -2,18 +2,18 @@ import numpy as np
 from datetime import datetime, timedelta
 import xarray as xr
 import rioxarray
-import os
 
+import os
 from typing import Callable, Optional, Iterator
-from itertools import filterfalse
 
 from ..data_sources import DRYESDataSource
-from ..data_processes import TimeRange, Grid
 from ..lib.log import log
 from ..lib.io import save_dataset_to_geotiff, save_dataarray_to_geotiff
+from ..lib.time import TimeRange
+from ..lib.space import Grid
 
 class DRYESVariable:
-    def __init__(self, variable_name: str, type: str, destination: str):
+    def __init__(self, variable_name: str, type: str, destination: str) -> None:
 
         self.name = variable_name
         self.isstatic = type == 'static'
@@ -40,7 +40,7 @@ class DRYESVariable:
     
     def check_data_range(self, time_range: TimeRange) -> bool|Iterator[datetime]:
         """
-        Returns the timesteps in the TimeRange that are available locally
+        Yields the timesteps in the TimeRange that are available locally
         """
         if self.isstatic:
             return self.check_data()
@@ -52,8 +52,9 @@ class DRYESVariable:
             time += timedelta(days=1)
 
 class DRYESVarFromDataSource(DRYESVariable):
-    def __init__(self, data_source: DRYESDataSource, variable: str, type: str, destination: str):
+    def __init__(self, data_source: DRYESDataSource, variable: str, type: str, destination: str) -> None:
         self.data_source = data_source
+        self.start = data_source.get_start()
         super().__init__(variable, type, destination)
 
     def gather(self, grid: Grid, time_range: Optional[TimeRange] = None) -> None:
@@ -113,9 +114,10 @@ class DRYESVarFromDataSource(DRYESVariable):
                 log(f'Saved {n_saved} files to {output_path}')
 
 class DRYESVarFromOtherVars(DRYESVariable):
-    def __init__(self, variables: list[DRYESVariable], function: Callable[..., xr.DataArray], name: str, type: str, destination: str):
+    def __init__(self, variables: dict[str:DRYESVariable], function: Callable[..., xr.DataArray], name: str, type: str, destination: str) -> None:
         self.variables = variables
         self.function = function
+        self.start = max([v.start for v in variables.values() if not v.isstatic])
         super().__init__(name, type, destination)
 
     def compute(self, time_range: Optional[TimeRange]):

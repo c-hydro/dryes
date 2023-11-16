@@ -1,4 +1,3 @@
-# functions to be used for all CDS data sources
 import cdsapi
 from .. import DRYESDataSource
 

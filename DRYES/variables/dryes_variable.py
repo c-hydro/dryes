@@ -86,3 +86,14 @@ class DRYESVariable():
 
         self.gather_inputs(time_range)
         self.compute(time_range)
+
+    @staticmethod
+    def identical(input: DRYESInput, grid_file: str) -> DRYESVariable:
+        """
+        Create a variable that is identical to the input.
+        """
+        return DRYESVariable(inputs = {input.name: input},
+                             grid_file = grid_file,
+                             function = lambda x: x,
+                             destination = f'{input.destination}/{input.name}_%Y%m%d.tif',
+                             name = input.name)

@@ -114,3 +114,12 @@ def get_date_from_interval(interval: int, year: int, num_intervals: int = 12, en
         else:
             date = datetime(year, month, day)
         return date
+
+def doy_to_md(doy:int) -> tuple[int, int]:
+    """
+    Converts day of year to month and day. Ignores 29 February.
+    """
+    
+    date = datetime(1987, 1, 1) + timedelta(days = doy - 1)
+    return (date.month, date.day)
+    

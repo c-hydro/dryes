@@ -31,6 +31,9 @@ class DRYESIndex:
 
     def compute(self, current: TimeRange, reference: TimeRange|Callable[[datetime], TimeRange]) -> None:
         
+        if isinstance(reference, TimeRange):
+            reference = lambda time: reference
+
         # get the range for the data that is needed
         data_range = self.make_data_range(current, reference)
 

@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from typing import Callable
 
-from functools import lru_cache, partial
+from functools import partial
 
 from ..variables import DRYESVariable
 from ..lib.time import TimeRange, get_interval_date
+from ..lib.io import get_data, check_data_range
 
 def average_of_window(size: int, unit: str) -> Callable:
     """
@@ -35,18 +36,12 @@ def average_of_window(size: int, unit: str) -> Callable:
         if time_start < variable.start:
             return None
 
-        times_to_get = variable.check_data_range(TimeRange(time_start, time_end))
+        times_to_get = check_data_range(variable.path, TimeRange(time_start, time_end))
 
-        data = [get_data_with_cache(variable, time) for time in times_to_get]
+        data = [get_data(variable.path, time) for time in times_to_get]
         data = xr.concat(data, dim = 'time')
         mean = data.mean(dim = 'time', skipna=True)
         mean = mean.assign_coords(time = time)
         return mean
     
     return partial(_average_of_window, _size = size, _unit = unit)
-
-@lru_cache(maxsize=120)
-def get_data_with_cache(variable: DRYESVariable, time: datetime = None) -> xr.DataArray:
-    path = time.strftime(variable.path_pattern)
-    data = rioxarray.open_rasterio(path)
-    return data

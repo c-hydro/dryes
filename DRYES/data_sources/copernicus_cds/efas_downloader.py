@@ -6,10 +6,9 @@ import numpy as np
 
 from typing import Optional
 from tempfile import TemporaryDirectory
-from .cds_downloader import CDSDownloader
 
+from .cds_downloader import CDSDownloader
 from ...lib.space import Grid
-from ...lib.log import log
 
 class EFASDownloader(CDSDownloader):
 
@@ -159,11 +158,12 @@ class EFASDownloader(CDSDownloader):
         """
         with TemporaryDirectory() as temp_dir:
             output = f'{temp_dir}/{self.variable}.zip'
-            ext = 'grib' if self.request['format'] == 'grib.zip' else 'nc'
-            #filename = f'mars_data_0.{ext}'
 
             self.download(output, time)
             data = self.extract_zipped(output)
+
+            # set the crs to WGS84
+            data = data.rio.write_crs('epsg:4326', inplace=True)
 
             # aggregate the data to a daily value
             daily_data = self.agg_daily(data, time)

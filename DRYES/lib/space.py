@@ -18,7 +18,7 @@ class Grid:
         """
         with rasterio.open(self.source) as src:
             self_data = src.read(1)
-            invmask = np.logical_or(self_data == 0, np.isnan(self_data), self_data == src.nodata)
+            invmask = np.logical_or(np.logical_or(self_data == 0, np.isnan(self_data)), self_data == src.nodata)
             self.mask = np.logical_not(invmask)
             self.shape = self.mask.shape
             self.transform = src.transform
@@ -26,10 +26,17 @@ class Grid:
             self.bounds = src.bounds
             self.resolution = src.res
         
-    def apply(self, data: xr.Dataset|xr.DataArray, coord_names:Optional[list[str]] = None, mask:bool = True) -> xr.Dataset|xr.DataArray:
+    def apply(self,
+              data: xr.Dataset|xr.DataArray, 
+              coord_names:Optional[list[str]] = None,
+              mask:bool = True,
+              method:str = 'nearest') -> xr.Dataset|xr.DataArray:
         """
         Applies the grid to a xarray.DataArray.
         """
+        # reproject the data to the crs of the target grid
+        data = data.rio.reproject(self.crs)
+
         if coord_names is None:
             coord_names = get_coord_names(data)
 
@@ -40,12 +47,12 @@ class Grid:
         shape = self.shape
 
         # Create a new xarray Dataset that represents the target grid
-        lon = np.arange(transform[2], transform[2] + transform[0] * shape[1], transform[0])
-        lat = np.arange(transform[5], transform[5] + transform[4] * shape[0], transform[4])
+        lon = np.arange(transform[2] + transform[0] / 2, transform[2] + transform[0] * shape[1], transform[0])
+        lat = np.arange(transform[5] + transform[4] / 2, transform[5] + transform[4] * shape[0], transform[4])
         target = {latname: (lat), lonname: (lon)}        
 
         # Interpolate the original data onto the target grid
-        regridded = data.interp(target, method='nearest')
+        regridded = data.interp(target, method=method)
 
         # Add metadata
         regridded.rio.write_transform(transform, inplace=True)
@@ -104,5 +111,9 @@ def get_coord_names(dataset: xr.Dataset) -> list[str]:
             coord_names[0] = coord
         elif 'lon' in coord.lower():
             coord_names[1] = coord
+        elif coord.lower() == 'x':
+            coord_names[1] = coord
+        elif coord.lower() == 'y':
+            coord_names[0] = coord
     
     return coord_names

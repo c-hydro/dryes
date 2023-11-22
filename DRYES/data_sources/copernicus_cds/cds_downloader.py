@@ -3,7 +3,6 @@ from .. import DRYESDataSource
 
 class CDSDownloader(DRYESDataSource):
     def __init__(self) -> None:
-        super().__init__()
         self.cds = cdsapi.Client(progress=False)#, quiet=True)
 
     def download(self, dataset: str, request: dict, output: str) -> None:

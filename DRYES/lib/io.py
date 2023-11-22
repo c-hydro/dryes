@@ -23,7 +23,7 @@ def save_dataarray_to_geotiff(data: xr.DataArray, output_file: str) -> bool:
     # create the directory if it does not exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     # save the data to a geotiff
-    data.rio.write_nodata(np.nan, inplace=True)
+    data = data.rio.write_nodata(np.nan, inplace=True)
     data.rio.to_raster(output_file, compress = 'lzw')
 
     return True

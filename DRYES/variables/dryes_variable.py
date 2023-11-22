@@ -47,9 +47,9 @@ class DRYESVariable():
         variable_name = self.name
         log(f'Starting {variable_name} computation...')
 
-        variable_paths = [v.path_pattern for v in self.inputs.values()]
+        variable_paths = [v.path for v in self.inputs.values()]
 
-        timesteps_to_compute_per_var = [check_data_range(paths, time_range) for paths in variable_paths]
+        timesteps_to_compute_per_var = [set(check_data_range(paths, time_range)) for paths in variable_paths]
         intersection = set.intersection(*timesteps_to_compute_per_var)
         timesteps_to_compute = list(intersection)
         timesteps_to_compute.sort() # sort the timesteps in chronological order <- going through the set messes up the order

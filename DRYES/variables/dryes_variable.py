@@ -34,7 +34,7 @@ class DRYESVariable():
         also checks that the data is not available yet before gathering it
         """
 
-        log('Gathering input data...')
+        log(' Checking source data:')
         for v in self.inputs.values():
             v.gather(self.grid, time_range)
 
@@ -44,9 +44,7 @@ class DRYESVariable():
         also checks that the data is not available yet before computing it
         """
         
-        variable_name = self.name
-        log(f'Starting {variable_name} computation...')
-
+        log(f' Processing source data into {self.name}:')
         variable_paths = [v.path for v in self.inputs.values()]
 
         timesteps_to_compute_per_var = [set(check_data_range(paths, time_range)) for paths in variable_paths]
@@ -54,29 +52,27 @@ class DRYESVariable():
         timesteps_to_compute = list(intersection)
         timesteps_to_compute.sort() # sort the timesteps in chronological order <- going through the set messes up the order
         tot_timesteps = len(timesteps_to_compute)
-        log(f'Found {tot_timesteps} timesteps between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}.')
 
         # filter out the timesteps that are already computed
         timesteps_to_compute = [time for time in timesteps_to_compute if not check_data(self.path, time)]
         num_timesteps = len(timesteps_to_compute)
+        log(f' - {tot_timesteps - num_timesteps}/{tot_timesteps} timesteps available locally.')
         if num_timesteps == 0:
-            log(f'All timesteps already computed.')
             return
         
-        log(f'Found {num_timesteps} timesteps not already computed.')
-
+        log(f' - Processing {num_timesteps} timesteps.')
         # get the static inputs, these are the same for each timestep
-        static_data = {k:get_data(v.path_pattern) for k,v in self.inputs.items() if v.isstatic}
+        static_data = {k:get_data(v.path) for k,v in self.inputs.items() if v.isstatic}
 
         # compute each remaining timestep
         for time in timesteps_to_compute:
-            log(f'Computing {variable_name} for {time:%Y-%m-%d}.')
-            dynamic_data = {k:get_data(v.path_pattern, time) for k,v in self.inputs.items() if not v.isstatic}
+            log(f'   - Processing {time:%Y-%m-%d}...')
+            dynamic_data = {k:get_data(v.path, time) for k,v in self.inputs.items() if not v.isstatic}
             data = self.function(**static_data, **dynamic_data)
             output_file = time.strftime(self.path)
             saved = save_dataarray_to_geotiff(data, output_file)
-
-            log(f'Saved to {output_file}')
+            if saved:
+                log(f'   - Saved to {output_file}')
 
     def make(self, time_range: TimeRange) -> None:
         """

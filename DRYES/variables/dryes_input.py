@@ -28,43 +28,40 @@ class DRYESInput():
         source = self.data_source
         source_name = source.__class__.__name__
         variable_name = source.variable
-        log(f'Starting download of {variable_name} using {source_name}.')
 
         if time_range is None and not self.isstatic:
             raise ValueError(f'TimeRange must be specified for dynamic data: {variable_name}.')
         
         if self.isstatic:
             # check if the data is already available locally
-            if self.check_data():
-                log(f'Data already available locally.')
+            if check_data(self.path):
+                log(f' - {variable_name} (static) available locally.')
                 return
 
             # download the data
-            log(f'Downloading static data {variable_name}.')
+            log(f' - {variable_name} (static): gathering using {source_name}.')
             data = source.get_data(grid)
             output_path = self.destination
             n_saved = save_dataset_to_geotiff(data, output_path)
 
-            log(f'Saved {n_saved} files to {output_path}')
+            log(f' - {variable_name} (static): saved {n_saved} files to {output_path}')
         
         else:
             # get all the timesteps that the source is available for in the timerange
             timesteps_to_download = list(source.get_times(time_range.start, time_range.end))
             tot_timesteps = len(timesteps_to_download)
-            log(f'Found {tot_timesteps} timesteps between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}.')
 
             # filter out the timesteps that are already available locally
             timesteps_to_download = [time for time in timesteps_to_download if not check_data(self.path, time)]
             num_timesteps = len(timesteps_to_download)
+            log(f' - {variable_name}: {tot_timesteps - num_timesteps}/{tot_timesteps} timesteps available locally.')
             if num_timesteps == 0:
-                log(f'All timesteps already available locally.')
                 return
             
-            log(f'Found {num_timesteps} timesteps not already available locally.')
-
             # download each remaining timestep
+            log(f' - {variable_name}: gathering {num_timesteps} timesteps using {source_name}.')
             for time in timesteps_to_download:
-                log(f'Downloading {variable_name} for {time:%Y-%m-%d}.')
+                log(f'   - Gathering {time:%Y-%m-%d}...')
                 data = source.get_data(grid, time)
                 output_path = time.strftime(self.destination)
                 addn = time.strftime(self.addn)
@@ -72,4 +69,4 @@ class DRYESInput():
                 os.makedirs(output_path, exist_ok=True)
                 n_saved = save_dataset_to_geotiff(data, output_path, addn)
         
-                log(f'Saved {n_saved} files to {output_path}')
+                log(f'   - Saved {n_saved} files to {output_path}')

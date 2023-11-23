@@ -5,72 +5,39 @@ import os
 from typing import List
 
 from .dryes_index import DRYESIndex
-from ..variables.dryes_variable import DRYESVariable
-from ..time_aggregation import TimeAggregation
 
 from ..lib.time import TimeRange, doy_to_md
 from ..lib.parse import substitute_values
 from ..lib.io import get_data, check_data, save_dataarray_to_geotiff
-from ..lib.log import log, setup_logging
+from ..lib.log import log
 
 class DRYESLFI(DRYESIndex):
-    def __init__(self, input_variable: DRYESVariable,
-                 timesteps_per_year: int,
-                 options: dict,
-                 output_paths: dict,
-                 log_file: str = 'DRYES_log.txt') -> None:
 
-        setup_logging(log_file)
-        self.input_variable = input_variable
-        self.timesteps_per_year = timesteps_per_year
-        options = self.check_options(options)
+    # this flag is used to determine if we need to process all timesteps continuously
+    # or if we can have gaps in the processing
+    # the LFI always works continuously (for other indices, it depends on the time aggregation)
+    iscontinuous = True
 
-        self.options = options
-        self.output_paths = substitute_values(output_paths, output_paths, rec = False)
-        self.get_cases()
+    # default options for the LFI
+    default_options = {
+        'threshold'  : 0.05,
+        'thr_window' : 31
+    }
 
-    def check_options(self, options: dict) -> dict:
-        # check if the options are correct
-        if not 'threshold' in options:
-            log('No threshold specified, using default threshold of 0.05.')
-            options['threshold'] = 0.05
-        if not 'thr_window' in options:
-            log('No threshold window specified, using default window of 31 days.')
-            options['thr_window'] = 31
-        
-        opts = {}
-        opts['threshold'] = options['threshold']
-        opts['thr_window'] = options['thr_window']
+    parameters = ('Qthreshold', 'lambda')
 
-        return opts
+    def calc_parameters(self, reference: TimeRange) -> dict:
+        # make the parameters
 
-    def compute(self, current: TimeRange, reference: TimeRange) -> None:
-        # for the LFI, this needs to be separate from the compute method in the parent class
-        # because the LFI does a lot of operations before the time aggregation, like computing the thresholds
-        # the time aggregation, in the LFI is only used to determine the timesteps of the final output
-
-        # get the range for the data that is needed
-        data_range = TimeRange(reference.start, current.end)
-
-        # get the data -> this will both gather and compute the data (checking if it is already available)
-        self.input_variable.make(data_range)
-
-        # calculate thresholds
-        self.thresholds = self.calc_thresholds(reference)
-        
-        # calculate the deficit
-        self.deficit = self.calc_deficit(data_range)
-
+        thresholds = self.calc_thresholds(reference)
         breakpoint()
-
-        pass
-
+        
     def calc_thresholds(self, reference: TimeRange) -> List[str]:
 
-        log('Starting thresholds calculation')
+        log('#Thresholds:')
 
         dest_parameters = self.output_paths['parameters']
-        destination = substitute_values(dest_parameters, {'par': 'thr', 'history_start': reference.start, "history_end": reference.end})
+        destination = substitute_values(dest_parameters, {'par': 'Qthreshold', 'history_start': reference.start, "history_end": reference.end})
         cases_destinations = [substitute_values(destination, case['tags']) for case in self.cases]
 
         start_year = reference.start.year
@@ -78,16 +45,34 @@ class DRYESLFI(DRYESIndex):
 
         input_path = self.input_variable.path
 
-        # loop through all days in a year
+        # check what we need to calculate
+        timesteps_to_compute = {case['id']: set() for case in self.cases}
         for doy in range(1,366):
             # get the month and day (this ignores leap years)
             month, day = doy_to_md(doy)
-            log(f'Calculating thresholds for {day}/{month}...')
             for case in self.cases:
                 this_destination = cases_destinations[case['id']]
                 # check if this month and day have already been done: we can put a random year here because %Y is not in destination
-                if check_data(this_destination, datetime(2000, month, day)): continue
+                if not check_data(this_destination, datetime(2000, month, day)): 
+                    timesteps_to_compute[case['id']].add((month, day))
 
+        for case in self.cases:
+            timesteps_done = 365 - len(timesteps_to_compute[case['id']])
+            log(f' - case {case["name"]}: {timesteps_done}/365 timesteps already computed.')
+
+        timesteps_to_iterate = set.union(*timesteps_to_compute.values())
+        timesteps_to_iterate = list(timesteps_to_iterate)
+        timesteps_to_iterate.sort()
+
+        if len(timesteps_to_iterate) == 0:
+            return cases_destinations
+        
+        log(f' #Iterating through {len(timesteps_to_iterate)} timesteps with missing thresholds.')
+        for month, day in timesteps_to_iterate:
+            log(f'  - {day:02d}/{month:02d}')
+            for case in self.cases:
+                if (month, day) not in timesteps_to_compute[case['id']]: continue
+                this_destination = cases_destinations[case['id']]
                 # get all dates within the window of this month and day in the reference period
                 this_thr = case['options']['threshold']
                 this_halfwindow = np.floor(case['options']['thr_window']/2)

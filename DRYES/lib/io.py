@@ -13,7 +13,7 @@ def save_dataset_to_geotiff(data: xr.Dataset, output_path: str, addn: str = '') 
     if addn != '' and addn[0] != '_': addn = '_' + addn
     for i, var in enumerate(data.data_vars):
         output_file = os.path.join(output_path, f'{var}{addn}.tif')
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         this_data = data[var].rio.write_nodata(np.nan, inplace=True)
         this_data.rio.to_raster(output_file, compress = 'lzw')
 
@@ -34,9 +34,12 @@ def check_data(path_pattern, time: Optional[datetime] = None) -> bool:
 
 @lru_cache(maxsize=120)
 def get_data(path_pattern, time: Optional[datetime] = None) -> xr.DataArray:
-    path = time.strftime(path_pattern)
-    data = rioxarray.open_rasterio(path)
-    return data
+    path = time.strftime(path_pattern) if time is not None else path_pattern
+    if check_data(path):
+        data = rioxarray.open_rasterio(path)
+        return data
+    else:
+        return None
 
 def check_data_range(path_pattern, time_range: TimeRange) -> bool|Iterator[datetime]:
     """

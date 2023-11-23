@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 def substitute_values(structure, tag_dict, rec = False):
     """
     replace the {tags} in the structure with the values in the tag_dict

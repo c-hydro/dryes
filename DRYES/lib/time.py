@@ -16,13 +16,13 @@ def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int)
     """
     Creates a list of timesteps between two dates.
     n_intervals is the number of subdivisions of the year to consider.
-    n_intervals can only take as value 1, 2, 3, 4, 6, 12, 24, 36.
+    n_intervals can only take as value 1, 2, 3, 4, 6, 12, 24, 36, 365.
 
     """
     start_year = time_start.year
     end_year = time_end.year
 
-    if n_intervals not in [1, 2, 3, 4, 6, 12, 24, 36]:
+    if n_intervals not in [1, 2, 3, 4, 6, 12, 24, 36, 365]:
         raise ValueError("Invalid number of intervals. Must be a positive integer that divides 12, 24, or 36 evenly.")
 
     if n_intervals == 1:
@@ -41,7 +41,14 @@ def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int)
         timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 1) for month in range(1, 13) for day in [1, 16]]
     elif n_intervals == 36:
         timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 1) for month in range(1, 13) for day in [1, 11, 21]]
-    
+    elif n_intervals == 365:
+        timesteps =  [time_start]
+        new_timestep = time_start
+        while new_timestep < time_end:
+            new_timestep = new_timestep + timedelta(days=1)
+            if (new_timestep.month, new_timestep.day) != (2, 29):
+                timesteps.append(new_timestep)
+
     timesteps = [time for time in timesteps if time >= time_start and time <= time_end]
     return timesteps
 

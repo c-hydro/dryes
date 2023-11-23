@@ -36,6 +36,7 @@ def average_of_window(size: int, unit: str) -> Callable:
         if time_start < variable.start:
             return None
 
+        variable.make(TimeRange(time_start, time_end))
         times_to_get = check_data_range(variable.path, TimeRange(time_start, time_end))
 
         data = [get_data(variable.path, time) for time in times_to_get]

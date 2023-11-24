@@ -222,12 +222,14 @@ class DRYESIndex:
             if agg_name in time_agg.postaggfun.keys():
                 agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable)
 
-            for i, data in enumerate(agg_data[agg_name]):
+            n = 0
+            for data in agg_data[agg_name]:
                 this_time = timesteps_to_compute[agg_name][i]
                 path_out = this_time.strftime(agg_paths[agg_name])
                 save_dataarray_to_geotiff(data, path_out)
+                n += 1
             
-            log(f'#Saved {i} files to {os.path.dirname(self.output_paths['data'])}.')
+            log(f'#Saved {n} files to {os.path.dirname(self.output_paths['data'])}.')
 
         return agg_paths
     

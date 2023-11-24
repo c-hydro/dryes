@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import numpy as np
 
+from typing import List
+
 class TimeRange():
     def __init__(self, start: datetime, end: datetime):
         """
@@ -129,4 +131,7 @@ def doy_to_md(doy:int) -> tuple[int, int]:
     
     date = datetime(1987, 1, 1) + timedelta(days = doy - 1)
     return (date.month, date.day)
-    
+
+def ntimesteps_to_md(timesteps_per_year: int) -> List[tuple[int, int]]:
+    timesteps = create_timesteps(datetime(1987, 1, 1), datetime(1987, 12, 31), timesteps_per_year)
+    return [(time.month, time.day) for time in timesteps] 

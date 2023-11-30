@@ -187,8 +187,9 @@ class DRYESIndex:
         
         # the time aggregator recognises only the 'agg_name' keyword
         # for the path name
-        path = self.output_paths['data']
-        path = substitute_values(path, {'var': variable.name, 'options.agg_fn': '{agg_name}'})
+        path_raw = substitute_values(self.output_paths['data'], {'var': variable.name})
+        self.output_paths['data'] = path_raw
+        path = substitute_values(self.output_paths['data'], {'options.agg_fn': '{agg_name}'})
         
         log(f'Making input data ({variable.name})...')
         # if there are no aggregations to compute, just get the data in the paths

@@ -29,28 +29,6 @@ class DRYESLFI(DRYESIndex):
         'min_nevents'  :  5
     }
 
-    # def get_cases(self):
-    #     # for the LFI, we need to do this separately from the superclass, because parameters work a little differently
-    #     # we need to separate the cases that are relevant for the threshold calculation from the other cases which are relevent for the lambds
-    #     thr_options = self.options.copy()
-    #     del thr_options['min_duration']
-    #     del thr_options['min_interval']
-    #     del thr_options['min_nevents']
-
-    #     lambda_options = self.options.copy()
-    #     del lambda_options['thr_quantile']
-    #     del lambda_options['thr_window']
-
-    #     # get the cases for the lambda firts
-    #     super().get_cases(lambda_options)
-    #     lambda_cases = self.cases['opt']
-
-    #     # then get the cases for the threshold
-    #     super().get_cases(thr_options)
-
-    #     # and add the lambda cases
-    #     self.cases['lambda']= lambda_cases
-
     def make_parameters(self, history: TimeRange):
         # for the LFI, we need to do this separately from the superclass, because parameters work a little differently
         # the threshold is calculated from the superclass
@@ -135,7 +113,7 @@ class DRYESLFI(DRYESIndex):
                            for i, case in enumerate(thr_cases) if i in cases_to_calc_deficit.keys()}
 
         # get all the deficits for the history period
-        input_path = self.input_variable.path
+        input_path = self.output_paths['data']
         #test_period = TimeRange(history.start, history.start + timedelta(days = 365))
         if ddi_time is None: ddi_time = history
         all_deficits = get_deficits(input_path, threshold_paths, ddi_time)
@@ -186,7 +164,7 @@ class DRYESLFI(DRYESIndex):
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
 
-        input_path = self.input_variable.path
+        input_path = self.output_paths['data']
         output = {'Qthreshold': {}} # this is the output dictionary
 
         # loop over all cases, let's do this in a smart way so that we don't have to load the data multiple times

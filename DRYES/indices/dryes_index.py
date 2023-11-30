@@ -138,7 +138,7 @@ class DRYESIndex:
             self.make_parameters(reference)
 
         # calculate the index
-        #raw_index_path = self.make_index(current, reference_fn)
+        self.make_index(current, reference_fn)
     
     def make_data_timesteps(self, current: TimeRange, reference_fn: Callable[[datetime], TimeRange]) -> List[datetime]:
         """
@@ -341,9 +341,10 @@ class DRYESIndex:
 
         # check if anything has been calculated already
 
-        for case in self.cases:
+        for case in self.cases['opt']:
             case['tags']['post_process'] = ""
-            this_index_path = substitute_values(self.output_paths['maps'], case['tags'])
+            this_index_path_raw = substitute_values(self.output_paths['maps'], {'index': self.index_name})
+            this_index_path = substitute_values(this_index_path_raw, case['tags'])
             done_timesteps = check_data_range(this_index_path, current)
             timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
             if len(timesteps_to_compute) == 0:
@@ -351,9 +352,14 @@ class DRYESIndex:
                 continue
                       
             log(f' - case {case["name"]}: {len(timesteps) - len(timesteps_to_compute)}/{len(timesteps)} timesteps already computed.')
-            
-            index = self.calc_index(timesteps, reference_fn)
-            save_dataarray_to_geotiff(index, this_index_path)
-            
-
-        return self.calc_index(current, reference_fn)    
+            for time in timesteps:
+                log(f'  - {time:%d/%m/%Y}')
+                reference = reference_fn(time)
+                index = self.calc_index(time, reference, case)
+                output = self.output_template.copy(data = index.values)
+                metadata = {'name': self.index_name,
+                            'time': time,
+                            'type': 'DRYES index',
+                            'index': self.index_name}
+                path_out = time.strftime(this_index_path)
+                save_dataarray_to_geotiff(output, path_out, metadata)   

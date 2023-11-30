@@ -2,8 +2,9 @@ from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import warnings
+import glob
 
-from typing import List
+from typing import List, Optional
 
 from .dryes_index import DRYESIndex
 
@@ -79,15 +80,14 @@ class DRYESLFI(DRYESIndex):
                     cases_to_calc_lambda[this_thrid].append(this_lamid)
                     n+=1
         
-        all_cases = len(lam_cases) * len(thr_cases)
+        all_cases = sum(len(v) for v in cases_to_calc_lambda.values())
         log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
+        if n == 0: return
 
         deficit_cases_hierarchy = [thr_cases, lam_cases]
         ddi_dict, cum_drought_dict = self.calc_deficit(history, deficit_cases_hierarchy, cases_to_calc_lambda)
 
-        input_path = self.input_variable.path
         template = self.output_template
-        ddi_names = ['deficit', 'duration', 'interval']
         for thrcase in thr_cases:
             this_thrid = thrcase['id']
             if this_thrid not in cases_to_calc_lambda.keys(): continue
@@ -111,25 +111,18 @@ class DRYESLFI(DRYESIndex):
                             'index': self.index_name}
                 save_dataarray_to_geotiff(lambda_da, this_lambda_path, metadata)
 
-                # now let's save the ddi at the end of the history period
-                this_ddi_path = self.output_paths['ddi']
-                this_ddi_path = substitute_values(this_ddi_path, lamcase['tags'])
-                this_ddi_time = history.end + timedelta(days = 1)
-                this_ddi_path = this_ddi_time.strftime(this_ddi_path)
-                this_ddi = ddi_dict[this_thrid][this_lamid]
-                for i in range(3):
-                    this_ddi_da = template.copy(data = np.expand_dims(this_ddi[i], 0))
-                    metadata = {
-                            'name': ddi_names[i],
-                            'type': 'DRYES parameter',
-                            'index': self.index_name,
-                            'time': this_ddi_time.strftime('%Y-%m-%d')}
-                    output_file = this_ddi_path.format(ddi_var = ddi_names[i])
-                    save_dataarray_to_geotiff(this_ddi_da, output_file, metadata)
+                ddi_path_raw = self.output_paths['ddi']
+                ddi_path = substitute_values(ddi_path_raw, lamcase['tags'])
+                ddi = ddi_dict[this_thrid][this_lamid]
+                ddi_time = history.end + timedelta(days = 1)
+                self.save_ddi(ddi, ddi_time, ddi_path)
 
     def calc_deficit(self, history: TimeRange,
                      deficit_cases_hierarchy: List[List[dict[str, dict]]],
-                     cases_to_calc_deficit: dict[int:List[int]]) -> [dict, dict]:
+                     cases_to_calc_deficit: dict[int:List[int]],
+                     ddi_time:  Optional[TimeRange] = None,
+                     start_ddi: Optional[np.ndarray] = None,
+                     quiet = False) -> [dict, dict]:
 
         thr_cases, def_cases = deficit_cases_hierarchy
 
@@ -138,17 +131,18 @@ class DRYESLFI(DRYESIndex):
                                                 {'par': 'Qthreshold',
                                                 'history_start' : history.start,
                                                 'history_end'   : history.end})        
-        threshold_paths = {case['id']: substitute_values(theshold_path_raw, case['tags'])
-                           for case in thr_cases if case['id'] in cases_to_calc_deficit.keys()}
+        threshold_paths = {i: substitute_values(theshold_path_raw, case['tags'])
+                           for i, case in enumerate(thr_cases) if i in cases_to_calc_deficit.keys()}
 
         # get all the deficits for the history period
         input_path = self.input_variable.path
         #test_period = TimeRange(history.start, history.start + timedelta(days = 365))
-        all_deficits = get_deficits(input_path, threshold_paths, history)
+        if ddi_time is None: ddi_time = history
+        all_deficits = get_deficits(input_path, threshold_paths, ddi_time)
 
         # set the starting conditions for each case we need to calculate lambda for
-        ddi_raw  = np.zeros((3,*self.input_variable.grid.shape))
-        ddi_dict = {k:{vv:ddi_raw.copy() for vv in v} 
+        if start_ddi is None: start_ddi  = np.zeros((3,*self.input_variable.grid.shape))
+        ddi_dict = {k:{vv:start_ddi.copy() for vv in v} 
                                            for k,v in cases_to_calc_deficit.items()}
         # ddi stands for drought_deficit, duration, interval
 
@@ -159,9 +153,11 @@ class DRYESLFI(DRYESIndex):
         cum_drought_dict = {k:{vv:cum_drought_raw.copy() for vv in v}
                                              for k,v in cases_to_calc_deficit.items()}
 
+        if not quiet:
+            log(f'  - Computing streamflow deficits:')
         # loop over all timesteps
         for time, deficit_dict in all_deficits:
-            log(f'   {time:%Y-%m-%d}')
+            if time.day == 1 and not quiet: log(f'   - {time:%Y-%m-%d}')
             for thrcase, deficit in deficit_dict.items():
                 for case in cases_to_calc_deficit[thrcase]:
                     # get the current conditions
@@ -232,6 +228,63 @@ class DRYESLFI(DRYESIndex):
 
     def calc_lambda(self, history: TimeRange) -> xr.DataArray:
         pass
+
+    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+        # calculate the current deficit
+        ddi_path = substitute_values(self.output_paths['ddi'], case['tags'])
+        # get the most recent ddi
+        ddi_time, ddi_start = get_recent_ddi(time, ddi_path)
+        # if there is no ddi, we need to calculate it from scratch,
+        # otherwise we can just use the most recent one and update from there
+        ddi = None
+        if ddi_time == time:
+            ddi = ddi_start
+        elif ddi_time is None:
+            ddi_time_range = TimeRange(history.start, time - timedelta(days = 1))
+        else:
+            ddi_time_range = TimeRange(ddi_time, time - timedelta(days = 1))
+
+        if ddi is None:
+            # calculate the deficit
+            deficit_cases_hierarchy = [[case], [[case]]]
+            cases_to_calc = {0: [0]}
+            ddi_dict, _ = self.calc_deficit(history, deficit_cases_hierarchy, cases_to_calc, ddi_time_range, ddi_start, quiet=True)
+            ddi = ddi_dict[0][0]
+        
+        deficit  = ddi[0]
+        duration = ddi[1]
+        min_duration = case['options']['min_duration']
+        deficit[duration < min_duration] = 0
+
+        # save the ddi for the next timestep
+        self.save_ddi(ddi, time, ddi_path)
+
+        # get the lambda
+        lambda_path_raw = substitute_values(self.output_paths['lambda'], {'history_start': history.start, 'history_end': history.end})
+        lambda_path = substitute_values(lambda_path_raw, case['tags'])
+        lambda_data = get_data(lambda_path).values
+
+        lfi_data = 1 - np.exp(-lambda_data * deficit)
+        output_template = self.output_template
+        lfi = output_template.copy(data = lfi_data)
+        return lfi
+
+    def save_ddi(self, ddi: np.ndarray, time: datetime, path: str):
+        # now let's save the ddi at the end of the history period
+        ddi_names = ['deficit', 'duration', 'interval']
+        path = time.strftime(path)
+        for i in range(3):
+            data = ddi[i]
+            mask = self.input_variable.grid.mask
+            data[~mask] = np.nan
+            ddi_da = self.output_template.copy(data = np.expand_dims(data, 0))
+            metadata = {
+                    'name': ddi_names[i],
+                    'type': 'DRYES parameter',
+                    'index': self.index_name,
+                    'time': time.strftime('%Y-%m-%d')}
+            output_file = path.format(ddi_var = ddi_names[i])
+            save_dataarray_to_geotiff(ddi_da, output_file, metadata)
 
 def get_deficits(streamflow: str, threshold: dict[int:str], time_range:TimeRange) -> dict[int:np.ndarray]:
     for time in time_range:
@@ -333,6 +386,38 @@ def pool_deficit_singlepixel(deficit: float,
     cum_drought = np.array([cum_deficit, ndroughts])
     final_conditions = np.array([drought_deficit, duration, interval])
     return final_conditions, cum_drought
+
+def get_recent_ddi(time, ddi_path):
+    """
+    returns the most recent ddi for the given time
+    """
+    ddi_vars  = ['deficit', 'duration', 'interval']
+    ddi_times = {var: set() for var in ddi_vars}
+    ddi_path  = {var: substitute_values(ddi_path, {'ddi_var': var}) for var in ddi_vars}
+    for var in ddi_vars:
+        this_ddi_path = ddi_path[var]
+        this_ddi_path_glob = this_ddi_path.replace('%Y', '*').\
+                                         replace('%m', '*').\
+                                         replace('%d', '*')
+        all_ddi_paths = glob.glob(this_ddi_path_glob)
+        times = [datetime.strptime(path, this_ddi_path) for path in all_ddi_paths]
+        ddi_times[var] = set(times)
+    
+    # get the timesteps common to all ddi variables
+    common_times = set.intersection(*ddi_times.values())
+    common_times_before_time = {t for t in common_times if t <= time}
+    if common_times_before_time == set(): return None, None
+
+    # get the most recent timestep
+    recent_time = max(common_times_before_time)
+    deficit, duration, interval = [get_data(path, recent_time).values for path in ddi_path.values()]
+
+    ddi = np.squeeze(np.stack([deficit, duration, interval], axis = 0))
+
+    return recent_time, ddi
+
+
+
 
     # for t in range(deficit.shape[0]):
     #     # if we have a streamflow deficit at this timestep

@@ -342,7 +342,8 @@ class DRYESIndex:
         timesteps = create_timesteps(current.start, current.end, self.timesteps_per_year)
 
         # check if anything has been calculated already
-        for agg in self.cases['agg']:
+        agg_cases = self.cases['agg'] if len(self.cases['agg']) > 0 else [{}]
+        for agg in agg_cases:
             agg_tags = agg['tags'] if 'tags' in agg else {}
             agg_name = agg['name'] if 'name' in agg else ''
 

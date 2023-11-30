@@ -7,7 +7,7 @@ from ..time_aggregation.time_aggregation import TimeAggregation
 
 from ..lib.log import setup_logging, log
 from ..lib.time import TimeRange, create_timesteps, ntimesteps_to_md
-from ..lib.parse import substitute_values
+from ..lib.parse import substitute_values, options_to_cases
 from ..lib.io import check_data_range, save_dataarray_to_geotiff
 
 class DRYESIndex:
@@ -96,38 +96,7 @@ class DRYESIndex:
             agg_cases.append(this_case)
 
         ## then add the options
-        # get the options that need to be permutated and the ones that are fixed
-        fixed_options = {k: v for k, v in options.items() if not isinstance(v, dict)}
-        to_permutate = {k: list(v.keys()) for k, v in options.items() if isinstance(v, dict)}
-        values_to_permutate = [v for v in to_permutate.values()]
-        keys = list(to_permutate.keys())
-
-        permutations = [dict(zip(keys, p)) for p in itertools.product(*values_to_permutate)]
-        identifiers = copy.deepcopy(permutations)
-        for permutation in permutations:
-            permutation.update(fixed_options)
-
-        cases_opts = []
-        for permutation in permutations:
-            this_case_opts = {}
-            for k, v in permutation.items():
-                # if this is one of the options that we permutated
-                if isinstance(options[k], dict):
-                    this_case_opts[k] = options[k][v]
-                # if not, this is fixed
-                else:
-                    this_case_opts[k] = v
-                    permutation[k] = ""
-            cases_opts.append(this_case_opts)
-
-        opt_cases = []
-        for case, permutation, i in zip(cases_opts, permutations, range(len(identifiers))):
-            this_case = dict()
-            this_case['id']   = i
-            this_case['name'] = ','.join(v for v in permutation.values() if v != "")
-            this_case['tags'] = {'options.' + pk:pv for pk,pv in permutation.items()}
-            this_case['options'] = case
-            opt_cases.append(this_case)
+        opt_cases = options_to_cases(options)
 
         ## finally add the post-processing, if it exists
         post_cases = []

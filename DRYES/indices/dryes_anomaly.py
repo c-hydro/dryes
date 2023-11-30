@@ -43,7 +43,7 @@ class DRYESAnomaly(DRYESIndex):
         
         input_path = self.input_variable.path
         data = [get_data(input_path, time) for time in dates]
-        data_template = data[0].copy()
+        data_template = self.output_template
         data = np.stack(data, axis = 0)
         output = {}
         # calculate the parameters
@@ -62,3 +62,30 @@ class DRYESAnomaly(DRYESIndex):
                 std = data_template.copy(data = std_data)
                 output['std'] = {0:std}
         return output
+    
+    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+        # load the data for the index
+        input_path_raw = self.output_paths['data']
+        input_path = substitute_values(input_path_raw, case['tags'])
+        data = get_data(input_path, time)
+
+        # load the parameters
+        par_path_raw = substitute_values(self.output_paths['parameters'], {'history_start': history.start, 'history_end': history.end})
+        par_path = substitute_values(par_path_raw, case['tags'])
+        parameters = [get_data(substitute_values(par_path, {'par': par}), time) for par in self.parameters]
+        # calculate the index
+        if case['options']['type'] == 'empiricalzscore':
+            mean, std = parameters
+            anomaly_data = (data - mean) / std
+        elif case['options']['type'] == 'percentdelta':
+            mean = parameters[0]
+            anomaly_data = (data - mean) / mean * 100
+        elif case['options']['type'] == 'absolutedelta':
+            mean = parameters[0]
+            anomaly_data = data - mean
+        else:
+            raise ValueError(f"Unknown type {case['options']['type']} for anomaly index.")
+        
+        output_template = self.output_template
+        anomaly = output_template.copy(data = anomaly_data)
+        return anomaly

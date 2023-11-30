@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Callable, List, Optional
+import xarray as xr
 import os
+import numpy as np
 
 from ..variables.dryes_variable import DRYESVariable
 from ..time_aggregation.time_aggregation import TimeAggregation
@@ -8,7 +10,7 @@ from ..time_aggregation.time_aggregation import TimeAggregation
 from ..lib.log import setup_logging, log
 from ..lib.time import TimeRange, create_timesteps, ntimesteps_to_md
 from ..lib.parse import substitute_values, options_to_cases
-from ..lib.io import check_data_range, save_dataarray_to_geotiff
+from ..lib.io import check_data_range, save_dataarray_to_geotiff, get_data
 
 class DRYESIndex:
     def __init__(self, input_variable: DRYESVariable,
@@ -101,7 +103,6 @@ class DRYESIndex:
         ## finally add the post-processing, if it exists
         post_cases = []
         if post_processing is not None:
-            post_cases = [None]
             for post_name, post_fn in post_processing.items():
                 this_case = dict()
                 this_case['id']   = i
@@ -341,26 +342,80 @@ class DRYESIndex:
         timesteps = create_timesteps(current.start, current.end, self.timesteps_per_year)
 
         # check if anything has been calculated already
+        for agg in self.cases['agg']:
+            agg_tags = agg['tags'] if 'tags' in agg else {}
+            agg_name = agg['name'] if 'name' in agg else ''
 
-        for case in self.cases['opt']:
-            case['tags']['post_process'] = ""
-            this_index_path_raw = substitute_values(self.output_paths['maps'], {'index': self.index_name})
-            this_index_path = substitute_values(this_index_path_raw, case['tags'])
-            done_timesteps = check_data_range(this_index_path, current)
-            timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
-            if len(timesteps_to_compute) == 0:
-                log(f' - case {case["name"]}: already calculated.')
-                continue
-                      
-            log(f' - case {case["name"]}: {len(timesteps) - len(timesteps_to_compute)}/{len(timesteps)} timesteps already computed.')
-            for time in timesteps:
-                log(f'  - {time:%d/%m/%Y}')
-                reference = reference_fn(time)
-                index = self.calc_index(time, reference, case)
-                output = self.output_template.copy(data = index.values)
-                metadata = {'name': self.index_name,
-                            'time': time,
-                            'type': 'DRYES index',
-                            'index': self.index_name}
-                path_out = time.strftime(this_index_path)
-                save_dataarray_to_geotiff(output, path_out, metadata)   
+            for case_ in self.cases['opt']:
+                case = case_.copy()
+                case['tags'].update(agg_tags)
+                case['tags']['options.post_fn'] = ""
+
+                case['name'] = case['name'] if len(agg_name) == 0 else ', '.join([agg_name, case['name']])
+
+                this_index_path_raw = substitute_values(self.output_paths['maps'], {'index': self.index_name})
+                this_index_path = substitute_values(this_index_path_raw, case['tags'])
+                done_timesteps = check_data_range(this_index_path, current)
+                timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
+                if len(timesteps_to_compute) == 0:
+                    log(f' - case {case["name"]}: already calculated.')
+                else:        
+                    log(f' - case {case["name"]}: {len(timesteps) - len(timesteps_to_compute)}/{len(timesteps)} timesteps already computed.')
+                    for time in timesteps_to_compute:
+                        log(f'  - {time:%d/%m/%Y}')
+                        reference = reference_fn(time)
+                        index = self.calc_index(time, reference, case)
+                        output = self.output_template.copy(data = index.values)
+                        metadata = {'name': self.index_name,
+                                    'time': time,
+                                    'type': 'DRYES index',
+                                    'index': self.index_name}
+                        path_out = time.strftime(this_index_path)
+                        save_dataarray_to_geotiff(output, path_out, metadata)
+
+                # now do the post-processing
+                for post_case in self.cases['post']:
+                    case['tags'].update(post_case['tags'])
+                    this_ppindex_path = substitute_values(this_index_path_raw, case['tags'])
+                    done_timesteps = check_data_range(this_ppindex_path, current)
+                    timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
+                    if len(timesteps_to_compute) == 0:
+                        log(f' - post-processing {post_case["name"]}: already calculated.')
+                        continue
+
+                    log(f'  - post-processing {post_case["name"]}: {len(timesteps) - len(timesteps_to_compute)}/{len(timesteps)} timesteps already computed.')
+                    for time in timesteps_to_compute:
+                        log(f'   - {time:%d/%m/%Y}')
+                        reference = reference_fn(time)
+                        index = get_data(this_index_path, time)
+                        post_fn = post_case['post_fn']
+                        ppindex_data = post_fn(index.values)
+                        output = self.output_template.copy(data = np.expand_dims(ppindex_data, axis = 0))
+                        metadata = {'name': self.index_name,
+                                    'time': time,
+                                    'type': 'DRYES index',
+                                    'index': self.index_name,
+                                    'post-processing': post_case['name']}
+                        path_out = time.strftime(this_ppindex_path)
+                        save_dataarray_to_geotiff(output, path_out, metadata)
+
+    def calc_parameters(self, dates: List[datetime],
+                        par_and_cases: dict[str:List[int]],
+                        reference: Optional[TimeRange]=None) -> dict[str:dict[int:xr.DataArray]]:
+        """
+        Calculates the parameters for the index.
+        par_and_cases is a dictionary with the following structure:
+        {par: [case1, case2, ...]}
+        indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
+
+        The output is a dictionary with the following structure:
+        {par: {case1: parcase1, case2: parcase1, ...}}
+        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        """
+        raise NotImplementedError
+    
+    def calc_index(self, time,  reference: TimeRange, case: dict) -> xr.DataArray:
+        """
+        Calculates the index for the given time and reference period.
+        """
+        raise NotImplementedError

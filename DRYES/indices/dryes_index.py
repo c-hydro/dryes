@@ -1,7 +1,5 @@
 from datetime import datetime
-from typing import Callable, List
-import itertools
-import copy
+from typing import Callable, List, Optional
 import os
 
 from ..variables.dryes_variable import DRYESVariable
@@ -27,7 +25,8 @@ class DRYESIndex:
         self.check_options(options)
         self.get_cases()
 
-        self.output_paths = substitute_values(output_paths, output_paths, rec = False)
+        self.output_paths    = substitute_values(output_paths, output_paths, rec = False)
+        self.output_template = input_variable.grid.template
     
     def check_options(self, options: dict) -> dict:
         these_options = self.default_options.copy()
@@ -262,6 +261,7 @@ class DRYESIndex:
                 if time in timesteps_to_compute[agg_name]:
                     agg_data[agg_name].append(time_agg.aggfun[agg_name](variable, time))
         
+        data_template = self.output_template
         for agg_name in agg_names:
             log(f'#Completing time aggregation: {agg_name}...')
             if agg_name in time_agg.postaggfun.keys():
@@ -271,7 +271,14 @@ class DRYESIndex:
             for data in agg_data[agg_name]:
                 this_time = timesteps_to_compute[agg_name][i]
                 path_out = this_time.strftime(agg_paths[agg_name])
-                save_dataarray_to_geotiff(data, path_out)
+                output = data_template.copy(data = data.values)
+                metadata = {'name' : variable.name,
+                            'time' : this_time,
+                            'type' : 'DRYES data',
+                            'index': self.index_name,
+                            'aggregation': agg_name}
+                
+                save_dataarray_to_geotiff(data, path_out, metadata)
                 n += 1
             
             log(f'#Saved {n} files to {os.path.dirname(self.output_paths['data'])}.')
@@ -329,7 +336,6 @@ class DRYESIndex:
 
             # if nothing needs to be calculated, skip
             if len(timesteps_to_iterate) == 0: continue
-
             log(f' #Iterating through {len(timesteps_to_iterate)} timesteps with missing parameters.')
             for time in timesteps_to_iterate:
                 month = time.month
@@ -344,12 +350,19 @@ class DRYESIndex:
                 data_dates = all_dates
                 data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
+                data_template = self.output_template
                 par_data = self.calc_parameters(data_dates, parcases_to_calc, history)
                 for par in par_data:
                     for id, data in par_data[par].items():
                         path = substitute_values(par_paths[par], self.cases['opt'][id]['tags'])
                         path = time.strftime(path)
-                        saved = save_dataarray_to_geotiff(data, path)
+                        output = data_template.copy(data = data.values)
+                        metadata = {'reference_period': f'{history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}',
+                                    'name': par,
+                                    'time': time.strftime('%d/%m'),
+                                    'type': 'DRYES parameter',
+                                    'index': self.index_name}
+                        saved = save_dataarray_to_geotiff(output, path, metadata)
 
     def make_index(self, current: TimeRange, reference_fn: Callable[[datetime], TimeRange]) -> str:
         log(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')

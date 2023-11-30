@@ -15,7 +15,7 @@ from ..lib.io import get_data, check_data, save_dataarray_to_geotiff
 
 
 class DRYESAnomaly(DRYESIndex):
-
+    index_name = 'anomaly'
     default_options = {
         'agg_fn' : {'Agg1': agg.average_of_window(1, 'months')},
         'type'   : 'empiricalzscore'

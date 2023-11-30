@@ -65,12 +65,18 @@ class DRYESVariable():
         static_data = {k:get_data(v.path) for k,v in self.inputs.items() if v.isstatic}
 
         # compute each remaining timestep
+        data_template = self.grid.template
         for time in timesteps_to_compute:
             log(f'   - Processing {time:%Y-%m-%d}...')
             dynamic_data = {k:get_data(v.path, time) for k,v in self.inputs.items() if not v.isstatic}
             data = self.function(**static_data, **dynamic_data)
             output_file = time.strftime(self.path)
-            saved = save_dataarray_to_geotiff(data, output_file)
+            output = data_template.copy(data = data)
+            metadata = {'name' : self.name,
+                        'type' : 'DRYES data',
+                        'aggregation': 'none',
+                        'time' : time.strftime('%Y-%m-%d')}
+            saved = save_dataarray_to_geotiff(output, output_file, metadata)
             if saved:
                 log(f'   - Saved to {output_file}')
 

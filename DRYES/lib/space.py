@@ -3,6 +3,8 @@ import xarray as xr
 import rasterio
 from typing import Optional
 
+from .io import get_data
+
 # grid object useful for regridding datasets
 class Grid:
     def __init__(self, source: str) -> None:
@@ -25,6 +27,8 @@ class Grid:
             self.crs = src.crs
             self.bounds = src.bounds
             self.resolution = src.res
+        self.template = get_data(self.source)
+        self.template.attrs = {'transform': self.transform, 'crs': self.crs}
         
     def apply(self,
               data: xr.Dataset|xr.DataArray, 

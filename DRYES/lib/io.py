@@ -19,9 +19,17 @@ def save_dataset_to_geotiff(data: xr.Dataset, output_path: str, addn: str = '') 
 
     return i + 1
 
-def save_dataarray_to_geotiff(data: xr.DataArray, output_file: str) -> bool:
+def save_dataarray_to_geotiff(data: xr.DataArray, output_file: str,
+                              metadata: dict = {}) -> bool:
     # create the directory if it does not exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    # add metadata
+    metadata.update(data.attrs)
+    metadata['time_produced'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    data.attrs = metadata
+    if 'name' in metadata: data.name = metadata['name']
+
     # save the data to a geotiff
     data = data.rio.write_nodata(np.nan, inplace=True)
     data.rio.to_raster(output_file, compress = 'lzw')

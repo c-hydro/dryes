@@ -13,6 +13,17 @@ class TimeRange():
         self.isrange = True
         self.start = start
         self.end = end
+    
+    def __iter__(self):
+        self.now = self.start
+        return self
+    
+    def __next__(self):
+        if self.now > self.end:
+            raise StopIteration
+        now = self.now
+        self.now+= timedelta(days=1)
+        return now
 
 def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int) -> list[datetime]:
     """

@@ -3,6 +3,7 @@ from typing import Callable, List, Optional
 import xarray as xr
 import os
 import numpy as np
+from copy import deepcopy
 
 from ..variables.dryes_variable import DRYESVariable
 from ..time_aggregation.time_aggregation import TimeAggregation
@@ -114,13 +115,17 @@ class DRYESIndex:
         ## and combine them
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}
 
-    def compute(self, current: TimeRange, reference: TimeRange|Callable[[datetime], TimeRange]) -> None:
+    def compute(self, current:   tuple[datetime, datetime],
+                      reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]]) -> None:
         
+        # turn the current period into a TimeRange object
+        current = TimeRange(current[0], current[1])
+        raw_reference = deepcopy(reference)
         # make the reference period a function of time, for extra flexibility
-        if isinstance(reference, TimeRange):
-            reference_fn = lambda time: reference
+        if isinstance(reference, tuple) or isinstance(reference, list):
+            reference_fn = lambda time: TimeRange(raw_reference[0], raw_reference[1])
         elif isinstance(reference, Callable):
-            reference_fn = reference
+            reference_fn = lambda time: TimeRange(raw_reference(time)[0], raw_reference(time)[1])
 
         # get the timesteps for which we need input data
         data_timesteps = self.make_data_timesteps(current, reference_fn)
@@ -135,8 +140,8 @@ class DRYESIndex:
         reference_periods = self.make_reference_periods(current, reference_fn)
 
         # calculate the parameters
-        for reference in reference_periods:
-            self.make_parameters(reference)
+        for reference_ in reference_periods:
+            self.make_parameters(reference_)
 
         # calculate the index
         self.make_index(current, reference_fn)

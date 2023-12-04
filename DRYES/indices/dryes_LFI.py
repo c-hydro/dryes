@@ -127,7 +127,7 @@ class DRYESLFI(DRYESIndex):
         all_deficits = get_deficits(input_path, threshold_paths, ddi_time)
 
         # set the starting conditions for each case we need to calculate lambda for
-        if start_ddi is None: start_ddi  = np.zeros((3,*self.input_variable.grid.shape))
+        if start_ddi is None: start_ddi  = np.zeros((3,*self.grid.shape))
         ddi_dict = {k:{vv:start_ddi.copy() for vv in v} 
                                            for k,v in cases_to_calc_deficit.items()}
         # ddi stands for drought_deficit, duration, interval
@@ -135,7 +135,7 @@ class DRYESLFI(DRYESIndex):
         # set the cumulative drought, we only need the average droguth deficit to
         # calculate the lambda, so we keep track of the cumulative drought
         # and the number of droughts
-        cum_drought_raw = np.zeros((2, *self.input_variable.grid.shape))
+        cum_drought_raw = np.zeros((2, *self.grid.shape))
         cum_drought_dict = {k:{vv:cum_drought_raw.copy() for vv in v}
                                              for k,v in cases_to_calc_deficit.items()}
 
@@ -159,6 +159,7 @@ class DRYESLFI(DRYESIndex):
         return ddi_dict, cum_drought_dict
 
     def calc_parameters(self, dates: List[datetime],
+                        in_path: str, 
                         par_and_cases: dict[str:List[int]],
                         reference: TimeRange) -> dict[str:dict[int:xr.DataArray]]:
         """
@@ -172,7 +173,7 @@ class DRYESLFI(DRYESIndex):
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
 
-        input_path = self.output_paths['data']
+        input_path = in_path
         output = {'Qthreshold': {}} # this is the output dictionary
 
         # loop over all cases, let's do this in a smart way so that we don't have to load the data multiple times
@@ -264,7 +265,7 @@ class DRYESLFI(DRYESIndex):
         paths = [time.strftime(path) for path in paths]
         for i in range(3):
             data = ddi[i]
-            mask = self.input_variable.grid.mask
+            mask = self.grid.mask
             data[~mask] = np.nan
             ddi_da = self.output_template.copy(data = np.expand_dims(data, 0))
             metadata = {

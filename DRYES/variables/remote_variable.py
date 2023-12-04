@@ -9,7 +9,9 @@ from ..lib.io import save_dataset_to_geotiff, check_data
 from ..lib.time import TimeRange
 from ..lib.space import Grid
 
-class DRYESInput():
+from .dryes_variable import DRYESVariable
+
+class RemoteVariable(DRYESVariable):
     def __init__(self, data_source: DRYESDataSource, variable: str, type: str, destination: str) -> None:
         self.data_source = data_source
         self.start = data_source.get_start()
@@ -19,7 +21,7 @@ class DRYESInput():
         self.path = os.path.join(self.destination, variable+self.addn+'.tif')
         self.name = variable
 
-    def gather(self, grid: Grid, time_range: Optional[TimeRange] = None) -> None:
+    def make(self, grid: Grid, time_range: Optional[TimeRange] = None) -> None:
         """
         Gathers all the data from the remote source in the TimeRange,
         also checks that the data is not available yet before gathering it

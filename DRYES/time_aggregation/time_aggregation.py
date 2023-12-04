@@ -2,7 +2,7 @@ import xarray as xr
 from typing import Optional, Callable
 from datetime import datetime
 
-from ..variables import DRYESVariable
+from ..variables.dryes_variable import DRYESVariable
 
 AggFunction = Callable[[DRYESVariable, datetime,], xr.Dataset]
 PostAggFunction = Callable[[list[xr.DataArray], DRYESVariable], list[xr.DataArray]]

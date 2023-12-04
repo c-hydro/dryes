@@ -28,6 +28,7 @@ class DRYESAnomaly(DRYESIndex):
         return ['mean', 'std'] if 'empiricalzscore' in all_types else ['mean']
 
     def calc_parameters(self, dates: List[datetime],
+                        data_path: str,
                         par_and_cases: dict[str:List[int]],
                         reference: Optional[TimeRange]=None) -> dict[str:dict[int:xr.DataArray]]:
         """
@@ -41,7 +42,7 @@ class DRYESAnomaly(DRYESIndex):
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
         
-        input_path = self.input_variable.path
+        input_path = data_path
         data = [get_data(input_path, time) for time in dates]
         data_template = self.output_template
         data = np.stack(data, axis = 0)

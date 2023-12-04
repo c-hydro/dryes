@@ -1,2 +1,3 @@
-from .dryes_input import *
-from .dryes_variable import *
+from .local_variable import LocalVariable
+from .remote_variable import RemoteVariable
+from .processed_variable import ProcessedVariable

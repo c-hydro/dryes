@@ -6,19 +6,20 @@ from typing import Callable
 
 from functools import partial
 
-from ..variables import DRYESVariable
+from ..variables.dryes_variable import DRYESVariable
 from ..lib.time import TimeRange, get_interval_date
+from ..lib.space import Grid
 from ..lib.io import get_data, check_data_range
 
 def average_of_window(size: int, unit: str) -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
     """
-    def _average_of_window(variable: DRYESVariable, time: datetime, _size: int, _unit: str) -> xr.DataArray:
+    def _average_of_window(variable: DRYESVariable, grid: Grid, time: datetime, _size: int, _unit: str) -> xr.DataArray:
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
         """
-
+        #breakpoint()
         time_end = time - timedelta(days=1)
         if _unit[-1] != 's': _unit += 's'
         if _unit in ['months', 'years', 'days', 'weeks']:
@@ -36,7 +37,7 @@ def average_of_window(size: int, unit: str) -> Callable:
         if time_start < variable.start:
             return None
 
-        variable.make(TimeRange(time_start, time_end))
+        variable.make(grid, TimeRange(time_start, time_end))
         times_to_get = check_data_range(variable.path, TimeRange(time_start, time_end))
 
         data = [get_data(variable.path, time) for time in times_to_get]

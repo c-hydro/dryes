@@ -10,11 +10,13 @@ from ..time_aggregation.time_aggregation import TimeAggregation
 
 from ..lib.log import setup_logging, log
 from ..lib.time import TimeRange, create_timesteps, ntimesteps_to_md
+from ..lib.space import Grid
 from ..lib.parse import substitute_values, options_to_cases
 from ..lib.io import check_data_range, save_dataarray_to_geotiff, get_data
 
 class DRYESIndex:
     def __init__(self, input_variable: DRYESVariable,
+                 grid_file: str,
                  timesteps_per_year: int,
                  options: dict,
                  output_paths: dict,
@@ -31,11 +33,11 @@ class DRYESIndex:
         self.output_paths = substitute_values(output_paths, output_paths, rec = False)
         self.check_output_paths()
 
-        breakpoint()
         if 'data' not in self.output_paths:
             self.output_paths['data'] = input_variable.path
 
-        self.output_template = input_variable.grid.template
+        self.grid = Grid(grid_file)
+        self.output_template = self.grid.template
     
     def check_options(self, options: dict) -> dict:
         these_options = self.default_options.copy()
@@ -216,7 +218,7 @@ class DRYESIndex:
         agg_cases = self.cases['agg']
         if len(agg_cases) == 0:
             variable.path = path
-            variable.make(TimeRange(min(timesteps), max(timesteps)))
+            variable.make(self.grid, TimeRange(min(timesteps), max(timesteps)))
             return path
 
         # get the names of the aggregations to compute
@@ -249,7 +251,8 @@ class DRYESIndex:
             for agg_name in agg_names:
                 log(f'#Starting aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
-                    agg_data[agg_name].append(time_agg.aggfun[agg_name](variable, time))
+                    agg_data[agg_name].append(time_agg.aggfun[agg_name](variable, self.grid, time))
+                    #breakpoint()
         
         data_template = self.output_template
         for agg_name in agg_names:
@@ -259,6 +262,8 @@ class DRYESIndex:
 
             n = 0
             for i, data in enumerate(agg_data[agg_name]):
+                if data is None or data.size == 0:
+                    data = data_template.copy(data = np.full(data_template.shape, np.nan))
                 this_time = timesteps_to_compute[agg_name][i]
                 path_out = this_time.strftime(agg_paths[agg_name])
                 output = data_template.copy(data = data.values)
@@ -302,8 +307,10 @@ class DRYESIndex:
             if agg is not None:
                 log(f' #{agg["name"]}:')
                 par_paths = {par:substitute_values(path, agg['tags']) for par, path in output_paths.items()}
+                in_path = self.input_data_path[agg["name"]]
             else:
                 par_paths = output_paths
+                in_path = self.input_data_path
 
             #par_paths = {par: substitute_values(this_output_path, {'par': par}) for par in parameters}
             timesteps_to_do_set = {par: set() for par in parameters}
@@ -342,7 +349,7 @@ class DRYESIndex:
                 data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
                 data_template = self.output_template
-                par_data = self.calc_parameters(data_dates, parcases_to_calc, history)
+                par_data = self.calc_parameters(data_dates, in_path, parcases_to_calc, history)
                 for par in par_data:
                     for id, data in par_data[par].items():
                         path = substitute_values(par_paths[par], self.cases['opt'][id]['tags'])
@@ -398,12 +405,11 @@ class DRYESIndex:
                 for post_case in self.cases['post']:
                     case['tags'].update(post_case['tags'])
                     this_ppindex_path = substitute_values(this_index_path_raw, case['tags'])
-                    done_timesteps = check_data_range(this_ppindex_path, current)
+                    done_timesteps = list(check_data_range(this_ppindex_path, current))
                     timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
                     if len(timesteps_to_compute) == 0:
                         log(f' - post-processing {post_case["name"]}: already calculated.')
                         continue
-
                     log(f'  - post-processing {post_case["name"]}: {len(timesteps) - len(timesteps_to_compute)}/{len(timesteps)} timesteps already computed.')
                     for time in timesteps_to_compute:
                         log(f'   - {time:%d/%m/%Y}')

@@ -28,7 +28,13 @@ class DRYESIndex:
         self.check_options(options)
         self.get_cases()
 
-        self.output_paths    = substitute_values(output_paths, output_paths, rec = False)
+        self.output_paths = substitute_values(output_paths, output_paths, rec = False)
+        self.check_output_paths()
+
+        breakpoint()
+        if 'data' not in self.output_paths:
+            self.output_paths['data'] = input_variable.path
+
         self.output_template = input_variable.grid.template
     
     def check_options(self, options: dict) -> dict:
@@ -115,6 +121,12 @@ class DRYESIndex:
         ## and combine them
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}
 
+    def check_output_paths(self) -> None:
+        # check that we have output paths for all the parameters in self.parameters
+        for par in self.parameters:
+            if par not in self.output_paths:
+                raise ValueError(f'No output path for parameter {par}.')
+
     def compute(self, current:   tuple[datetime, datetime],
                       reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]]) -> None:
         
@@ -157,14 +169,16 @@ class DRYESIndex:
         current_timesteps = create_timesteps(current.start, current.end, agg_timesteps_per_year)
         reference_start = set(reference_fn(time).start for time in current_timesteps)
         reference_end   = set(reference_fn(time).end   for time in current_timesteps)
-        
         if self.iscontinuous:
             time_start = min(reference_start)
             time_end   = max(current_timesteps)
             return create_timesteps(time_start, time_end, agg_timesteps_per_year)
         else:
             reference_timesteps = create_timesteps(min(reference_start), max(reference_end), self.timesteps_per_year)
-            return reference_timesteps + current_timesteps
+            all_timesteps = set.union(set(reference_timesteps), set(current_timesteps))
+            all_timesteps = list(all_timesteps)
+            all_timesteps.sort()
+            return all_timesteps
 
     def make_reference_periods(self, current: TimeRange, reference_fn: Callable[[datetime], TimeRange]) -> List[TimeRange]:
         """
@@ -244,7 +258,7 @@ class DRYESIndex:
                 agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable)
 
             n = 0
-            for data in agg_data[agg_name]:
+            for i, data in enumerate(agg_data[agg_name]):
                 this_time = timesteps_to_compute[agg_name][i]
                 path_out = this_time.strftime(agg_paths[agg_name])
                 output = data_template.copy(data = data.values)
@@ -265,8 +279,9 @@ class DRYESIndex:
         log(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
         
         # get the output path template for the parameters
-        output_path = self.output_paths['parameters']
-        output_path = substitute_values(output_path, {'history_start': history.start, "history_end": history.end})
+        output_paths = {par: self.output_paths[par] for par in self.parameters}
+        output_paths = {par: substitute_values(path, {'history_start': history.start, "history_end": history.end})
+                        for par, path in output_paths.items()}
         
         # get the parameters that need to be calculated
         parameters = self.parameters
@@ -286,11 +301,11 @@ class DRYESIndex:
         for agg in agg_cases:
             if agg is not None:
                 log(f' #{agg["name"]}:')
-                this_output_path = substitute_values(output_path, agg['tags'])
+                par_paths = {par:substitute_values(path, agg['tags']) for par, path in output_paths.items()}
             else:
-                this_output_path = output_path
+                par_paths = output_paths
 
-            par_paths = {par: substitute_values(this_output_path, {'par': par}) for par in parameters}
+            #par_paths = {par: substitute_values(this_output_path, {'par': par}) for par in parameters}
             timesteps_to_do_set = {par: set() for par in parameters}
             timesteps_to_do = {par: [] for par in parameters}
             # check if anything has been calculated already
@@ -361,7 +376,7 @@ class DRYESIndex:
 
                 this_index_path_raw = substitute_values(self.output_paths['maps'], {'index': self.index_name})
                 this_index_path = substitute_values(this_index_path_raw, case['tags'])
-                done_timesteps = check_data_range(this_index_path, current)
+                done_timesteps = list(check_data_range(this_index_path, current))
                 timesteps_to_compute = [time for time in timesteps if time not in done_timesteps]
                 if len(timesteps_to_compute) == 0:
                     log(f' - case {case["name"]}: already calculated.')

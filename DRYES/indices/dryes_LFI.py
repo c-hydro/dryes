@@ -29,11 +29,16 @@ class DRYESLFI(DRYESIndex):
         'min_nevents'  :  5
     }
 
+    # parameters for the LFI
+    parameters = ('Qthreshold', 'lambda', 'Ddeficit', 'duration', 'interval')
+
     def make_parameters(self, history: TimeRange):
         # for the LFI, we need to do this separately from the superclass, because parameters work a little differently
         # the threshold is calculated from the superclass
+        parameters_all = self.parameters
         self.parameters = ('Qthreshold',)
         super().make_parameters(history)
+        self.parameters = parameters_all
 
         # let's separate the cases based on the threshold parameters
         # the deficits and the lambdas
@@ -58,7 +63,7 @@ class DRYESLFI(DRYESIndex):
                     cases_to_calc_lambda[this_thrid].append(this_lamid)
                     n+=1
         
-        all_cases = sum(len(v) for v in cases_to_calc_lambda.values())
+        all_cases = sum(len(v) for v in lam_cases)
         log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
         if n == 0: return
 
@@ -89,11 +94,15 @@ class DRYESLFI(DRYESIndex):
                             'index': self.index_name}
                 save_dataarray_to_geotiff(lambda_da, this_lambda_path, metadata)
 
-                ddi_path_raw = self.output_paths['ddi']
-                ddi_path = substitute_values(ddi_path_raw, lamcase['tags'])
+                ddi_paths_raw = [self.output_paths['Ddeficit'],
+                                 self.output_paths['duration'],
+                                 self.output_paths['interval']]
+                tag_dict = {'history_start': history.start, 'history_end': history.end}
+                tag_dict.update(lamcase['tags'])
+                ddi_paths = [substitute_values(ddi_path, tag_dict) for ddi_path in ddi_paths_raw]
                 ddi = ddi_dict[this_thrid][this_lamid]
                 ddi_time = history.end + timedelta(days = 1)
-                self.save_ddi(ddi, ddi_time, ddi_path)
+                self.save_ddi(ddi, ddi_time, ddi_paths)
 
     def calc_deficit(self, history: TimeRange,
                      deficit_cases_hierarchy: List[List[dict[str, dict]]],
@@ -105,10 +114,9 @@ class DRYESLFI(DRYESIndex):
         thr_cases, def_cases = deficit_cases_hierarchy
 
         # then we need to figure out the paths for the thresholds
-        theshold_path_raw = substitute_values(self.output_paths['parameters'],
-                                                {'par': 'Qthreshold',
-                                                'history_start' : history.start,
-                                                'history_end'   : history.end})        
+        theshold_path_raw = substitute_values(self.output_paths['Qthreshold'],
+                                                {'history_start' : history.start,
+                                                 'history_end'   : history.end})        
         threshold_paths = {i: substitute_values(theshold_path_raw, case['tags'])
                            for i, case in enumerate(thr_cases) if i in cases_to_calc_deficit.keys()}
 
@@ -204,14 +212,17 @@ class DRYESLFI(DRYESIndex):
 
         return output
 
-    def calc_lambda(self, history: TimeRange) -> xr.DataArray:
-        pass
-
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # calculate the current deficit
-        ddi_path = substitute_values(self.output_paths['ddi'], case['tags'])
+        ddi_paths_raw = [self.output_paths['Ddeficit'],
+                         self.output_paths['duration'],
+                         self.output_paths['interval']]
+        tag_dict = {'history_start': history.start, 'history_end': history.end}
+        tag_dict.update(case['tags'])
+        ddi_paths = [substitute_values(ddi_path, tag_dict) for ddi_path in ddi_paths_raw]
+        #ddi_path = substitute_values(self.output_paths['ddi'], case['tags'])
         # get the most recent ddi
-        ddi_time, ddi_start = get_recent_ddi(time, ddi_path)
+        ddi_time, ddi_start = get_recent_ddi(time, ddi_paths)
         # if there is no ddi, we need to calculate it from scratch,
         # otherwise we can just use the most recent one and update from there
         ddi = None
@@ -235,7 +246,7 @@ class DRYESLFI(DRYESIndex):
         deficit[duration < min_duration] = 0
 
         # save the ddi for the next timestep
-        self.save_ddi(ddi, time, ddi_path)
+        self.save_ddi(ddi, time, ddi_paths)
 
         # get the lambda
         lambda_path_raw = substitute_values(self.output_paths['lambda'], {'history_start': history.start, 'history_end': history.end})
@@ -247,10 +258,10 @@ class DRYESLFI(DRYESIndex):
         lfi = output_template.copy(data = lfi_data)
         return lfi
 
-    def save_ddi(self, ddi: np.ndarray, time: datetime, path: str):
+    def save_ddi(self, ddi: np.ndarray, time: datetime, paths: List[str]):
         # now let's save the ddi at the end of the history period
         ddi_names = ['deficit', 'duration', 'interval']
-        path = time.strftime(path)
+        paths = [time.strftime(path) for path in paths]
         for i in range(3):
             data = ddi[i]
             mask = self.input_variable.grid.mask
@@ -261,7 +272,7 @@ class DRYESLFI(DRYESIndex):
                     'type': 'DRYES parameter',
                     'index': self.index_name,
                     'time': time.strftime('%Y-%m-%d')}
-            output_file = path.format(ddi_var = ddi_names[i])
+            output_file = paths[i]
             save_dataarray_to_geotiff(ddi_da, output_file, metadata)
 
 def get_deficits(streamflow: str, threshold: dict[int:str], time_range:TimeRange) -> dict[int:np.ndarray]:
@@ -365,18 +376,18 @@ def pool_deficit_singlepixel(deficit: float,
     final_conditions = np.array([drought_deficit, duration, interval])
     return final_conditions, cum_drought
 
-def get_recent_ddi(time, ddi_path):
+def get_recent_ddi(time, ddi_paths):
     """
     returns the most recent ddi for the given time
     """
-    ddi_vars  = ['deficit', 'duration', 'interval']
+    ddi_vars  = ['Ddeficit', 'duration', 'interval']
     ddi_times = {var: set() for var in ddi_vars}
-    ddi_path  = {var: substitute_values(ddi_path, {'ddi_var': var}) for var in ddi_vars}
+    ddi_paths  = {var: ddi_paths[i] for i, var in enumerate(ddi_vars)}
     for var in ddi_vars:
-        this_ddi_path = ddi_path[var]
+        this_ddi_path = ddi_paths[var]
         this_ddi_path_glob = this_ddi_path.replace('%Y', '*').\
-                                         replace('%m', '*').\
-                                         replace('%d', '*')
+                                           replace('%m', '*').\
+                                           replace('%d', '*')
         all_ddi_paths = glob.glob(this_ddi_path_glob)
         times = [datetime.strptime(path, this_ddi_path) for path in all_ddi_paths]
         ddi_times[var] = set(times)
@@ -388,9 +399,9 @@ def get_recent_ddi(time, ddi_path):
 
     # get the most recent timestep
     recent_time = max(common_times_before_time)
-    deficit, duration, interval = [get_data(path, recent_time).values for path in ddi_path.values()]
+    Ddeficit, duration, interval = [get_data(path, recent_time).values for path in ddi_paths.values()]
 
-    ddi = np.squeeze(np.stack([deficit, duration, interval], axis = 0))
+    ddi = np.squeeze(np.stack([Ddeficit, duration, interval], axis = 0))
 
     return recent_time, ddi
 

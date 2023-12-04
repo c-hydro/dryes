@@ -70,18 +70,19 @@ class DRYESAnomaly(DRYESIndex):
         data = get_data(input_path, time)
 
         # load the parameters
-        par_path_raw = substitute_values(self.output_paths['parameters'], {'history_start': history.start, 'history_end': history.end})
-        par_path = substitute_values(par_path_raw, case['tags'])
-        parameters = [get_data(substitute_values(par_path, {'par': par}), time) for par in self.parameters]
+        tag_dict = {'history_start': history.start, 'history_end': history.end}
+        tag_dict.update(case['tags'])
+        par_path = {par: substitute_values(self.output_paths[par], tag_dict)
+                        for par in self.parameters}
+        parameters = {par: get_data(par_path[par], time) for par in self.parameters}
+        mean = parameters['mean']
         # calculate the index
         if case['options']['type'] == 'empiricalzscore':
-            mean, std = parameters
+            std  = parameters['std']
             anomaly_data = (data - mean) / std
         elif case['options']['type'] == 'percentdelta':
-            mean = parameters[0]
             anomaly_data = (data - mean) / mean * 100
         elif case['options']['type'] == 'absolutedelta':
-            mean = parameters[0]
             anomaly_data = data - mean
         else:
             raise ValueError(f"Unknown type {case['options']['type']} for anomaly index.")

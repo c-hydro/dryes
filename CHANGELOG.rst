@@ -3,6 +3,10 @@ Changelog
 =========
 
 =======
+Version 2.6.12 [2023-12-11]
+***************************
+- Modified SPI tool to avoid errors in parameters calculation
+
 Version 2.6.11 [2023-11-13]
 ***************************
 - Switched from xarray.open_rasterio to rioxarray.open_rasterio post xarray v0.20

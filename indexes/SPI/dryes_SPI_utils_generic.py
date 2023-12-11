@@ -156,7 +156,10 @@ def load_monthly_avg_data_from_geotiff(da_domain_in, period_daily, period_monthl
                 data_climatology = data_climatology.interp(coordinates_target, method='nearest')
 
                 # set no data to NaN
-                data_climatology.values[data_climatology.values == data_climatology.nodatavals[0]] = np.nan
+                try:
+                    data_climatology.values[data_climatology.values == data_climatology.nodatavals[0]] = np.nan
+                except:
+                    data_climatology.values[data_climatology.values == data_climatology._FillValue] = np.nan
 
                 # apply threshold
                 data_month_values[data_month_values > threshold_climatology * data_climatology.values] = np.nan

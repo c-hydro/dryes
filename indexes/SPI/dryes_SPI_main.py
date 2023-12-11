@@ -217,13 +217,14 @@ def main():
 
         # compute SPI
         probVal = stat.gamma.cdf(data_this_month, a=parameters[0,:,:], loc=parameters[1,:,:], scale=parameters[2,:,:])
-        # probVal[probVal == 0] = 0.0000001
-        # probVal[probVal == 1] = 0.9999999
+        probVal[probVal == 0] = 0.0000001
+        probVal[probVal == 1] = 0.9999999
 
         prob0 = parameters[3,:,:]
 
         probVal = prob0.values + \
                     ((1 - prob0.values) * probVal)
+
 
         SPI = stat.norm.ppf(probVal, loc=0, scale=1)
         logging.info(' --> SPI computed for aggregation ' + str(agg_window))

@@ -212,6 +212,8 @@ class DRYESIndex:
         path_raw = substitute_values(self.output_paths['data'], {'var': variable.name})
         self.output_paths['data'] = path_raw
         path = substitute_values(self.output_paths['data'], {'options.agg_fn': '{agg_name}'})
+
+        data_template = self.output_template
         
         log(f'Making input data ({variable.name})...')
         # if there are no aggregations to compute, just get the data in the paths
@@ -246,38 +248,51 @@ class DRYESIndex:
         timesteps_to_iterate.sort()
 
         agg_data = {n:[] for n in agg_names}
+        n = 0
         for i, time in enumerate(timesteps_to_iterate):
             log(f'Computing {time:%d-%m-%Y} ({i+1}/{len(timesteps_to_iterate)})...')
             for agg_name in agg_names:
-                log(f'#Starting aggregation {agg_name}...')
+                log(f'#Aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
-                    agg_data[agg_name].append(time_agg.aggfun[agg_name](variable, self.grid, time))
-                    #breakpoint()
+                    data = time_agg.aggfun[agg_name](variable, self.grid, time)
+                    if not self.iscontinuous:
+                        if data is None or data.size == 0:
+                            data = data_template.copy(data = np.full(data_template.shape, np.nan))
+                        path_out = time.strftime(agg_paths[agg_name])
+                        output = data_template.copy(data = data.values)
+                        metadata = {'name' : variable.name,
+                                    'time' : time,
+                                    'type' : 'DRYES data',
+                                    'index': self.index_name,
+                                    'aggregation': agg_name}
+                        save_dataarray_to_geotiff(output, path_out, metadata)
+                        n += 1
+                    else:
+                        agg_data[agg_name].append(data)
         
-        data_template = self.output_template
-        for agg_name in agg_names:
-            log(f'#Completing time aggregation: {agg_name}...')
-            if agg_name in time_agg.postaggfun.keys():
-                agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable)
+        if self.iscontinuous:
 
-            n = 0
-            for i, data in enumerate(agg_data[agg_name]):
-                if data is None or data.size == 0:
-                    data = data_template.copy(data = np.full(data_template.shape, np.nan))
-                this_time = timesteps_to_compute[agg_name][i]
-                path_out = this_time.strftime(agg_paths[agg_name])
-                output = data_template.copy(data = data.values)
-                metadata = {'name' : variable.name,
-                            'time' : this_time,
-                            'type' : 'DRYES data',
-                            'index': self.index_name,
-                            'aggregation': agg_name}
-                
-                save_dataarray_to_geotiff(data, path_out, metadata)
-                n += 1
+            for agg_name in agg_names:
+                log(f'#Completing time aggregation: {agg_name}...')
+                if agg_name in time_agg.postaggfun.keys():
+                    agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable)
+
+                for i, data in enumerate(agg_data[agg_name]):
+                    if data is None or data.size == 0:
+                        data = data_template.copy(data = np.full(data_template.shape, np.nan))
+                    this_time = timesteps_to_compute[agg_name][i]
+                    path_out = this_time.strftime(agg_paths[agg_name])
+                    output = data_template.copy(data = data.values)
+                    metadata = {'name' : variable.name,
+                                'time' : this_time,
+                                'type' : 'DRYES data',
+                                'index': self.index_name,
+                                'aggregation': agg_name}
+                    
+                    save_dataarray_to_geotiff(output, path_out, metadata)
+                    n += 1
             
-            log(f'#Saved {n} files to {os.path.dirname(self.output_paths['data'])}.')
-
+        log(f'#Saved {n} files to {os.path.dirname(self.output_paths['data'])}.')
         return agg_paths
     
     def make_parameters(self, history: TimeRange):

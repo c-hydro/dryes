@@ -40,7 +40,6 @@ class Grid:
         """
         # reproject the data to the crs of the target grid
         data = data.rio.reproject(self.crs)
-
         if coord_names is None:
             coord_names = get_coord_names(data)
 
@@ -49,18 +48,17 @@ class Grid:
 
         transform = self.transform
         shape = self.shape
-
         # Create a new xarray Dataset that represents the target grid
         lon = np.arange(transform[2] + transform[0] / 2, transform[2] + transform[0] * shape[1], transform[0])
         lat = np.arange(transform[5] + transform[4] / 2, transform[5] + transform[4] * shape[0], transform[4])
-        target = {latname: (lat), lonname: (lon)}        
+        target = {latname: (lat), lonname: (lon)}      
 
         # Interpolate the original data onto the target grid
         regridded = data.interp(target, method=method)
 
         # Add metadata
-        regridded.rio.write_transform(transform, inplace=True)
-        regridded.rio.write_crs(self.crs, inplace=True)
+        regridded = regridded.rio.write_transform(transform, inplace=True)
+        regridded = regridded.rio.write_crs(self.crs, inplace=True)
         # Mask the data if requested
         if mask:
             # Reshape regridded to match the target grid, the order of the dimensions

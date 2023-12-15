@@ -54,6 +54,6 @@ class LocalVariable(DRYESVariable):
             gridded_data = grid.apply(data)
             output_path = timestep.strftime(self.path)
             gridded_data.name = self.name
-            saved = save_dataarray_to_geotiff(data, output_path)
+            saved = save_dataarray_to_geotiff(gridded_data, output_path)
 
             log(f' - {self.name}: saved files to {output_path}')

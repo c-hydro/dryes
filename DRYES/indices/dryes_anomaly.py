@@ -32,7 +32,7 @@ class DRYESAnomaly(DRYESIndex):
                         par_and_cases: dict[str:List[int]],
                         reference: Optional[TimeRange]=None) -> dict[str:dict[int:xr.DataArray]]:
         """
-        Calculates the parameters for the LFI. This will only do the threshold calculation.
+        Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.

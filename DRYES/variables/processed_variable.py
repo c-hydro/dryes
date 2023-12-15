@@ -18,8 +18,9 @@ class ProcessedVariable(DRYESVariable):
                        destination: str,
                        name: Optional[str]=None) -> None:
         
-        self.inputs = inputs
-        self.start = max([v.start for v in inputs.values() if not v.isstatic])
+        self.inputs_static = {k:v for k,v in inputs.items() if v.isstatic}
+        self.inputs_dynamic = {k:v for k,v in inputs.items() if not v.isstatic}
+        self.start = max([v.start for v in self.inputs_dynamic.values() if not v.isstatic])
         #self.grid = Grid(grid_file)
 
         self.function = function
@@ -28,6 +29,8 @@ class ProcessedVariable(DRYESVariable):
         self.name = name
         self.path = destination
 
+        self.times_processed = []
+
     def gather_inputs(self, grid: Grid, time_range: TimeRange) -> None:
         """
         Gathers all the data from the remote source in the TimeRange,
@@ -35,7 +38,8 @@ class ProcessedVariable(DRYESVariable):
         """
 
         log(' Checking source data:')
-        for v in self.inputs.values():
+        all_inputs = {**self.inputs_static, **self.inputs_dynamic}
+        for v in all_inputs.values():
             v.make(grid, time_range)
 
     def compute(self, grid, time_range: TimeRange):
@@ -45,7 +49,7 @@ class ProcessedVariable(DRYESVariable):
         """
         
         log(f' Processing source data into {self.name}:')
-        variable_paths = [v.path for v in self.inputs.values()]
+        variable_paths = [v.path for v in {**self.inputs_static, **self.inputs_dynamic}.values()]
 
         timesteps_to_compute_per_var = [set(check_data_range(paths, time_range)) for paths in variable_paths]
         intersection = set.intersection(*timesteps_to_compute_per_var)
@@ -62,13 +66,13 @@ class ProcessedVariable(DRYESVariable):
         
         log(f' - Processing {num_timesteps} timesteps.')
         # get the static inputs, these are the same for each timestep
-        static_data = {k:get_data(v.path) for k,v in self.inputs.items() if v.isstatic}
+        static_data = {k:get_data(v.path) for k,v in self.inputs_static.items()}
 
         # compute each remaining timestep
         data_template = grid.template
         for time in timesteps_to_compute:
             log(f'   - Processing {time:%Y-%m-%d}...')
-            dynamic_data = {k:get_data(v.path, time) for k,v in self.inputs.items() if not v.isstatic}
+            dynamic_data = {k:get_data(v.path, time) for k,v in self.inputs_dynamic.items()}
             data = self.function(**static_data, **dynamic_data)
             output_file = time.strftime(self.path)
             output = data_template.copy(data = data)
@@ -79,6 +83,7 @@ class ProcessedVariable(DRYESVariable):
             saved = save_dataarray_to_geotiff(output, output_file, metadata)
             if saved:
                 log(f'   - Saved to {output_file}')
+                self.times_processed.append(time)
 
     def make(self, grid: Grid, time_range: TimeRange = None):
         """

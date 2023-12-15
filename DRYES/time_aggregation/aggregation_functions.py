@@ -7,7 +7,7 @@ from typing import Callable
 from functools import partial
 
 from ..variables.dryes_variable import DRYESVariable
-from ..lib.time import TimeRange, get_interval_date
+from ..lib.time import TimeRange, get_interval_date, get_window
 from ..lib.space import Grid
 from ..lib.io import get_data, check_data_range
 
@@ -19,26 +19,13 @@ def average_of_window(size: int, unit: str) -> Callable:
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
         """
-        #breakpoint()
-        time_end = time - timedelta(days=1)
-        if _unit[-1] != 's': _unit += 's'
-        if _unit in ['months', 'years', 'days', 'weeks']:
-            time_start = time - relativedelta(**{_unit: _size})
-        elif _unit == 'dekads':
-            if time_end == get_interval_date(time_end, 36, end = True):
-                tmp_time = time_end
-                for i in range(_size): tmp_time = get_interval_date(tmp_time, 36) - timedelta(days=1)
-                time_start = tmp_time + timedelta(days=1)
-            else:
-                time_start = time - timedelta(days = 10 * _size)
-        else:
-            raise ValueError('Unit for average aggregator recognized: must be one of dekads, months, years, days, weeks')
+        window = get_window(time, _size, _unit)
 
-        if time_start < variable.start:
+        if window.start < variable.start:
             return None
 
-        variable.make(grid, TimeRange(time_start, time_end))
-        times_to_get = check_data_range(variable.path, TimeRange(time_start, time_end))
+        variable.make(grid, window)
+        times_to_get = check_data_range(variable.path, window)
 
         data = [get_data(variable.path, time) for time in times_to_get]
         data = xr.concat(data, dim = 'time')
@@ -47,3 +34,26 @@ def average_of_window(size: int, unit: str) -> Callable:
         return mean
     
     return partial(_average_of_window, _size = size, _unit = unit)
+
+def sum_of_window(size: int, unit: str) -> Callable:
+    """
+    Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.
+    """
+    def _sum_of_window(variable: DRYESVariable, grid: Grid, time: datetime, _size: int, _unit: str) -> xr.DataArray:
+        """
+        Aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
+        """
+        window = get_window(time, _size, _unit)
+        if window.start < variable.start:
+            return None
+
+        variable.make(grid, window)
+        times_to_get = check_data_range(variable.path, window)
+
+        data = [get_data(variable.path, time) for time in times_to_get]
+        data = xr.concat(data, dim = 'time')
+        mean = data.sum(dim = 'time', skipna=True)
+        mean = mean.assign_coords(time = time)
+        return mean
+    
+    return partial(_sum_of_window, _size = size, _unit = unit)

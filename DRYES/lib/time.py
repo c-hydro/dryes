@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import numpy as np
 
 from typing import List
@@ -146,3 +147,19 @@ def doy_to_md(doy:int) -> tuple[int, int]:
 def ntimesteps_to_md(timesteps_per_year: int) -> List[tuple[int, int]]:
     timesteps = create_timesteps(datetime(1987, 1, 1), datetime(1987, 12, 31), timesteps_per_year)
     return [(time.month, time.day) for time in timesteps] 
+
+def get_window(time: datetime, size: int, unit: str) -> TimeRange:
+        time_end = time - timedelta(days=1)
+        if unit[-1] != 's': unit += 's'
+        if unit in ['months', 'years', 'days', 'weeks']:
+            time_start = time - relativedelta(**{unit: size})
+        elif unit == 'dekads':
+            if time_end == get_interval_date(time_end, 36, end = True):
+                tmp_time = time_end
+                for i in range(size): tmp_time = get_interval_date(tmp_time, 36) - timedelta(days=1)
+                time_start = tmp_time + timedelta(days=1)
+            else:
+                time_start = time - timedelta(days = 10 * size)
+        else:
+            raise ValueError('Unit for average aggregator recognized: must be one of dekads, months, years, days, weeks')
+        return TimeRange(time_start, time_end)

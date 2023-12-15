@@ -1,13 +1,13 @@
-import rioxarray
 import xarray as xr
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
+from datetime import datetime
 from typing import Callable
+import numpy as np
+import warnings
 
 from functools import partial
 
 from ..variables.dryes_variable import DRYESVariable
-from ..lib.time import TimeRange, get_interval_date, get_window
+from ..lib.time import get_window
 from ..lib.space import Grid
 from ..lib.io import get_data, check_data_range
 
@@ -28,8 +28,11 @@ def average_of_window(size: int, unit: str) -> Callable:
         times_to_get = check_data_range(variable.path, window)
 
         data = [get_data(variable.path, time) for time in times_to_get]
-        data = xr.concat(data, dim = 'time')
-        mean = data.mean(dim = 'time', skipna=True)
+        all_data = np.stack(data, axis = 0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            mean_data = np.nanmean(all_data, axis = 0)
+        mean = grid.template.copy(data = mean_data)
         mean = mean.assign_coords(time = time)
         return mean
     
@@ -51,9 +54,10 @@ def sum_of_window(size: int, unit: str) -> Callable:
         times_to_get = check_data_range(variable.path, window)
 
         data = [get_data(variable.path, time) for time in times_to_get]
-        data = xr.concat(data, dim = 'time')
-        mean = data.sum(dim = 'time', skipna=True)
-        mean = mean.assign_coords(time = time)
-        return mean
+        all_data = np.stack(data, axis = 0)
+        sum_data = np.sum(all_data, axis = 0)
+        sum = grid.template.copy(data = sum_data)
+        sum = sum.assign_coords(time = time)
+        return sum
     
     return partial(_sum_of_window, _size = size, _unit = unit)

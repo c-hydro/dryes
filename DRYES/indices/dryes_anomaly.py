@@ -56,12 +56,12 @@ class DRYESAnomaly(DRYESIndex):
             if 'mean' in parameters:
                 mean_data = np.nanmean(data, axis = 0)
                 mean = data_template.copy(data = mean_data)
-                output['mean'] = {0:mean}
+                output['mean'] = {0:mean} # -> we save this as case 0 because it is the same for all cases
             # std
             if 'std' in parameters:
                 std_data = np.nanstd(data, axis = 0)
                 std = data_template.copy(data = std_data)
-                output['std'] = {0:std}
+                output['std'] = {0:std} # -> we save this as case 0 because it is the same for all cases
         return output
     
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:

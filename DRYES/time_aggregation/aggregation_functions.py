@@ -38,6 +38,7 @@ def average_of_window(size: int, unit: str) -> Callable:
     
     return partial(_average_of_window, _size = size, _unit = unit)
 
+#TODO: make sum safe by managing NaNs (nanmean * n = sum, unless there are more than a certain number of NaNs)
 def sum_of_window(size: int, unit: str) -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.

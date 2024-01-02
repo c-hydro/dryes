@@ -3,14 +3,14 @@ import numpy as np
 import xarray as xr
 import warnings
 
-from typing import List, Optional
+from typing import List
 
 from .dryes_index import DRYESIndex
 
+from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
+
 from ..lib.time import TimeRange
-from ..lib.parse import substitute_values
-from ..lib.io import get_data
 from ..lib.stat import compute_gamma, check_pval_gamma, get_prob_gamma, map_prob_to_normal
 
 
@@ -36,12 +36,14 @@ class DRYESStandardisedIndex(DRYESIndex):
                 raise ValueError(f"Unknown distribution {distribution}.")
         return all_parameters
 
-    def calc_parameters(self, dates: List[datetime],
-                        data_path: str,
-                        par_and_cases: dict[str:List[int]],
-                        reference: Optional[TimeRange]=None) -> dict[str:dict[int:xr.DataArray]]:
+    def calc_parameters(self,
+                        time: datetime,
+                        variable: IOHandler,
+                        history: TimeRange,
+                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
         """
-        Calculates the parameters for the standardised index (i.e. the distribution fitting).
+        time, variable, history, par_cases
+        Calculates the parameters for the index.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
@@ -50,12 +52,14 @@ class DRYESStandardisedIndex(DRYESIndex):
         {par: {case1: parcase1, case2: parcase1, ...}}
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
-        input_path = data_path
-        data = [get_data(input_path, time) for time in dates]
-        data_template = self.output_template
-        data = np.stack(data, axis = 0)
-        # remove the 1-dimensional band dimension
-        #data = data.squeeze()
+
+        history_years = range(history.start.year, history.end.year + 1)
+        all_dates  = [datetime(year, time.month, time.day) for year in history_years]
+        data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
+
+        data_ = [variable.get_data(time) for time in data_dates]
+        data = np.stack(data_, axis = 0)
+
         output = {}
         # calculate the parameters
         parameters = par_and_cases.keys()
@@ -68,8 +72,7 @@ class DRYESStandardisedIndex(DRYESIndex):
                 # reassign NaNs
                 iszero = np.where(np.isnan(data), np.nan, iszero)
                 prob0_data = np.nanmean(iszero, axis = 0)
-                prob0 = data_template.copy(data = prob0_data)
-                output['prob0'] = {0:prob0} # -> we save this as case 0 because it is the same for all cases
+                output['prob0'] = {0:prob0_data} # -> we save this as case 0 because it is the same for all cases
             
             # gamma distribution
             gamma_pars = [p for p in parameters if 'gamma' in p]
@@ -85,23 +88,24 @@ class DRYESStandardisedIndex(DRYESIndex):
 
                     for i, par in enumerate(gamma_pars):
                         this_par_data = these_pars[i]
-                        this_par = data_template.copy(data = this_par_data)
-                        output[par] = {case: this_par}
+                        if par not in output:
+                            output[par] = {case: this_par_data}
+                        else:
+                            output[par][case] = this_par_data
                         
         return output
     
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # load the data for the index
-        input_path_raw = self.output_paths['data']
-        input_path = substitute_values(input_path_raw, case['tags'])
-        data = get_data(input_path, time)
+        data = self._data.get_data(time, **case['tags'])
 
         # load the parameters
-        tag_dict = {'history_start': history.start, 'history_end': history.end}
-        tag_dict.update(case['tags'])
-        par_path = {par: substitute_values(self.output_paths[par], tag_dict)
-                        for par in self.parameters}
-        parameters = {par: get_data(par_path[par], time) for par in self.parameters}
+        if 'history_start' not in case['tags']:
+            case['tags']['history_start'] = history.start
+        if 'history_end' not in case['tags']:
+            case['tags']['history_end'] = history.end
+        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items()}
+
         # calculate the index
         if case['options']['distribution'] == 'gamma':
             probVal = get_prob_gamma(data, parameters)
@@ -111,7 +115,4 @@ class DRYESStandardisedIndex(DRYESIndex):
             raise ValueError(f"Unknown distribution {case['options']['distribution']}.")
         
         stindex_data = map_prob_to_normal(probVal)
-
-        output_template = self.output_template
-        anomaly = output_template.copy(data = stindex_data)
-        return anomaly
+        return stindex_data

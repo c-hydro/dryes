@@ -9,7 +9,9 @@ def gaussian_smoothing(sigma):
         kernel = Gaussian2DKernel(_sigma)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
+            original_shape = data.shape
             data = np.squeeze(data)
-            return convolve(data, kernel, nan_treatment = 'interpolate', preserve_nan = True)
+            smooth_data = convolve(data, kernel, nan_treatment = 'interpolate', preserve_nan = True)
+            return np.reshape(smooth_data, original_shape)
         
     return partial(_gaussian_smoothing, _sigma = sigma)

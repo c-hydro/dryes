@@ -3,14 +3,16 @@ import numpy as np
 import xarray as xr
 import warnings
 import glob
+import os
 
 from typing import List, Optional
 
 from .dryes_index import DRYESIndex
 
-from ..lib.time import TimeRange, doy_to_md
+from ..io import IOHandler
+
+from ..lib.time import TimeRange, create_timesteps
 from ..lib.parse import substitute_values, make_case_hierarchy
-from ..lib.io import get_data, check_data, save_dataarray_to_geotiff
 from ..lib.log import log
 
 class DRYESLFI(DRYESIndex):
@@ -32,12 +34,12 @@ class DRYESLFI(DRYESIndex):
     # parameters for the LFI
     parameters = ('Qthreshold', 'lambda', 'Ddeficit', 'duration', 'interval')
 
-    def make_parameters(self, history: TimeRange):
+    def make_parameters(self, history: TimeRange, timesteps_per_year: int):
         # for the LFI, we need to do this separately from the superclass, because parameters work a little differently
         # the threshold is calculated from the superclass
         parameters_all = self.parameters
         self.parameters = ('Qthreshold',)
-        super().make_parameters(history)
+        super().make_parameters(history, 365)
         self.parameters = parameters_all
 
         # let's separate the cases based on the threshold parameters
@@ -46,38 +48,41 @@ class DRYESLFI(DRYESIndex):
                       ['min_duration', 'min_interval', 'min_nevents']]
         thr_cases, lam_cases = make_case_hierarchy(self.cases['opt'], opt_groups)
 
-        # first thing, figure out what cases we need to calculate lambda for
-        raw_lambda_path = substitute_values(self.output_paths['lambda'],
-                                            {'history_start' : history.start,
-                                             'history_end'   : history.end})
+        # update the history in all parameters
+        parlambda = self._parameters['lambda'].update(history_start = history.start,
+                                                      history_end   = history.end)
         
         cases_to_calc_lambda = {}
+        thresholds = {}
         n = 0
         for thrcase in thr_cases:
             this_thrid = thrcase['id']
+            this_thresholds = self._parameters['Qthreshold'].update(**thrcase['tags'])
+            thresholds[this_thrid] = this_thresholds
             cases_to_calc_lambda[this_thrid] = []
             for lamcase in lam_cases[this_thrid]:
                 this_lamid = lamcase['id']
-                this_lambda_path = substitute_values(raw_lambda_path, lamcase['tags'])
-                if not check_data(this_lambda_path):
-                    cases_to_calc_lambda[this_thrid].append(this_lamid)
+                #this_lambda_path = substitute_values(raw_lambda_path, lamcase['tags'])
+                if not parlambda.check_data(**lamcase['tags']):
+                    cases_to_calc_lambda[this_thrid].append(lamcase)
                     n+=1
-        
+
         all_cases = sum(len(v) for v in lam_cases)
         log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
         if n == 0: return
 
-        deficit_cases_hierarchy = [thr_cases, lam_cases]
-        ddi_dict, cum_drought_dict = self.calc_deficit(history, deficit_cases_hierarchy, cases_to_calc_lambda)
+        # Now do the DDI calculation, this will be useful for lambda later
+        cum_drought_dict = self.make_ddi(history, timesteps_per_year, thresholds, cases_to_calc_lambda, keep_cumdeficit=True)
 
-        template = self.output_template
         for thrcase in thr_cases:
             this_thrid = thrcase['id']
             if this_thrid not in cases_to_calc_lambda.keys(): continue
+
             for lamcase in lam_cases[this_thrid]:
                 this_lamid = lamcase['id']
-                if this_lamid not in cases_to_calc_lambda[this_thrid]: continue
-                this_lambda_path = substitute_values(raw_lambda_path, lamcase['tags'])
+                all_lamids = [v['id'] for v in lam_cases[this_thrid]]
+                if this_lamid not in all_lamids: continue
+
                 this_cum_drought = cum_drought_dict[this_thrid][this_lamid]
                 min_nevents = lamcase['options']['min_nevents']
 
@@ -87,81 +92,92 @@ class DRYESLFI(DRYESIndex):
                     mean_deficit[this_cum_drought[1] < min_nevents] = np.nan
                     lambda_data = 1/mean_deficit
                 
-                lambda_da = template.copy(data = np.expand_dims(lambda_data,0))
-                metadata = {'reference_period': f'{history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}',
-                            'name': 'lambda',
-                            'type': 'DRYES parameter',
-                            'index': self.index_name}
-                save_dataarray_to_geotiff(lambda_da, this_lambda_path, metadata)
+                parlambda.write_data(lambda_data, **lamcase['tags'])
 
-                ddi_paths_raw = [self.output_paths['Ddeficit'],
-                                 self.output_paths['duration'],
-                                 self.output_paths['interval']]
-                tag_dict = {'history_start': history.start, 'history_end': history.end}
-                tag_dict.update(lamcase['tags'])
-                ddi_paths = [substitute_values(ddi_path, tag_dict) for ddi_path in ddi_paths_raw]
-                ddi = ddi_dict[this_thrid][this_lamid]
-                ddi_time = history.end + timedelta(days = 1)
-                self.save_ddi(ddi, ddi_time, ddi_paths)
-
-    def calc_deficit(self, history: TimeRange,
-                     deficit_cases_hierarchy: List[List[dict[str, dict]]],
-                     cases_to_calc_deficit: dict[int:List[int]],
-                     ddi_time:  Optional[TimeRange] = None,
-                     start_ddi: Optional[np.ndarray] = None,
-                     quiet = False) -> [dict, dict]:
-
-        thr_cases, def_cases = deficit_cases_hierarchy
-
-        # then we need to figure out the paths for the thresholds
-        theshold_path_raw = substitute_values(self.output_paths['Qthreshold'],
-                                                {'history_start' : history.start,
-                                                 'history_end'   : history.end})        
-        threshold_paths = {i: substitute_values(theshold_path_raw, case['tags'])
-                           for i, case in enumerate(thr_cases) if i in cases_to_calc_deficit.keys()}
+    def make_ddi(self,
+                 time_range: Optional[TimeRange], 
+                 timesteps_per_year: int,
+                 thresholds: dict[int:IOHandler],
+                 cases: dict[int:list[dict]],
+                 keep_cumdeficit = False) -> dict:
+    
+        timesteps = create_timesteps(time_range.start, time_range.end, timesteps_per_year)
 
         # get all the deficits for the history period
-        input_path = self.output_paths['data']
+        #input_path = self.output_paths['data']
+        input = self._data
         #test_period = TimeRange(history.start, history.start + timedelta(days = 365))
-        if ddi_time is None: ddi_time = history
-        all_deficits = get_deficits(input_path, threshold_paths, ddi_time)
+        all_deficits = get_deficits(input, thresholds, time_range)
 
         # set the starting conditions for each case we need to calculate lambda for
-        if start_ddi is None: start_ddi  = np.zeros((3,*self.grid.shape))
-        ddi_dict = {k:{vv:start_ddi.copy() for vv in v} 
-                                           for k,v in cases_to_calc_deficit.items()}
+        start_ddi  = np.full((3,*input.template.shape), np.nan)
+        ddi_dict = {k:{v['id']:start_ddi.copy() for v in v} for k,v in cases.items()}
         # ddi stands for drought_deficit, duration, interval
 
-        # set the cumulative drought, we only need the average droguth deficit to
+        # set the cumulative drought, we only need the average drougth deficit to
         # calculate the lambda, so we keep track of the cumulative drought
         # and the number of droughts
-        cum_drought_raw = np.zeros((2, *self.grid.shape))
-        cum_drought_dict = {k:{vv:cum_drought_raw.copy() for vv in v}
-                                             for k,v in cases_to_calc_deficit.items()}
+        cum_drought_raw = np.zeros((2, *input.template.shape))
+        cum_drought_dict = {k:{v['id']:cum_drought_raw.copy() for v in v} for k,v in cases.items()}
 
-        if not quiet:
-            log(f'  - Computing streamflow deficits:')
-        # loop over all timesteps
         for time, deficit_dict in all_deficits:
-            if time.day == 1 and not quiet: log(f'   - {time:%Y-%m-%d}')
             for thrcase, deficit in deficit_dict.items():
-                for case in cases_to_calc_deficit[thrcase]:
+                for case in cases[thrcase]:
+                    cid = case['id']
                     # get the current conditions
-                    ddi = ddi_dict[thrcase][case]
+                    ddi = ddi_dict[thrcase][cid]
                     # and the options
-                    options = def_cases[thrcase][case]['options']
+                    options = cases[thrcase][cid]['options']
                     # pool the deficit
                     ddi, cum_drought = pool_deficit(deficit, options, current_conditions = ddi)
                     # update the ddi and cumulative drought
-                    ddi_dict[thrcase][case] = ddi
-                    cum_drought_dict[thrcase][case] += cum_drought
+                    ddi_dict[thrcase][cid] = ddi
+                    cum_drought_dict[thrcase][cid] += cum_drought
+                    if time in timesteps:
+                    # save the current ddi
+                        tags = cases[thrcase][cid]['tags']
+                        tags.update(thresholds[thrcase].tags)
+                        self.save_ddi(ddi, time, tags)
 
-        return ddi_dict, cum_drought_dict
+        if keep_cumdeficit:
+            return cum_drought_dict
 
-    def calc_parameters(self, dates: List[datetime],
-                        in_path: str, 
-                        par_and_cases: dict[str:List[int]],
-                        reference: TimeRange) -> dict[str:dict[int:xr.DataArray]]:
+    def update_ddi(self,
+                   ddi_start: np.ndarray,
+                   ddi_time: datetime,
+                   time: datetime,
+                   case: dict,
+                   history: TimeRange) -> np.ndarray:
+        
+        tags = case['tags']
+        tags.update({'history_start': history.start, 'history_end': history.end})
+
+        # get the threshold
+        threshold = self._parameters['Qthreshold'].update(**tags)
+
+        # get the deficits
+        input = self._data
+        all_deficits = get_deficits(input, {0:threshold}, TimeRange(ddi_time, time))
+
+        # get the options
+        options = case['options']
+
+        if ddi_start is None:
+            ddi_start = np.full((3, *input.template.shape), np.nan)
+        
+        # pool the deficit
+        ddi = ddi_start
+        for time, deficit_dict in all_deficits:
+            deficit = deficit_dict[0]    
+            ddi, _ = pool_deficit(deficit, options, current_conditions = ddi)
+
+        return ddi
+
+    def calc_parameters(self,
+                        time: datetime,
+                        variable: IOHandler,
+                        history: TimeRange,
+                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
         """
         Calculates the parameters for the LFI. This will only do the threshold calculation.
         par_and_cases is a dictionary with the following structure:
@@ -173,7 +189,10 @@ class DRYESLFI(DRYESIndex):
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
 
-        input_path = in_path
+        history_years = range(history.start.year, history.end.year + 1)
+        dates  = [datetime(year, time.month, time.day) for year in history_years]
+
+        #input_path = in_path
         output = {'Qthreshold': {}} # this is the output dictionary
 
         # loop over all cases, let's do this in a smart way so that we don't have to load the data multiple times
@@ -188,104 +207,82 @@ class DRYESLFI(DRYESIndex):
         for window, cases in window_cases.items():
             halfwindow = np.floor(window/2)
             # get all dates within the window of this month and day in the reference period
-            all_dates = []
+            data_dates = []
             for date in dates:
                 this_date = date - timedelta(days = halfwindow)
                 while this_date <= date + timedelta(days = halfwindow):
-                    if this_date >= reference.start and this_date <= reference.end:
-                        all_dates.append(this_date)
+                    if this_date >= history.start and this_date <= history.end:
+                        data_dates.append(this_date)
                     this_date += timedelta(days = 1)
             
             # if there are no dates, skip
-            if len(all_dates) == 0: continue
+            if len(data_dates) == 0: continue
+            
             # get the data for these dates
-            data = [get_data(input_path, date) for date in all_dates]
-            data_template = self.output_template
-            data = np.stack(data, axis = 0)
+            data_ = [variable.get_data(time) for time in data_dates]
+            data = np.stack(data_, axis = 0)
 
             # calculate the thresholds for each case that has this window size
             for case in cases:
                 threshold_quantile = self.cases['opt'][case]['options']['thr_quantile']
                 threshold_data = np.quantile(data, threshold_quantile, axis = 0)
                 # save the threshold
-                threshold = data_template.copy(data = threshold_data)
-                output['Qthreshold'][case] = threshold
+                #threshold = data_template.copy(data = threshold_data)
+                output['Qthreshold'][case] = threshold_data
 
         return output
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-        # calculate the current deficit
-        ddi_paths_raw = [self.output_paths['Ddeficit'],
-                         self.output_paths['duration'],
-                         self.output_paths['interval']]
-        tag_dict = {'history_start': history.start, 'history_end': history.end}
-        tag_dict.update(case['tags'])
-        ddi_paths = [substitute_values(ddi_path, tag_dict) for ddi_path in ddi_paths_raw]
-        #ddi_path = substitute_values(self.output_paths['ddi'], case['tags'])
-        # get the most recent ddi
-        ddi_time, ddi_start = get_recent_ddi(time, ddi_paths)
+        
+        tags = case['tags']
+        tags.update({'history_start': history.start, 'history_end': history.end})
+
+        ddi = [self._parameters[par].update(**tags) for par in self.parameters if par in ['Ddeficit', 'duration', 'interval']]
+        ddi_time, ddi_start = get_recent_ddi(time, ddi)
         # if there is no ddi, we need to calculate it from scratch,
         # otherwise we can just use the most recent one and update from there
         ddi = None
         if ddi_time == time:
             ddi = ddi_start
         elif ddi_time is None:
-            ddi_time_range = TimeRange(history.start, time - timedelta(days = 1))
-        else:
-            ddi_time_range = TimeRange(ddi_time, time - timedelta(days = 1))
+            ddi_time = history.start
 
         if ddi is None:
             # calculate the deficit
-            deficit_cases_hierarchy = [[case], [[case]]]
-            cases_to_calc = {0: [0]}
-            ddi_dict, _ = self.calc_deficit(history, deficit_cases_hierarchy, cases_to_calc, ddi_time_range, ddi_start, quiet=True)
-            ddi = ddi_dict[0][0]
+            ddi = self.update_ddi(ddi_start, ddi_time, time - timedelta(1), case, history)
+
+        # save the ddi for the next timestep
+        self.save_ddi(ddi, time, tags)
         
         deficit  = ddi[0]
         duration = ddi[1]
         min_duration = case['options']['min_duration']
         deficit[duration < min_duration] = 0
 
-        # save the ddi for the next timestep
-        self.save_ddi(ddi, time, ddi_paths)
-
         # get the lambda
-        lambda_path_raw = substitute_values(self.output_paths['lambda'], {'history_start': history.start, 'history_end': history.end})
-        lambda_path = substitute_values(lambda_path_raw, case['tags'])
-        lambda_data = get_data(lambda_path).values
+        lambda_data = self._parameters['lambda'].update(**tags).get_data(time)
 
         lfi_data = 1 - np.exp(-lambda_data * deficit)
-        output_template = self.output_template
-        lfi = output_template.copy(data = lfi_data)
-        return lfi
+        return lfi_data
 
-    def save_ddi(self, ddi: np.ndarray, time: datetime, paths: List[str]):
+    def save_ddi(self, ddi: np.ndarray, time: datetime, tags):
         # now let's save the ddi at the end of the history period
-        ddi_names = ['deficit', 'duration', 'interval']
-        paths = [time.strftime(path) for path in paths]
+        ddi_names = ['Ddeficit', 'duration', 'interval']
         for i in range(3):
             data = ddi[i]
-            mask = self.grid.mask
-            data[~mask] = np.nan
-            ddi_da = self.output_template.copy(data = np.expand_dims(data, 0))
-            metadata = {
-                    'name': ddi_names[i],
-                    'type': 'DRYES parameter',
-                    'index': self.index_name,
-                    'time': time.strftime('%Y-%m-%d')}
-            output_file = paths[i]
-            save_dataarray_to_geotiff(ddi_da, output_file, metadata)
+            output = self._parameters[ddi_names[i]].update(**tags)
+            output.write_data(data, time)
 
-def get_deficits(streamflow: str, threshold: dict[int:str], time_range:TimeRange) -> dict[int:np.ndarray]:
+def get_deficits(streamflow: IOHandler, threshold: dict[int:IOHandler], time_range:TimeRange) -> dict[int:np.ndarray]:
     for time in time_range:
         if (time.month, time.day) == (2,29): continue
-        data = get_data(streamflow, time).values
-        thresholds = {case: get_data(thr, time).values for case, thr in threshold.items()}
+        data = streamflow.get_data(time)
+        thresholds = {case: th.get_data(time) for case, th in threshold.items()}
         deficit = {}
         for case, thr in thresholds.items():
-            this_deficit = thr - data
+            this_deficit = thr.values - data.values
             this_deficit[this_deficit < 0] = 0
-            deficit[case] = np.squeeze(this_deficit)
+            deficit[case] = this_deficit#np.squeeze(this_deficit)
 
         yield time, deficit
 
@@ -313,21 +310,21 @@ def pool_deficit(deficit: np.ndarray,
     min_interval = options['min_interval']
 
     # initialize the output
-    cum_drought = np.zeros((2, *deficit.shape))
+    cum_drought = np.full((2, *deficit.shape), np.nan)
 
     # get the indices where we have a streamflow deficit
     indices = np.where(~np.isnan(deficit))
-    for x,y in zip(*indices):
-        this_deficit = deficit[x,y]
-        this_current_conditions = current_conditions[:,x,y]
+    for b,x,y in zip(*indices):
+        this_deficit = deficit[0,x,y]
+        this_current_conditions = current_conditions[:,b,x,y]
         # pool the deficit for this pixel
         this_ddi, this_cum_drought = pool_deficit_singlepixel(this_deficit,
                                                               min_duration, min_interval,
                                                               this_current_conditions)
 
         # update the output
-        current_conditions[:,x,y] = this_ddi
-        cum_drought[:,x,y] = this_cum_drought
+        current_conditions[:,b,x,y] = this_ddi
+        cum_drought[:,b,x,y] = this_cum_drought
 
     return current_conditions, cum_drought
 
@@ -340,6 +337,7 @@ def pool_deficit_singlepixel(deficit: float,
     Same as pool_deficit, but for a single pixel.
     """
     # pool the deficit for a single pixel
+    current_conditions[np.isnan(current_conditions)] = 0
     drought_deficit, duration, interval = current_conditions
 
     cum_deficit  = 0
@@ -377,21 +375,27 @@ def pool_deficit_singlepixel(deficit: float,
     final_conditions = np.array([drought_deficit, duration, interval])
     return final_conditions, cum_drought
 
-def get_recent_ddi(time, ddi_paths):
+def get_recent_ddi(time, ddi):
     """
     returns the most recent ddi for the given time
     """
-    ddi_vars  = ['Ddeficit', 'duration', 'interval']
-    ddi_times = {var: set() for var in ddi_vars}
-    ddi_paths  = {var: ddi_paths[i] for i, var in enumerate(ddi_vars)}
-    for var in ddi_vars:
-        this_ddi_path = ddi_paths[var]
+    # deficit, duration, interval = ddi
+    # ddi_vars  = ['Ddeficit', 'duration', 'interval']
+    ddi_times = {}
+    # ddi_paths  = {var: ddi_paths[i] for i, var in enumerate(ddi_vars)}
+    for var in ddi:
+        this_ddi_path = var.path()
         this_ddi_path_glob = this_ddi_path.replace('%Y', '*').\
                                            replace('%m', '*').\
                                            replace('%d', '*')
         all_ddi_paths = glob.glob(this_ddi_path_glob)
-        times = [datetime.strptime(path, this_ddi_path) for path in all_ddi_paths]
-        ddi_times[var] = set(times)
+        times = []
+        for path in all_ddi_paths:
+            this_time = datetime.strptime(os.path.basename(path), os.path.basename(this_ddi_path))
+            times.append(this_time)
+        
+        #times = [datetime.strptime(os.path.basename(path), this_ddi_path) for path in all_ddi_paths]
+        ddi_times[var.name] = set(times)
     
     # get the timesteps common to all ddi variables
     common_times = set.intersection(*ddi_times.values())
@@ -400,9 +404,9 @@ def get_recent_ddi(time, ddi_paths):
 
     # get the most recent timestep
     recent_time = max(common_times_before_time)
-    Ddeficit, duration, interval = [get_data(path, recent_time).values for path in ddi_paths.values()]
+    Ddeficit, duration, interval = [var.get_data(recent_time) for var in ddi]
 
-    ddi = np.squeeze(np.stack([Ddeficit, duration, interval], axis = 0))
+    ddi = np.stack([Ddeficit, duration, interval], axis = 0)
 
     return recent_time, ddi
 

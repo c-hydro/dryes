@@ -135,9 +135,7 @@ def combine_options(old_options, new_options):
     #                 this_parent.update(child)
     #                 these_options.append(this_parent)
     #             opt_hierarchy[i].append(these_options)
-
-    
-            
+          
 def permutate_options(options):
 
     # get the options that need to be permutated and the ones that are fixed
@@ -160,11 +158,11 @@ def cases_to_options(cases):
     options = {}
     for case in cases:
         for key, value in case['options'].items():
-            if case['tags']['options.' + key] == "":
+            if case['tags'][key] == "":
                 options[key] = value
             else:
                 if key not in options: options[key] = {}
-                options[key].update({case['tags']['options.' + key]: value})
+                options[key].update({case['tags'][key]: value})
     return options
 
 def options_to_cases(options):
@@ -199,7 +197,7 @@ def options_to_cases(options):
         this_case = dict()
         this_case['id']   = i
         this_case['name'] = ','.join(v for v in permutation.values() if v != "")
-        this_case['tags'] = {'options.' + pk:pv for pk,pv in permutation.items()}
+        this_case['tags'] = {pk:pv for pk,pv in permutation.items()}
         this_case['options'] = case
         opt_cases.append(this_case)
 

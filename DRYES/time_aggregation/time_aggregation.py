@@ -2,14 +2,15 @@ import xarray as xr
 from typing import Optional, Callable
 from datetime import datetime
 
-from ..variables.dryes_variable import DRYESVariable
+from ..io import IOHandler
 
-AggFunction = Callable[[DRYESVariable, datetime,], xr.Dataset]
-PostAggFunction = Callable[[list[xr.DataArray], DRYESVariable], list[xr.DataArray]]
+AggFunction = Callable[[IOHandler, datetime,], xr.Dataset]
+PostAggFunction = Callable[[list[xr.DataArray], IOHandler], list[xr.DataArray]]
 
 class TimeAggregation:
-    def __init__(self, timesteps_per_year: int, aggregation_function: Optional[AggFunction] = None) -> None:
-        self.timesteps_per_year = timesteps_per_year
+    def __init__(self, #timesteps_per_year: int,
+                 aggregation_function: Optional[AggFunction] = None) -> None:
+        #self.timesteps_per_year = timesteps_per_year
         if aggregation_function is not None:
             self.aggfun = {'Agg' : aggregation_function}
         else:

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='DRYES',
+    name='dryes',
     version='0.1',
     packages=find_packages(),
     description='A package for operational calculation of environmental indices for drought monitoring',
@@ -18,5 +18,15 @@ setup(
     ],
     keywords='data analysis, meteorological data, satellite data, climatological indices, drought indices',
     install_requires=[
+        'astropy>=5.3.3',
+        'lmoments3>=1.0.6',
+        'methodtools>=0.4.7',
+        'numpy>=1.24.0',
+        'python_dateutil>=2.8.2',
+        'rioxarray>=0.15.0',
+        'scipy>=1.8.0',
+        'xarray>=2023.9.0', 
     ],
+    python_requires='>=3.10',
+    test_suite='tests',
 )

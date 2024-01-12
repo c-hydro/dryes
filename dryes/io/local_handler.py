@@ -23,7 +23,7 @@ class LocalIOHandler(IOHandler):
         self.dir  = path
         self.file = file
         self.path_pattern = os.path.join(self.dir , file)
-        self.name = name if name is not None else os.path.basename(file)
+        self.name = name if name is not None else os.path.basename(file).split('.')[0]
         self.format = format if format is not None else file.split('.')[-1]
         if self.format.lower() in ['tif', 'tiff', 'geotiff']:
             self.format = 'GeoTIFF'

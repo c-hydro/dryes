@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from DRYES.io import LocalIOHandler as Local
-from DRYES.time_aggregation import aggregation_functions as agg
-from DRYES.post_processing import pp_functions as pp
-from DRYES.indices import DRYESAnomaly
+from dryes.io import LocalIOHandler as Local
+from dryes.time_aggregation import aggregation_functions as agg
+from dryes.post_processing import pp_functions as pp
+from dryes.indices import DRYESAnomaly
 
 INPUT   = '/home/drought/share/DRYES/data/Italia/output/FPAR/VNP15A2H/%Y/%m/%d'
 HOME = '/home/drought/DRYES/analyses/luca_workspace/tests/VIIRS-FAPAR/Italia'

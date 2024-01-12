@@ -6,9 +6,9 @@ from copy import deepcopy
 from ..time_aggregation.time_aggregation import TimeAggregation
 from ..io import IOHandler
 
-from ..lib.log import setup_logging
-from ..lib.time import TimeRange, create_timesteps, ntimesteps_to_md
-from ..lib.parse import options_to_cases
+from ..utils.log import setup_logging
+from ..utils.time import TimeRange, create_timesteps, ntimesteps_to_md
+from ..utils.parse import options_to_cases
 
 class DRYESIndex:
     def __init__(self,

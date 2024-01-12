@@ -10,8 +10,8 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..lib.time import TimeRange
-from ..lib.stat import compute_gamma, check_pval_gamma, get_prob_gamma, map_prob_to_normal
+from ..utils.time import TimeRange
+from ..utils.stat import compute_gamma, check_pval_gamma, get_prob_gamma, map_prob_to_normal
 
 
 class DRYESStandardisedIndex(DRYESIndex):

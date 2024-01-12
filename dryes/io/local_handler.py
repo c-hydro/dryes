@@ -8,8 +8,8 @@ import numpy as np
 
 from .io_handler import IOHandler
 
-from ..lib.time import TimeRange
-from ..lib.parse import substitute_string
+from ..utils.time import TimeRange
+from ..utils.parse import substitute_string
 
 class LocalIOHandler(IOHandler):
     type = 'local'

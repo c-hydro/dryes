@@ -1,11 +1,11 @@
 from datetime import datetime
 import functools
 
-from DRYES.time_aggregation import aggregation_functions as agg
-from DRYES.post_processing import pp_functions as pp
-from DRYES.indices import DRYESStandardisedIndex
+from dryes.time_aggregation import aggregation_functions as agg
+from dryes.post_processing import pp_functions as pp
+from dryes.indices import DRYESStandardisedIndex
 
-from DRYES.io import LocalIOHandler as Local
+from dryes.io import LocalIOHandler as Local
 
 HOME = '/home/drought/DRYES/analyses/luca_workspace/tests/SPI/Italia'
 INPUT = f'{HOME}/data/%Y/%m/'

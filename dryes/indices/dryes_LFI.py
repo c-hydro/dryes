@@ -11,9 +11,9 @@ from .dryes_index import DRYESIndex
 
 from ..io import IOHandler
 
-from ..lib.time import TimeRange, create_timesteps
-from ..lib.parse import substitute_values, make_case_hierarchy
-from ..lib.log import log
+from ..utils.time import TimeRange, create_timesteps
+from ..utils.parse import substitute_values, make_case_hierarchy
+from ..utils.log import log
 
 class DRYESLFI(DRYESIndex):
     index_name = 'LFI'

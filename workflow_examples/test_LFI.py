@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from DRYES.io import LocalIOHandler as Local
-from DRYES.indices import DRYESLFI
+from dryes.io import LocalIOHandler as Local
+from dryes.indices import DRYESLFI
 
 
 HOME = '/home/drought/DRYES/analyses/luca_workspace/tests/LFI/PO'

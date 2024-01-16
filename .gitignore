@@ -1,6 +1,3 @@
-# This is a folder for internal development only
-DEV_int/*
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -37,3 +34,4 @@ venv.bak/
 
 # IDEs and editors
 .vscode
+.idea

@@ -11,7 +11,7 @@ from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
 from ..utils.time import TimeRange
-from ..utils.stat import compute_gamma, check_pval_gamma, get_prob_gamma, map_prob_to_normal
+from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 
 class DRYESStandardisedIndex(DRYESIndex):
@@ -22,19 +22,28 @@ class DRYESStandardisedIndex(DRYESIndex):
         'pval_threshold' : None
     }
     
+    distr_par = {
+        'gamma':    ['gamma.a', 'gamma.loc', 'gamma.scale'],
+        'normal':   ['normal.loc', 'normal.scale'],
+        'pearson3': ['pearson3.skew', 'pearson3.loc', 'pearson3.scale']
+    }
+
     @property
-    def parameters(self):
+    def distributions(self):
         opt_cases = self.cases['opt']
         all_distr = set(case['options']['distribution'] for case in opt_cases)
-        all_parameters = ['prob0']
         for distribution in all_distr:
-            if distribution == 'gamma':
-                all_parameters += ['gamma.a', 'gamma.loc', 'gamma.scale']
-            # elif distribution == 'normal':
-            #     all_parameters += ['normal.loc', 'normal.scale']
-            else:
+            if distribution not in self.distr_par:
                 raise ValueError(f"Unknown distribution {distribution}.")
-        return all_parameters
+        return all_distr
+
+    @property
+    def parameters(self):
+        all_distr = self.distributions
+        parameters = ['prob0']
+        for distribution in all_distr:
+            parameters += [par for par in self.distr_par[distribution]]
+        return parameters
 
     def calc_parameters(self,
                         time: datetime,
@@ -74,19 +83,23 @@ class DRYESStandardisedIndex(DRYESIndex):
                 prob0_data = np.nanmean(iszero, axis = 0)
                 output['prob0'] = {0:prob0_data} # -> we save this as case 0 because it is the same for all cases
             
-            # gamma distribution
-            gamma_pars = [p for p in parameters if 'gamma' in p]
-            if len(gamma_pars) > 0:
-                gamma_parameters = np.apply_along_axis(compute_gamma, axis = 0, arr = data)
-                for case in par_and_cases[gamma_pars[0]]:
-                    these_pars = gamma_parameters.copy()
+            #distribution parameters
+            for distr in self.distributions:
+                # fit the distribution to calculate the parameters
+                distr_parnames  = self.distr_par[distr]
+                distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data, distribution=distr, positive_only = True)
+
+                # check the p-value of the fit, this needs to be done for each case, as the p-value threshold can be different
+                distr_cases = par_and_cases[distr_parnames[0]] # we use the first parameter name to get the cases
+                for case in distr_cases:
+                    these_pars = distr_parvalues.copy()
                     this_p_thr = self.cases['opt'][case]['options']['pval_threshold']
-                    to_iterate = np.where(~np.isnan(gamma_parameters[0]))
+                    to_iterate = np.where(~np.isnan(these_pars[0])) # only iterate over the non-nan values of the parameters
                     for b,x,y in zip(*to_iterate):
-                        if not check_pval_gamma(data[:,b,x,y], gamma_parameters[:,b,x,y], p_val_th = this_p_thr):
+                        if not check_pval(data[:,b,x,y], distr, these_pars[:,b,x,y], p_val_th = this_p_thr):
                             these_pars[:,b,x,y] = np.nan
 
-                    for i, par in enumerate(gamma_pars):
+                    for i, par in enumerate(distr_parnames):
                         this_par_data = these_pars[i]
                         if par not in output:
                             output[par] = {case: this_par_data}
@@ -95,6 +108,7 @@ class DRYESStandardisedIndex(DRYESIndex):
                         
         return output
     
+    # this is run for a single case, making things a lot easier
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # load the data for the index
         data = self._data.get_data(time, **case['tags'])
@@ -104,15 +118,13 @@ class DRYESStandardisedIndex(DRYESIndex):
             case['tags']['history_start'] = history.start
         if 'history_end' not in case['tags']:
             case['tags']['history_end'] = history.end
-        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items()}
+
+        distribution = case['options']['distribution']
+        pars_to_get  = self.distr_par[distribution] + ['prob0']
+        parameters   = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
 
         # calculate the index
-        if case['options']['distribution'] == 'gamma':
-            probVal = get_prob_gamma(data, parameters)
-        # elif case['options']['distribution'] == 'normal':
-        #     probVal = get_prob_normal(data, parameters)
-        else:
-            raise ValueError(f"Unknown distribution {case['options']['distribution']}.")
-        
+        probVal = get_prob(data, distribution, parameters)
+
         stindex_data = map_prob_to_normal(probVal)
         return stindex_data

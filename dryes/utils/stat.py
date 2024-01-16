@@ -3,53 +3,94 @@ import scipy.stats as stat
 from lmoments3 import distr
 from typing import Iterable
 
-# Gets parameters of a gamma distribution fitted to the data x
-def compute_gamma(x: Iterable[float]) -> tuple[float, float, float]: 
-    x = np.array(x)
-    dpd = x[np.where(x > 0)]  # only non null values
+## supported distributions
+# gamma
+# normal
+# pearson3
 
-    if len(dpd) < 4:
-        return [np.nan]*3
+# Gets parameters of a gamma distribution fitted to the data x
+def compute_distr_parameters(x: Iterable[float], distribution: str,
+                             min_obs: int = 5,
+                             positive_only: bool = True) -> list[float]:
+    x = np.array(x)
+
+    if distribution == 'gamma':
+        positive_only = True
+        parnames = ['a', 'loc', 'scale']
+        this_distr = distr.gam
+    elif distribution == 'normal':
+        parnames = ['loc', 'scale']
+        this_distr = distr.nor
+    elif distribution == 'pearson3':
+        parnames = ['skew', 'loc', 'scale']
+        this_distr = distr.pe3
+
+    if positive_only:
+        dpd = x[np.where(x > 0)]  # only non null values
+    else:
+        dpd = x
+
+    if len(dpd) <= min_obs:
+        return [np.nan]*len(parnames)
 
     try:
-        fit_dict = distr.gam.lmom_fit(dpd)
+        fit_dict = this_distr.lmom_fit(dpd)
     except:
-        return [np.nan]*3
+        return [np.nan]*len(parnames)
 
-    fit = [fit_dict['a'],fit_dict['loc'],fit_dict['scale']]
+    fit = [fit_dict[pn] for pn in parnames]
     
     return fit
 
 # Checks if the p-value of the Kolmogorov-Smirnov test is above the threshold
-def check_pval_gamma(x: Iterable[float], fit = np.ndarray, p_val_th: float = None) -> bool:
+def check_pval(x: Iterable[float], distribution: str,
+               fit = np.ndarray,
+               p_val_th: float = None,
+               positive_only: bool = True) -> bool:
 
     if any(np.isnan(fit)):
         return False
+    if p_val_th is None:
+        return True
 
     x = np.array(x)
-    dpd = x[np.where(x > 0)]  # only non null values
+
+    if distribution == 'gamma':
+        positive_only = True
+    elif distribution == 'normal':
+        distribution = 'norm' # this is the name used by scipy
+
+    if positive_only:
+        dpd = x[np.where(x > 0)]  # only non null values
 
     fit = list(fit)
-    if p_val_th is not None:
-        _, p_value = stat.kstest(dpd, "gamma", args=fit)
+    _, p_value = stat.kstest(dpd, distribution, args=fit)
     if p_value < p_val_th:
         return False
-
-    return True
+    else:
+        return True
 
 # Gets the probability of the data x to be in a gamma distribution
-def get_prob_gamma(data: np.ndarray, parameters: dict[str:np.ndarray], corr_extremes = 1e-7) -> np.ndarray:
+def get_prob(data: np.ndarray, distribution: str, 
+             parameters: dict[str:np.ndarray],
+             corr_extremes = 1e-7) -> np.ndarray:
         
-        # get the parameters
-        a = parameters['gamma.a']
-        loc = parameters['gamma.loc']
-        scale = parameters['gamma.scale']
-        
+        if distribution == 'gamma':
+            randvar = stat.gamma
+        elif distribution == 'normal':
+            randvar = stat.norm
+        elif distribution == 'pearson3':
+            randvar = stat.pearson3
+
+        # remove the name of the distribution from the parameters name and only select the ones for this distribution
+        pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}
+
         # compute SPI
-        probVal = stat.gamma.cdf(data, a=a, loc=loc, scale=scale)
+        probVal = randvar.cdf(data, **pars)
         probVal[probVal == 0] = corr_extremes
         probVal[probVal == 1] = 1 - corr_extremes
 
+        # correct for the probability of zero, if needed
         if 'prob0' in parameters.keys():
             prob0 = parameters['prob0']
             probVal = prob0 + ((1 - prob0) * probVal)

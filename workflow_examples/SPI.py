@@ -2,7 +2,7 @@ from datetime import datetime
 
 from dryes.time_aggregation import aggregation_functions as agg
 from dryes.post_processing import pp_functions as pp
-from dryes.indices import DRYESStandardisedIndex
+from dryes.indices import SPI
 
 from dryes.io import LocalIOHandler as Local
 
@@ -15,7 +15,7 @@ PARAMS  = ARCHIVE + '/parameters/{history_start:%Y%m%d}-{history_end:%Y%m%d}'
 OUTPUT = f'{ARCHIVE}/maps/%Y/%m/%d/'
 
 
-SPI = DRYESStandardisedIndex(
+spi_mcm_ita = SPI(
     index_options = {
         "agg_fn" : {"1"  : agg.sum_of_window(size = 1,  unit = 'months'),
                     "3"  : agg.sum_of_window(size = 3,  unit = 'months'),
@@ -59,6 +59,6 @@ SPI = DRYESStandardisedIndex(
                        path = OUTPUT, file = 'SPI{agg_fn}{distribution}_%Y%m%d000000.tif')}
 )
 
-SPI.compute(current   = (datetime(2020,1,1), datetime(2020,12,31)),
-            reference = (datetime(2010,1,1), datetime(2022,12,31)),
-            timesteps_per_year = 12)
+spi_mcm_ita.compute(current   = (datetime(2020,1,1), datetime(2020,12,31)),
+                    reference = (datetime(2010,1,1), datetime(2022,12,31)),
+                    timesteps_per_year = 12)

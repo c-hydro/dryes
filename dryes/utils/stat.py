@@ -24,6 +24,9 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
     elif distribution == 'pearson3':
         parnames = ['skew', 'loc', 'scale']
         this_distr = distr.pe3
+    elif distribution == 'gev':
+        parnames = ['c', 'loc', 'scale']
+        this_distr = distr.gev
 
     if positive_only:
         dpd = x[np.where(x > 0)]  # only non null values
@@ -59,6 +62,8 @@ def check_pval(x: Iterable[float], distribution: str,
         positive_only = True
     elif distribution == 'normal':
         distribution = 'norm' # this is the name used by scipy
+    elif distribution == 'gev':
+        distribution = 'genextreme' # this is the name used by scipy
 
     if positive_only:
         dpd = x[np.where(x > 0)]  # only non null values
@@ -81,6 +86,8 @@ def get_prob(data: np.ndarray, distribution: str,
             randvar = stat.norm
         elif distribution == 'pearson3':
             randvar = stat.pearson3
+        elif distribution == 'gev':
+            randvar = stat.genextreme
 
         # remove the name of the distribution from the parameters name and only select the ones for this distribution
         pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}

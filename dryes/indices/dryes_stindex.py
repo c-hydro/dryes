@@ -15,18 +15,32 @@ from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_pro
 
 
 class DRYESStandardisedIndex(DRYESIndex):
+    """
+    This class implements a standardised index, that is an anomaly index, fitted to a distribution and standardised to a normal distribution.
+    It is used for the SPI (Standardised Precipitation Index) and the SPEI (Standardised Precipitation Evapotranspiration Index).
+    """
     index_name = 'standardised index'
+
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
-        'distribution'   : 'gamma',
+        'distribution'   : 'normal',
         'pval_threshold' : None
     }
     
     distr_par = {
         'gamma':    ['gamma.a', 'gamma.loc', 'gamma.scale'],
         'normal':   ['normal.loc', 'normal.scale'],
-        'pearson3': ['pearson3.skew', 'pearson3.loc', 'pearson3.scale']
+        'pearson3': ['pearson3.skew', 'pearson3.loc', 'pearson3.scale'],
+        'gev':      ['gev.c', 'gev.loc', 'gev.scale']
     }
+
+    @property
+    def positive_only(self):
+        # this is by default False, unless, we request a gamma distribution
+        if 'gamma' in self.distributions:
+            return True
+        else:
+            return False
 
     @property
     def distributions(self):
@@ -40,7 +54,7 @@ class DRYESStandardisedIndex(DRYESIndex):
     @property
     def parameters(self):
         all_distr = self.distributions
-        parameters = ['prob0']
+        parameters = []
         for distribution in all_distr:
             parameters += [par for par in self.distr_par[distribution]]
         return parameters
@@ -87,7 +101,7 @@ class DRYESStandardisedIndex(DRYESIndex):
             for distr in self.distributions:
                 # fit the distribution to calculate the parameters
                 distr_parnames  = self.distr_par[distr]
-                distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data, distribution=distr, positive_only = True)
+                distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data, distribution=distr, positive_only = self.positive_only)
 
                 # check the p-value of the fit, this needs to be done for each case, as the p-value threshold can be different
                 distr_cases = par_and_cases[distr_parnames[0]] # we use the first parameter name to get the cases
@@ -96,7 +110,7 @@ class DRYESStandardisedIndex(DRYESIndex):
                     this_p_thr = self.cases['opt'][case]['options']['pval_threshold']
                     to_iterate = np.where(~np.isnan(these_pars[0])) # only iterate over the non-nan values of the parameters
                     for b,x,y in zip(*to_iterate):
-                        if not check_pval(data[:,b,x,y], distr, these_pars[:,b,x,y], p_val_th = this_p_thr):
+                        if not check_pval(data[:,b,x,y], distr, these_pars[:,b,x,y], p_val_th = this_p_thr, positive_only = self.positive_only):
                             these_pars[:,b,x,y] = np.nan
 
                     for i, par in enumerate(distr_parnames):
@@ -120,7 +134,9 @@ class DRYESStandardisedIndex(DRYESIndex):
             case['tags']['history_end'] = history.end
 
         distribution = case['options']['distribution']
-        pars_to_get  = self.distr_par[distribution] + ['prob0']
+        pars_to_get  = self.distr_par[distribution]
+        if 'prob0' in self._parameters:
+            pars_to_get += ['prob0']
         parameters   = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
 
         # calculate the index
@@ -128,3 +144,28 @@ class DRYESStandardisedIndex(DRYESIndex):
 
         stindex_data = map_prob_to_normal(probVal)
         return stindex_data
+    
+class SPI(DRYESStandardisedIndex):
+    index_name = 'SPI (Standardised Precipitaion Index)'
+    positive_only = True
+    default_options = {
+        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
+        'distribution'   : 'gamma',
+        'pval_threshold' : None
+    }
+
+    @property
+    def parameters(self):
+        return super().parameters + ['prob0']
+
+class SPEI(DRYESStandardisedIndex):
+    index_name = 'SPEI (Standardised Precipitaion Evapotranspiration Index)'
+    positive_only = False
+    default_options = {
+        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
+        'distribution'   : 'gev',
+        'pval_threshold' : None
+    }
+
+    #TODO: Should we assume that the input data is precipitation minus evapotranspiration? (and the rest is included in DAM)
+    #      Or should we allow the user to specify two variables, one for precipitation and one for evapotranspiration?

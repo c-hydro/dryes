@@ -1,0 +1,58 @@
+{   
+    "tags": {
+        "HOME" : "/home/luca/Documents/CIMA_code/tests/LFI/PO",
+        "INPUT": "{HOME}/data/%Y/%m/",
+
+        "ARCHIVE": "{HOME}/archive",
+        "PARAMS" : "{ARCHIVE}/parameters/",
+        "OUTPUT" : "{ARCHIVE}/maps/%Y/%m/%d/"
+    },
+    "index_options": {
+        "agg_fn": {
+            "thr_quantile": {
+                "Thr005":0.05,
+                "Thr010":0.10,
+                "Thr020":0.20
+            }
+        }
+    },
+    "run_options": {
+        "history_start": "2009-09-01",
+        "history_end": "2022-09-01",
+        "timesteps_per_year" : 36
+    },
+    "io_options": {
+        "data": {"type": "local",
+            "name": "discharge", "path": "{DATA}",
+            "file": "discharge_%Y%m%d.tif"
+        },
+        "threshold": {"type": "local",
+            "name": "threshold (LFI)", "path": "{PARAMS}/threshold/",
+            "file": "threshold_{thr_quantile}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "lambda": {"type": "local",
+            "name": "lambda (LFI)", "path": "{PARAMS}/lambda/",
+            "file": "lambda_{thr_quantile}_{history_start:%Y%m%d}-{history_end:%Y%m%d}.tif"
+        },
+        "deficit": {"type": "local",
+            "name": "drought deficit (LFI)", "path": "{PARAMS}/ddi/%Y/%m/%d/",
+            "file": "Ddeficit_{thr_quantile}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%Y%m%d.tif"
+        },
+        "duration": {"type": "local",
+            "name": "drought duration (LFI)", "path": "{PARAMS}/ddi/%Y/%m/%d/",
+            "file": "duration_{thr_quantile}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%Y%m%d.tif"
+        },
+        "interval": {"type": "local",
+        "name": "interdrought interval (LFI)", "path": "{PARAMS}/ddi/%Y/%m/%d/",
+        "file": "interval_{thr_quantile}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%Y%m%d.tif"
+    },
+        "log": {"type": "local",
+            "name": "log LFI", "path": "{HOME}",
+            "file": "log.txt"
+        },
+        "index": {"type": "local",
+            "name": "Low Flow Index (LFI)", "path": "{OUTPUT}",
+            "file": "LFI{thr_quantile}_%Y%m%d000000.tif"
+        }
+    }
+}

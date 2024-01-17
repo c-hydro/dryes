@@ -1,0 +1,61 @@
+{   
+    "tags": {
+        "HOME" : "/home/luca/Documents/CIMA_code/tests/SPI/Italia",
+        "INPUT": "{HOME}/data/%Y/%m/",
+
+        "ARCHIVE": "{HOME}/archive",
+        "AGGDATA": "{ARCHIVE}/data/%Y/%m/%d/",
+        "PARAMS" : "{ARCHIVE}/parameters/{history_start:%Y%m%d}-{history_end:%Y%m%d}",
+        "OUTPUT" : "{ARCHIVE}/maps/%Y/%m/%d/"
+    },
+    "index_options": {
+        "agg_fn": {
+            "1": {"type": "sum_of_window", "size": 1, "unit": "months"},
+            "3": {"type": "sum_of_window", "size": 3, "unit": "months"}
+        },
+        "distribution": "gamma",
+        "pval_threshold": 0.05,
+        "post_fn": {
+            "Sigma2": {"type": "gaussian_smoothing", "sigma": 2}
+        }
+    },
+    "run_options": {
+        "history_start": "2010-01-01",
+        "history_end": "2022-12-31",
+        "timesteps_per_year" : 12
+    },
+    "io_options": {
+        "data_raw": {"type": "local",
+            "name": "precipitation", "path": "{INPUT}",
+            "file": "PrecipMCM_nonnegative_%Y%m%d.tif"
+        },
+        "data": {"type": "local",
+            "name": "precipitation (aggregated)", "path": "{AGGDATA}",
+            "file": "PrecipMCM{agg_fn}Months_%Y%m%d.tif"
+        },
+        "gamma.a": {"type": "local",
+            "name": "gamma.a (SPI)", "path": "{PARAMS}/a/",
+            "file": "aAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "gamma.loc": {"type": "local",
+            "name": "gamma.loc (SPI)", "path": "{PARAMS}/loc/",
+            "file": "locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "gamma.scale": {"type": "local",
+            "name": "gamma.scale (SPI)", "path": "{PARAMS}/scale/",
+            "file": "scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "prob0": {"type": "local",
+            "name": "prob_0 (SPI)", "path": "{PARAMS}/prob0/",
+            "file": "prob0Agg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "log": {"type": "local",
+            "name": "log SPI", "path": "{HOME}",
+            "file": "log.txt"
+        },
+        "index": {"type": "local",
+            "name": "Standardised Precipitation Index (SPI)", "path": "{OUTPUT}",
+            "file": "SPI{agg_fn}_%Y%m%d000000.tif"
+        }
+    }
+}

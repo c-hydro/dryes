@@ -17,7 +17,7 @@ pip install .
 Import the package in your Python script as follows:
 
 ```python
-import DRYES
+import dryes
 ```
 
 You can then use the functions and classes provided by the package to set up your data analysis pipeline.

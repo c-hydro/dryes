@@ -216,7 +216,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         return ddi
 
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+    def get_ddi(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         
         tags = case['tags']
         tags.update({'history_start': history.start, 'history_end': history.end})
@@ -323,7 +323,7 @@ class LFI(DRYESThrBasedIndex):
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # take the current ddi from the superclass
-        ddi = super().calc_index(time, history, case)
+        ddi = self.get_ddi(time, history, case)
 
         deficit  = ddi[0]
         duration = ddi[1]
@@ -347,7 +347,7 @@ class HWI(DRYESThrBasedIndex):
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # take the current ddi from the superclass
-        ddi = super().calc_index(time, history, case)
+        ddi = self.get_ddi(time, history, case)
         # the first time this runs, it will calculate the ddi from the beginning of history to the current time
         # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
         # for the HWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
@@ -370,7 +370,7 @@ class CWI(DRYESThrBasedIndex):
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # take the current ddi from the superclass
-        ddi = super().calc_index(time, history, case)
+        ddi = self.get_ddi(time, history, case)
         # the first time this runs, it will calculate the ddi from the beginning of history to the current time
         # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
         # for the HWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi

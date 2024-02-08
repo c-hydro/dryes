@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import os
 import xarray as xr
+import rioxarray
 from rasterio.transform import Affine
 from osgeo import gdal, gdalconst
 from dryes_monthly_aggregator_generic import create_darray_3d, fill_tags2string
@@ -58,7 +59,7 @@ def load_monthly_from_geotiff(da_domain_in,period_daily, period_monthly,
             logging.info(' --> Looking for daily data at ' + path_data)
 
         if os.path.isfile(path_data):
-            data_this_day = xr.open_rasterio(path_data)
+            data_this_day = rioxarray.open_rasterio(path_data)
             data_this_day = np.squeeze(data_this_day)
 
             if multidaily_cumulative:
@@ -113,7 +114,7 @@ def load_monthly_from_geotiff(da_domain_in,period_daily, period_monthly,
                 tag_filled = {'source_gridded_climatology_sub_path_time': time_date,
                               'source_gridded_climatology_datetime': time_date}
                 path_climatology = fill_tags2string(path_climatology_max_in, template, tag_filled)
-                data_climatology = xr.open_rasterio(path_climatology)
+                data_climatology = rioxarray.open_rasterio(path_climatology)
                 data_climatology = np.squeeze(data_climatology)
 
                 # regrid
@@ -123,7 +124,7 @@ def load_monthly_from_geotiff(da_domain_in,period_daily, period_monthly,
                 data_climatology = data_climatology.interp(coordinates_target, method='nearest')
 
                 # set no data to NaN
-                data_climatology.values[data_climatology.values == data_climatology.nodatavals[0]] = np.nan
+                data_climatology.values[data_climatology.values == data_climatology._FillValue] = np.nan
 
                 # plt.figure()
                 # plt.imshow(data_climatology.values)

@@ -3,6 +3,10 @@ Changelog
 =========
 
 =======
+Version 2.6.13 [2024-02-08]
+***************************
+- Fixed typo in monthly aggregation tool
+
 Version 2.6.12 [2023-12-11]
 ***************************
 - Modified SPI tool to avoid errors in parameters calculation

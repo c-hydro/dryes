@@ -134,7 +134,7 @@ def load_monthly_avg_data_from_geotiff(da_domain_in,period_daily, period_monthly
                 data_climatology = data_climatology.interp(coordinates_target, method='nearest')
 
                 # set no data to NaN
-                data_climatology.values[data_climatology.values == data_climatology.nodatavals[0]] = np.nan
+                data_climatology.values[data_climatology.values == data_climatology.nodata] = np.nan
 
                 # plt.figure()
                 # plt.imshow(data_climatology.values)

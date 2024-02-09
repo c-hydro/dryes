@@ -4,6 +4,10 @@ Changelog
 
 =======
 
+Version 2.6.15 [2024-02-09]
+***************************
+- Fixed typo in monthly aggregation tool for SPEI
+
 Version 2.6.14 [2024-02-09]
 ***************************
 - Added tool for PET HS

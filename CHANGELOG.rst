@@ -3,6 +3,11 @@ Changelog
 =========
 
 =======
+
+Version 2.6.14 [2024-02-09]
+***************************
+- Added tool for PET HS
+
 Version 2.6.13 [2024-02-08]
 ***************************
 - Fixed typo in monthly aggregation tool

@@ -1,0 +1,44 @@
+{
+  "algorithm": {
+    "general": {
+      "title": "Algorithm to compute daily PET according to Hargreaves-Samani equation",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20240208]",
+      "project-info": "DRYES Drought Metrics Tool",
+      "algorithm": "Tools by CIMA Research Foundation"
+    },
+    "template": {
+      "source_gridded_sub_path_time": "%Y/%m/%d/",
+      "source_gridded_datetime": "%Y%m%d",
+      "outcome_sub_path_time": "%Y/%m/%d",
+      "outcome_datetime": "%Y%m%d"
+    }
+  },
+  "data": {
+    "input": {
+      "input_grid": "/static/SPEI_HS/MCM_mask_0nan.tif",
+      "folder": "{source_gridded_sub_path_time}",
+      "filename_mean": "AirT_DRYES_DAILY_{source_gridded_datetime}_italy.tif",
+      "filename_max": "AirT_DRYES_DAILY_MAX_{source_gridded_datetime}_italy.tif",
+      "filename_min": "AirT_DRYES_DAILY_MIN_{source_gridded_datetime}_italy.tif"
+    },
+    "outcome": {
+      "path": "/{outcome_sub_path_time}/PET_HS_{outcome_datetime}.tif",
+      "mask": true
+    },
+    "log": {
+      "filename": "dryes_PET_HS.txt",
+      "folder": "/PET_HS/"
+    }
+  },
+  "time": {
+    "time_run": null,
+    "time_start": null,
+    "time_end": null,
+    "time_period": 10,
+    "time_frequency": "D",
+    "time_rounding": "D",
+     "time_reverse": false
+  }
+}

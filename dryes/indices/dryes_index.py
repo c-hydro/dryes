@@ -251,7 +251,7 @@ class DRYESIndex:
             else:
                 these_ts_to_compute = []
                 i = 0
-                while(timesteps[i] not in available_ts) and i < len(timesteps):
+                while i < len(timesteps) and (timesteps[i] not in available_ts):
                     these_ts_to_compute.append(timesteps[i])
                     i += 1
             timesteps_to_compute[agg_name] = these_ts_to_compute

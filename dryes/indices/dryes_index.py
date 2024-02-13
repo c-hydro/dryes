@@ -269,16 +269,16 @@ class DRYESIndex:
             for agg_name in agg_names:
                 self.log.info(f'  Aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
-                    data = time_agg.aggfun[agg_name](variable_in, time)
+                    data, agg_info = time_agg.aggfun[agg_name](variable_in, time)
                     if agg_name not in time_agg.postaggfun.keys():
-                        variable_out.write_data(data, time = time, agg_fn = agg_name)
+                        variable_out.write_data(data, time = time, agg_fn = agg_name, **agg_info)
                     else:
                         agg_data[agg_name].append(data)
         
         for agg_name in agg_names:
             if agg_name in time_agg.postaggfun.keys():
                 self.log.info(f'Completing time aggregation: {agg_name}...')
-                agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in)
+                agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in, timesteps_to_compute[agg_name])
 
                 for i, data in enumerate(agg_data[agg_name]):
                     this_time = timesteps_to_compute[agg_name][i]

@@ -32,7 +32,13 @@ def average_of_window(size: int, unit: str) -> Callable:
             mean_data = np.nanmean(all_data, axis = 0)
         # mean = variable.template.copy(data = mean_data)
         # mean = mean.assign_coords(time = time)
-        return mean_data
+        
+        agg_info = {'agg_type': 'average',
+                    'agg_start': f'{min(times_to_get):%Y-%m-%d}',
+                    'agg_end':   f'{max(times_to_get):%Y-%m-%d}',
+                    'agg_n': len(times_to_get)}
+
+        return mean_data, agg_info
     
     return partial(_average_of_window, _size = size, _unit = unit)
 
@@ -57,6 +63,12 @@ def sum_of_window(size: int, unit: str) -> Callable:
         sum_data = np.sum(all_data, axis = 0)
         # sum = variable.template.copy(data = sum_data)
         # sum = sum.assign_coords(time = time)
-        return sum_data
+
+        agg_info = {'agg_type': 'sum',
+                    'agg_start': f'{min(times_to_get):%Y-%m-%d}',
+                    'agg_end':   f'{max(times_to_get):%Y-%m-%d}',
+                    'agg_n': len(times_to_get)}
+
+        return sum_data, agg_info
     
     return partial(_sum_of_window, _size = size, _unit = unit)

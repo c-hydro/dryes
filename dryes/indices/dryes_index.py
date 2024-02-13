@@ -263,26 +263,34 @@ class DRYESIndex:
         if len(timesteps_to_iterate) > 0:
             self.log.info(f'Aggregating input data ({variable_in.name})...')
 
-        agg_data = {n:[] for n in agg_names if agg_name in time_agg.postaggfun.keys()}
+        #agg_data = {n:[] for n in agg_names if agg_name in time_agg.postaggfun.keys()}
         for i, time in enumerate(timesteps_to_iterate):
             self.log.info(f' #Timestep {time:%d-%m-%Y} ({i+1}/{len(timesteps_to_iterate)})...')
             for agg_name in agg_names:
                 self.log.info(f'  Aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
-                    data, agg_info = time_agg.aggfun[agg_name](variable_in, time)
+                    agg_data, agg_info = time_agg.aggfun[agg_name](variable_in, time)
                     if agg_name not in time_agg.postaggfun.keys():
-                        variable_out.write_data(data, time = time, agg_fn = agg_name, **agg_info)
+                        variable_out.write_data(agg_data, time = time, agg_fn = agg_name, **agg_info)
                     else:
-                        agg_data[agg_name].append(data)
-        
-        for agg_name in agg_names:
-            if agg_name in time_agg.postaggfun.keys():
-                self.log.info(f'Completing time aggregation: {agg_name}...')
-                agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in, timesteps_to_compute[agg_name])
+                        postagg_data, postagg_info = time_agg.postaggfun[agg_name](agg_data, variable_out, time)
+                        for key in postagg_info:
+                            if key in agg_info:
+                                agg_info[key] += ', {postagg_info[key]}'
+                            else:
+                                agg_info[key] = postagg_info[key]
+                        variable_out.write_data(postagg_data, time = time, agg_fn = agg_name, **agg_info)
 
-                for i, data in enumerate(agg_data[agg_name]):
-                    this_time = timesteps_to_compute[agg_name][i]
-                    variable_out.write_data(data, time = this_time, agg_fn = agg_name)
+        #                 agg_data[agg_name].append(data)
+        
+        # for agg_name in agg_names:
+        #     if agg_name in time_agg.postaggfun.keys():
+        #         self.log.info(f'Completing time aggregation: {agg_name}...')
+        #         agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in, timesteps_to_compute[agg_name])
+
+        #         for i, data in enumerate(agg_data[agg_name]):
+        #             this_time = timesteps_to_compute[agg_name][i]
+        #             variable_out.write_data(data, time = this_time, agg_fn = agg_name)
     
     def make_parameters(self,
                         history: TimeRange,

@@ -63,7 +63,7 @@ class LocalIOHandler(IOHandler):
         this_path = self.path(time, **kwargs)
         return os.path.exists(this_path)
 
-    @lru_cache(maxsize=256)
+    #@lru_cache(maxsize=32)
     def get_data(self, time: Optional[datetime] = None, **kwargs):
         if self.check_data(time, **kwargs):
             data = rioxarray.open_rasterio(self.path(time, **kwargs))

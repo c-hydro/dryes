@@ -17,7 +17,8 @@ class DRYESAnomaly(DRYESIndex):
     default_options = {
         'agg_fn'       : {'Agg1': agg.average_of_window(1, 'months')},
         'type'         : 'empiricalzscore',
-        'min_reference': 1
+        'min_reference': 1,
+        #'min_std'      : 0.01 #TODO: implement this as an option, for now it is hardcoded in the code
     }
     
     @property
@@ -95,6 +96,8 @@ class DRYESAnomaly(DRYESIndex):
         if case['options']['type'] == 'empiricalzscore':
             std  = parameters['std']
             anomaly_data = (data - mean) / std
+            #TODO: implement this as an option, for now it is hardcoded in the code
+            anomaly_data = np.where(std < 0.01, np.nan, anomaly_data)
         elif case['options']['type'] == 'percentdelta':
             anomaly_data = (data - mean) / mean * 100
         elif case['options']['type'] == 'absolutedelta':

@@ -242,24 +242,21 @@ class DRYESIndex:
         for agg_name in agg_names:
             available_ts = variable_out.get_times(time_range, agg_fn = agg_name)
 
+            these_ts_to_compute = [time for time in timesteps if time not in available_ts]
             # if there is no post aggregation function, we don't care for the order of the timesteps
             # and can just compute the missing ones
-            if agg_name not in time_agg.postaggfun.keys():
-                these_ts_to_compute = [time for time in timesteps if time not in available_ts]
             # if there is a post aggregation function, each timesteps depends on the previous one(s)
-            # so we need to compute them in order TODO: check if this works as expected
-            else:
-                these_ts_to_compute = []
-                i = 0
-                while i < len(timesteps) and (timesteps[i] not in available_ts):
-                    these_ts_to_compute.append(timesteps[i])
-                    i += 1
+            # so we need to compute them in order from the first missing one onwards
+            if agg_name in time_agg.postaggfun.keys():
+                first_missing = min(these_ts_to_compute)
+                these_ts_to_compute = [time for time in timesteps if time >= first_missing]
+            
             timesteps_to_compute[agg_name] = these_ts_to_compute
 
         timesteps_to_iterate = set.union(*[set(timesteps_to_compute[agg_name]) for agg_name in agg_names])
         timesteps_to_iterate = list(timesteps_to_iterate)
         timesteps_to_iterate.sort()
-
+        breakpoint()
         if len(timesteps_to_iterate) > 0:
             self.log.info(f'Aggregating input data ({variable_in.name})...')
 

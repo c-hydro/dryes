@@ -15,8 +15,10 @@ from ..utils.time import TimeRange
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
     default_options = {
-        'agg_fn' : {'Agg1': agg.average_of_window(1, 'months')},
-        'type'   : 'empiricalzscore'
+        'agg_fn'       : {'Agg1': agg.average_of_window(1, 'months')},
+        'type'         : 'empiricalzscore',
+        'min_reference': 1,
+        #'min_std'      : 0.01 #TODO: implement this as an option, for now it is hardcoded in the code
     }
     
     @property
@@ -48,7 +50,7 @@ class DRYESAnomaly(DRYESIndex):
         data_ = [variable.get_data(time) for time in data_dates]
         data = np.stack(data_, axis = 0)
 
-        output = {}
+        pardata = {}
         # calculate the parameters
         parameters = par_and_cases.keys()
         # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
@@ -57,11 +59,25 @@ class DRYESAnomaly(DRYESIndex):
             # mean
             if 'mean' in parameters:
                 mean_data = np.nanmean(data, axis = 0)
-                output['mean'] = {0:mean_data} # -> we save this as case 0 because it is the same for all cases
+                pardata['mean'] = mean_data
+                #output['mean'] = {0:mean_data} # -> we save this as case 0 because it is the same for all cases
             # std
             if 'std' in parameters:
                 std_data = np.nanstd(data, axis = 0)
-                output['std'] = {0:std_data} # -> we save this as case 0 because it is the same for all cases
+                pardata['std'] = std_data
+                #output['std'] = {0:std_data} # -> we save this as case 0 because it is the same for all cases
+        
+        output = {}
+        # count how many years of data we have for each pixel
+        valid_data = np.sum(np.isfinite(data), axis = 0)
+        for par in parameters:
+            this_par_cases = par_and_cases[par]
+            output[par] = {}
+            for case in this_par_cases:
+                this_min_reference = self.cases['opt'][case]['options']['min_reference']
+                this_par_data = np.where(valid_data >= this_min_reference, pardata[par], np.nan)
+                output[par][case] = this_par_data
+        
         return output
     
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
@@ -80,6 +96,8 @@ class DRYESAnomaly(DRYESIndex):
         if case['options']['type'] == 'empiricalzscore':
             std  = parameters['std']
             anomaly_data = (data - mean) / std
+            #TODO: implement this as an option, for now it is hardcoded in the code
+            anomaly_data = np.where(std < 0.01, np.nan, anomaly_data)
         elif case['options']['type'] == 'percentdelta':
             anomaly_data = (data - mean) / mean * 100
         elif case['options']['type'] == 'absolutedelta':

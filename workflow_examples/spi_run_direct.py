@@ -23,7 +23,7 @@ def main():
                         #"6"  : agg.sum_of_window(size = 6,  unit = 'months'),
                         #"12" : agg.sum_of_window(size = 12, unit = 'months')
                     },
-            "distribution" : {"gamma":"gamma", "normal":"normal", "pearson3":"pearson3"},
+            #"distribution" : {"gamma":"gamma", "normal":"normal", "pearson3":"pearson3"},
             #"pval_threshold" : {"t05": 0.05, "t10": 0.1},
             #"post_fn": {"Sigma2" : pp.gaussian_smoothing(sigma = 2),
             #            "Sigma4" : pp.gaussian_smoothing(sigma = 4)}
@@ -41,28 +41,28 @@ def main():
                                 file = 'gamma/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             'gamma.scale':   Local(name = 'gamma.scale (SPI)', path = PARAMS,
                                 file = 'gamma/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
-            'normal.loc':    Local(name = 'normal.loc (SPI)',   path = PARAMS,
-                                file = 'normal/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
-            'normal.scale':  Local(name = 'normal.scale (SPI)', path = PARAMS,
-                                file = 'normal/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
-            'pearson3.skew': Local(name = 'pearson3.a (SPI)',     path = PARAMS,
-                                file = 'pearson3/skew/skewAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
-            'pearson3.loc':  Local(name = 'pearson3.loc (SPI)',   path = PARAMS,
-                                file = 'pearson3/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
-            'pearson3.scale':Local(name = 'pearson3gamma.scale (SPI)', path = PARAMS,
-                                file = 'pearson3/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+            # 'normal.loc':    Local(name = 'normal.loc (SPI)',   path = PARAMS,
+            #                     file = 'normal/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+            # 'normal.scale':  Local(name = 'normal.scale (SPI)', path = PARAMS,
+            #                     file = 'normal/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+            # 'pearson3.skew': Local(name = 'pearson3.a (SPI)',     path = PARAMS,
+            #                     file = 'pearson3/skew/skewAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+            # 'pearson3.loc':  Local(name = 'pearson3.loc (SPI)',   path = PARAMS,
+            #                     file = 'pearson3/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+            # 'pearson3.scale':Local(name = 'pearson3gamma.scale (SPI)', path = PARAMS,
+            #                     file = 'pearson3/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             'prob0':         Local(name = 'prob_0 (SPI)',      path = PARAMS,
                                 file = 'prob0/prob0Agg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             
             # outputs
             'log'  : Local(name = 'log SPI', path = HOME, file =  'log.txt'),
             'index': Local(name = 'Standardised Precipitation Index (SPI)', 
-                        path = OUTPUT, file = 'SPI{agg_fn}{distribution}_%Y%m%d000000.tif')}
+                        path = OUTPUT, file = 'SPI{agg_fn}_%Y%m%d000000.tif')}
     )
 
     spi_mcm_ita.compute(current   = (datetime(2020,1,1), datetime(2020,12,31)),
-                        reference = (datetime(2010,1,1), datetime(2022,12,31)),
-                        timesteps_per_year = 12)
+                        reference = (datetime(2010,1,1), datetime(2019,12,31)),
+                        timesteps_per_year = 36)
 
 if __name__ == '__main__':
     main()

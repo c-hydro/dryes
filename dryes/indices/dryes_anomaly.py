@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import warnings
@@ -10,7 +10,7 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange
+from ..utils.time import TimeRange, get_md_dates
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
@@ -44,7 +44,7 @@ class DRYESAnomaly(DRYESIndex):
         """
         
         history_years = range(history.start.year, history.end.year + 1)
-        all_dates  = [datetime(year, time.month, time.day) for year in history_years]
+        all_dates  = get_md_dates(history_years, time.month, time.day)
         data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
         data_ = [variable.get_data(time) for time in data_dates]
@@ -89,7 +89,9 @@ class DRYESAnomaly(DRYESIndex):
             case['tags']['history_start'] = history.start
         if 'history_end' not in case['tags']:
             case['tags']['history_end'] = history.end
-        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items()}
+        # parameters for 29th February are actually those for 28th February
+        par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
+        parameters = {par: p.get_data(par_time, **case['tags']) for par, p in self._parameters.items()}
 
         # calculate the index
         mean = parameters['mean']

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
 
-from typing import List
+from typing import Iterable
 
 class TimeRange():
     def __init__(self, start: datetime, end: datetime):
@@ -40,30 +40,34 @@ def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int)
         raise ValueError("Invalid number of intervals. Must be a positive integer that divides 12, 24, or 36 evenly.")
 
     if n_intervals == 1:
-        timesteps =  [datetime(year,     1,   1) for year in range(start_year, end_year + 1)]
+        timesteps =  [datetime(year,     1,   1) for year in range(start_year, end_year + 2)]
     elif n_intervals == 2:
-        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 1) for month in [1, 7]]
+        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 2) for month in [1, 7]]
     elif n_intervals == 3:
-        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 1) for month in [1, 5, 9]]
+        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 2) for month in [1, 5, 9]]
     elif n_intervals == 4:
-        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 1) for month in [1, 4, 7, 10]]
+        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 2) for month in [1, 4, 7, 10]]
     elif n_intervals == 6:
-        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 1) for month in [1, 3, 5, 7, 9, 11]]
+        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 2) for month in [1, 3, 5, 7, 9, 11]]
     elif n_intervals == 12:
-        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 1) for month in range(1, 13)]
+        timesteps =  [datetime(year, month,   1) for year in range(start_year, end_year + 2) for month in range(1, 13)]
     elif n_intervals == 24:
-        timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 1) for month in range(1, 13) for day in [1, 16]]
+        timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 2) for month in range(1, 13) for day in [1, 16]]
     elif n_intervals == 36:
-        timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 1) for month in range(1, 13) for day in [1, 11, 21]]
+        timesteps =  [datetime(year, month, day) for year in range(start_year, end_year + 2) for month in range(1, 13) for day in [1, 11, 21]]
     elif n_intervals == 365:
         timesteps =  [time_start]
         new_timestep = time_start
-        while new_timestep < time_end:
+        while True:
             new_timestep = new_timestep + timedelta(days=1)
             if (new_timestep.month, new_timestep.day) != (2, 29):
                 timesteps.append(new_timestep)
+            if new_timestep > time_end:
+                break
 
+    timesteps = [time - timedelta(days=1) for time in timesteps]
     timesteps = [time for time in timesteps if time >= time_start and time <= time_end]
+
     return timesteps
 
 def get_interval(date: datetime, num_intervals: int = 12) -> int:
@@ -144,22 +148,42 @@ def doy_to_md(doy:int) -> tuple[int, int]:
     date = datetime(1987, 1, 1) + timedelta(days = doy - 1)
     return (date.month, date.day)
 
-def ntimesteps_to_md(timesteps_per_year: int) -> List[tuple[int, int]]:
+def ntimesteps_to_md(timesteps_per_year: int) -> list[tuple[int, int]]:
     timesteps = create_timesteps(datetime(1987, 1, 1), datetime(1987, 12, 31), timesteps_per_year)
     return [(time.month, time.day) for time in timesteps] 
 
 def get_window(time: datetime, size: int, unit: str) -> TimeRange:
-        time_end = time - timedelta(days=1)
         if unit[-1] != 's': unit += 's'
         if unit in ['months', 'years', 'days', 'weeks']:
-            time_start = time - relativedelta(**{unit: size})
+            time_start = time - relativedelta(**{unit: size}) + timedelta(days=1)
         elif unit == 'dekads':
-            if time_end == get_interval_date(time_end, 36, end = True):
-                tmp_time = time_end
-                for i in range(size): tmp_time = get_interval_date(tmp_time, 36) - timedelta(days=1)
-                time_start = tmp_time + timedelta(days=1)
-            else:
-                time_start = time - timedelta(days = 10 * size)
+            if (time + timedelta(days=1)).day not in  [1, 11, 21]:
+                raise ValueError('Dekads can only start on the 1st, 11th, or 21st of the month')
+            dekad_end   = get_interval(time, 36)
+            dekad_start = dekad_end - size + 1
+            year = time.year
+            while interval_start < 1:
+                interval_start += 36
+                year -= 1
+            time_start = get_date_from_interval(dekad_start, year, 36)
         else:
-            raise ValueError('Unit for average aggregator recognized: must be one of dekads, months, years, days, weeks')
-        return TimeRange(time_start, time_end)
+            raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
+        return TimeRange(time_start, time)
+
+def is_leap(year: int) -> bool:
+    if year % 4 != 0:
+        return False
+    elif year % 100 != 0:
+        return True
+    elif year % 400 != 0:
+        return False
+    else:
+        return True
+
+def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime]:
+    if month == 2 and day in [28, 29]:
+        leaps = [year for year in years if is_leap(year)]
+        nonleaps = [year for year in years if not is_leap(year)]
+        return [datetime(year, 2, 29) for year in leaps] + [datetime(year, 2, 28) for year in nonleaps]
+    else:
+        return [datetime(year, month, day) for year in years]

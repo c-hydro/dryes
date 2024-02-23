@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import warnings
@@ -10,7 +10,7 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange
+from ..utils.time import TimeRange, get_md_dates
 from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 
@@ -77,7 +77,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         """
 
         history_years = range(history.start.year, history.end.year + 1)
-        all_dates  = [datetime(year, time.month, time.day) for year in history_years]
+        all_dates  = get_md_dates(history_years, time.month, time.day)
         data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
         data_ = [variable.get_data(time) for time in data_dates]
@@ -137,7 +137,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         pars_to_get  = self.distr_par[distribution]
         if 'prob0' in self._parameters:
             pars_to_get += ['prob0']
-        parameters   = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
+        par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
+        parameters = {par: p.get_data(par_time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
 
         # calculate the index
         probVal = get_prob(data, distribution, parameters)

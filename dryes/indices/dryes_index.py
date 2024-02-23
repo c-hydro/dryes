@@ -256,7 +256,6 @@ class DRYESIndex:
         timesteps_to_iterate = set.union(*[set(timesteps_to_compute[agg_name]) for agg_name in agg_names])
         timesteps_to_iterate = list(timesteps_to_iterate)
         timesteps_to_iterate.sort()
-        breakpoint()
         if len(timesteps_to_iterate) > 0:
             self.log.info(f'Aggregating input data ({variable_in.name})...')
 
@@ -386,7 +385,7 @@ class DRYESIndex:
                     for time in ts_todo:
                         self.log.info(f'   {time:%d/%m/%Y}')
                         history = reference_fn(time)
-                        case['tags'].update({'history_start': history.start, 'history_end': history.end})
+                        case['tags'].update({'history_start': history.start, 'history_end': history.end})      
                         index_data = self.calc_index(time, history, case)
                         index.write_data(index_data, time = time)
 

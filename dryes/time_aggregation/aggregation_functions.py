@@ -87,7 +87,7 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[tuple[int, str]] = N
         data = variable.get_data(times_to_get[0])
         for time in times_to_get[1:]:
             data_stack = np.stack([data, variable.get_data(time)], axis = 0)
-            data = np.nansum(data_stack, axis = 0)
+            data = np.sum(data_stack, axis = 0)
 
         # data = [variable.get_data(time) for time in times_to_get]
         # all_data = np.stack(data, axis = 0)

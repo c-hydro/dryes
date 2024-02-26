@@ -91,7 +91,7 @@ class DRYESStandardisedIndex(DRYESIndex):
             warnings.simplefilter("ignore", category=RuntimeWarning)
             # prob0 -> this is for all distributions
             if 'prob0' in parameters:
-                iszero = data == 0
+                iszero = data <= 0.0001#== 0
                 # reassign NaNs
                 iszero = np.where(np.isnan(data), np.nan, iszero)
                 prob0_data = np.nanmean(iszero, axis = 0)

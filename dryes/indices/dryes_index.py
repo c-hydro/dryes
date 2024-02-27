@@ -158,15 +158,15 @@ class DRYESIndex:
         elif isinstance(reference, Callable):
             reference_fn = lambda time: TimeRange(raw_reference(time)[0], raw_reference(time)[1])
 
-        # get the timesteps for which we need input data
-        if len(self.cases['agg']) == 0:
-           agg_timesteps_per_year = 365
-        else:
-            agg_timesteps_per_year = timesteps_per_year
-        data_timesteps = self.make_data_timesteps(current, reference_fn, agg_timesteps_per_year)
+        # # get the timesteps for which we need input data
+        # if len(self.cases['agg']) == 0:
+        #    agg_timesteps_per_year = 365
+        # else:
+        #     agg_timesteps_per_year = timesteps_per_year
+        # data_timesteps = self.make_data_timesteps(current, reference_fn, agg_timesteps_per_year)
 
-        # # get the data, this will aggregate the data, if necessary
-        self.make_input_data(data_timesteps)
+        # # # get the data, this will aggregate the data, if necessary
+        # self.make_input_data(data_timesteps)
 
         # get the timesteps for which we need to calculate the index
         timesteps = create_timesteps(current.start, current.end, timesteps_per_year)
@@ -365,11 +365,12 @@ class DRYESIndex:
                         tags = self.cases['opt'][case]['tags']
                         par.write_data(data, time = time, time_format = '%d/%m', **tags)
 
-    def make_index(self, current:   tuple[datetime, datetime],
-                         reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]],
+    def make_index(self, current:   TimeRange|tuple[datetime, datetime],
+                         reference: TimeRange|tuple[datetime, datetime]|Callable,
                          timesteps_per_year: int) -> None:
 
-        current = TimeRange(current[0], current[1])
+        if isinstance(current, tuple):
+            current = TimeRange(current[0], current[1])
         self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
 
         timesteps = self.make_data_timesteps(current, timesteps_per_year)
@@ -378,10 +379,15 @@ class DRYESIndex:
 
         raw_reference = deepcopy(reference)
         # make the reference period a function of time, for extra flexibility
-        if isinstance(reference, tuple) or isinstance(reference, list):
+        if isinstance(reference, TimeRange):
+            reference_fn = lambda time: raw_reference
+        elif isinstance(reference, tuple) or isinstance(reference, list):
             reference_fn = lambda time: TimeRange(raw_reference[0], raw_reference[1])
         elif isinstance(reference, Callable):
-            reference_fn = lambda time: TimeRange(raw_reference(time)[0], raw_reference(time)[1])
+            if isinstance(reference(current.start), TimeRange):
+                reference_fn = lambda time: raw_reference(time)
+            elif isinstance(reference(current.start), tuple) or isinstance(reference(current.start), list):
+                reference_fn = lambda time: TimeRange(raw_reference(time)[0], raw_reference(time)[1])
 
         # check if anything has been calculated already
         agg_cases = self.cases['agg'] if len(self.cases['agg']) > 0 else [{}]

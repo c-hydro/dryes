@@ -134,7 +134,7 @@ class DRYESStandardisedIndex(DRYESIndex):
             case['tags']['history_end'] = history.end
 
         distribution = case['options']['distribution']
-        pars_to_get  = self.distr_par[distribution]
+        pars_to_get  = self.distr_par[distribution].copy()
         if 'prob0' in self._parameters:
             pars_to_get += ['prob0']
         par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)

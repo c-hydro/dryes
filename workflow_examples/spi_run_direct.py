@@ -60,9 +60,12 @@ def main():
                         path = OUTPUT, file = 'SPI{agg_fn}_%Y%m%d000000.tif')}
     )
 
-    spi_mcm_ita.compute(current   = (datetime(2020,1,1), datetime(2020,12,31)),
-                        reference = (datetime(2010,1,1), datetime(2019,12,31)),
-                        timesteps_per_year = 36)
+    current   = (datetime(2020,1,1), datetime(2020,12,31))
+    reference = (datetime(2010,1,1), datetime(2019,12,31))
+    timesteps_per_year = 36
+
+    #spi_mcm_ita.make_parameters(reference, timesteps_per_year)
+    spi_mcm_ita.make_index(current, reference, timesteps_per_year)
 
 if __name__ == '__main__':
     main()

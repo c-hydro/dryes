@@ -165,7 +165,7 @@ class DRYESIndex:
             agg_timesteps_per_year = timesteps_per_year
         data_timesteps = self.make_data_timesteps(current, reference_fn, agg_timesteps_per_year)
 
-        # get the data, this will aggregate the data, if necessary
+        # # get the data, this will aggregate the data, if necessary
         self.make_input_data(data_timesteps)
 
         # get the timesteps for which we need to calculate the index
@@ -178,30 +178,29 @@ class DRYESIndex:
             self.make_parameters(reference_, timesteps_per_year)
 
         # calculate the index
-        self.make_index(timesteps, reference_fn)
+        self.make_index(current, reference_fn, timesteps_per_year)
     
-    def make_data_timesteps(self, current: TimeRange,
-                            reference_fn: Callable[[datetime], TimeRange],
+    def make_data_timesteps(self,
+                            time_range: TimeRange,
                             timesteps_per_year: int) -> List[datetime]:
         """
         This function will return the timesteps for which the data needs to be computed.
         """
-
-        # all of this will get the range for the data that is needed
-        current_timesteps = create_timesteps(current.start, current.end, timesteps_per_year)
-        reference_start = set(reference_fn(time).start for time in current_timesteps)
-        reference_end   = set(reference_fn(time).end   for time in current_timesteps)
-        if self.iscontinuous:
-            time_start = min(reference_start)
-            time_end   = max(current_timesteps)
-            return create_timesteps(time_start, time_end, timesteps_per_year)
+        
+        if not self.iscontinuous:
+            return create_timesteps(time_range.start, time_range.end, timesteps_per_year)
         else:
-            reference_timesteps = create_timesteps(min(reference_start), max(reference_end), timesteps_per_year)
-            all_timesteps = set.union(set(reference_timesteps), set(current_timesteps))
-            all_timesteps = list(all_timesteps)
-            all_timesteps.sort()
-            return all_timesteps
-
+            # get last available timestep, if any
+            last_timestep = []
+            for case in self.cases['agg']:
+                last_timestep.append(self._data.get_times(time_range, **case['tags'])[-1])
+            if len(last_timestep) > 0:
+                # if different aggregations have different last timesteps, we need to use the earliest
+                start = min(last_timestep)
+            else:
+                start = time_range.start
+            return create_timesteps(start, time_range.end, timesteps_per_year)
+    
     def make_reference_periods(self, current_timesteps: Iterable[datetime],
                                reference_fn: Callable[[datetime], TimeRange]) -> List[TimeRange]:
         """
@@ -218,7 +217,7 @@ class DRYESIndex:
 
         references_as_tr = [TimeRange(start, end) for start, end in references]
         return references_as_tr
-    
+
     def make_input_data(self, timesteps: List[datetime]):# -> dict[str:str]:
         """
         This function will gather compute and aggregate the input data
@@ -289,9 +288,17 @@ class DRYESIndex:
         #             variable_out.write_data(data, time = this_time, agg_fn = agg_name)
     
     def make_parameters(self,
-                        history: TimeRange,
+                        history: TimeRange|tuple[datetime, datetime],
                         timesteps_per_year: int) -> None:
+
+        if isinstance(history, tuple):
+            history = TimeRange(history[0], history[1])
+
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
+
+        data_timesteps = self.make_data_timesteps(history, timesteps_per_year)
+        # make aggregated data for the parameters
+        self.make_input_data(data_timesteps)
 
         # get the parameters that need to be calculated
         parameters = self.parameters
@@ -358,8 +365,23 @@ class DRYESIndex:
                         tags = self.cases['opt'][case]['tags']
                         par.write_data(data, time = time, time_format = '%d/%m', **tags)
 
-    def make_index(self, timesteps: List[datetime], reference_fn: Callable[[datetime], TimeRange]) -> str:
-        self.log.info(f'Calculating index for {min(timesteps):%d/%m/%Y}-{max(timesteps):%d/%m/%Y}...')
+    def make_index(self, current:   tuple[datetime, datetime],
+                         reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]],
+                         timesteps_per_year: int) -> None:
+
+        current = TimeRange(current[0], current[1])
+        self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
+
+        timesteps = self.make_data_timesteps(current, timesteps_per_year)
+        # make aggregated data for the parameters
+        self.make_input_data(timesteps)
+
+        raw_reference = deepcopy(reference)
+        # make the reference period a function of time, for extra flexibility
+        if isinstance(reference, tuple) or isinstance(reference, list):
+            reference_fn = lambda time: TimeRange(raw_reference[0], raw_reference[1])
+        elif isinstance(reference, Callable):
+            reference_fn = lambda time: TimeRange(raw_reference(time)[0], raw_reference(time)[1])
 
         # check if anything has been calculated already
         agg_cases = self.cases['agg'] if len(self.cases['agg']) > 0 else [{}]

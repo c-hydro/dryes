@@ -5,6 +5,7 @@ from methodtools import lru_cache
 import os
 import rioxarray
 import numpy as np
+import xarray as xr
 
 from .io_handler import IOHandler
 
@@ -92,7 +93,7 @@ class LocalIOHandler(IOHandler):
             new_handler.tags = new_tags
             return new_handler
         
-    def write_data(self, data: np.ndarray,
+    def write_data(self, data: xr.DataArray,
                    time: Optional[datetime] = None,
                    time_format: str = '%Y-%m-%d', **kwargs):
         
@@ -112,6 +113,8 @@ class LocalIOHandler(IOHandler):
         if time is not None: metadata['time'] = time.strftime(time_format)
         metadata.update(self.tags)
         metadata.update(kwargs)
+        if hasattr(data, 'attrs'):
+            metadata.update(data.attrs)
         output.attrs.update(metadata)
         
         output.name = self.name

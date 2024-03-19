@@ -155,10 +155,11 @@ class DRYESStandardisedIndex(DRYESIndex):
 
         stindex_data = map_prob_to_normal(probVal)
 
+        stindex = self._index.template.copy(data = stindex_data)
         if hasattr(data, 'attrs'):
-            stindex_data.attrs = data.attrs
+            stindex.attrs = data.attrs
             
-        return stindex_data
+        return stindex
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI (Standardised Precipitaion Index)'

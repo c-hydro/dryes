@@ -155,7 +155,7 @@ def ntimesteps_to_md(timesteps_per_year: int) -> list[tuple[int, int]]:
 def get_window(time: datetime, size: int, unit: str) -> TimeRange:
         if unit[-1] != 's': unit += 's'
         if unit in ['months', 'years', 'days', 'weeks']:
-            time_start = time - relativedelta(**{unit: size}) + timedelta(days=1)
+            time_start = time + timedelta(days=1) - relativedelta(**{unit: size})
         elif unit == 'dekads':
             if (time + timedelta(days=1)).day not in  [1, 11, 21]:
                 raise ValueError('Dekads can only start on the 1st, 11th, or 21st of the month')

@@ -24,7 +24,9 @@ class DRYESStandardisedIndex(DRYESIndex):
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'normal',
-        'pval_threshold' : None
+        'pval_threshold' : None,
+        'min_reference'  : 5,
+        'zero_threshold' : 0.0001,
     }
     
     distr_par = {
@@ -34,13 +36,13 @@ class DRYESStandardisedIndex(DRYESIndex):
         'gev':      ['gev.c', 'gev.loc', 'gev.scale']
     }
 
-    @property
-    def positive_only(self):
-        # this is by default False, unless, we request a gamma distribution
-        if 'gamma' in self.distributions:
-            return True
-        else:
-            return False
+    # @property
+    # def positive_only(self):
+    #     # this is by default False, unless, we request a gamma distribution
+    #     if 'gamma' in self.distributions:
+    #         return True
+    #     else:
+    #         return False
 
     @property
     def distributions(self):
@@ -86,40 +88,48 @@ class DRYESStandardisedIndex(DRYESIndex):
         output = {}
         # calculate the parameters
         parameters = par_and_cases.keys()
+        cases_and_pars = {case: [par for par in parameters if case in par_and_cases[par]] for case in range(len(self.cases['opt']))}
+
         # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            # prob0 -> this is for all distributions
-            if 'prob0' in parameters:
-                iszero = data <= 0.0001#== 0
-                # reassign NaNs
-                iszero = np.where(np.isnan(data), np.nan, iszero)
-                prob0_data = np.nanmean(iszero, axis = 0)
-                output['prob0'] = {0:prob0_data} # -> we save this as case 0 because it is the same for all cases
-            
-            #distribution parameters
-            for distr in self.distributions:
-                # fit the distribution to calculate the parameters
-                distr_parnames  = self.distr_par[distr]
-                distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data, distribution=distr, positive_only = self.positive_only)
+            for case in self.cases['opt']:
+                i = case['id']
+                if 'prob0' in cases_and_pars[i]:
+                    iszero = data <= case['options']['zero_threshold']
+                    # reassign NaNs
+                    iszero = np.where(np.isnan(data), np.nan, iszero)
+                    prob0_data = np.nanmean(iszero, axis = 0)
+                    if 'prob0' not in output:
+                        output['prob0'] = {i: prob0_data}
+                    else:
+                        output['prob0'][i] = prob0_data
 
-                # check the p-value of the fit, this needs to be done for each case, as the p-value threshold can be different
-                distr_cases = par_and_cases[distr_parnames[0]] # we use the first parameter name to get the cases
-                for case in distr_cases:
-                    these_pars = distr_parvalues.copy()
-                    this_p_thr = self.cases['opt'][case]['options']['pval_threshold']
-                    to_iterate = np.where(~np.isnan(these_pars[0])) # only iterate over the non-nan values of the parameters
-                    for b,x,y in zip(*to_iterate):
-                        if not check_pval(data[:,b,x,y], distr, these_pars[:,b,x,y], p_val_th = this_p_thr, positive_only = self.positive_only):
-                            these_pars[:,b,x,y] = np.nan
-
-                    for i, par in enumerate(distr_parnames):
-                        this_par_data = these_pars[i]
-                        if par not in output:
-                            output[par] = {case: this_par_data}
-                        else:
-                            output[par][case] = this_par_data
+                # if there is any other parameter, these are the distribution parameters
+                if any(par != 'prob0' for par in cases_and_pars[i] ):
+                    distr = case['options']['distribution']
+                    this_data = data.copy()
+                    if distr == 'gamma':
+                        this_data = np.where(this_data <= case['options']['zero_threshold'], np.nan, this_data)
                         
+                    distr_parnames  = self.distr_par[distr]
+                    distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=this_data,
+                                                          distribution=distr,
+                                                          min_obs = case['options']['min_reference'],)
+                    
+                    this_p_thr = case['options']['pval_threshold']
+                    to_iterate = np.where(~np.isnan(distr_parvalues[0])) # only iterate over the non-nan values of the parameters
+                    for b,x,y in zip(*to_iterate):
+                        if not check_pval(data[:,b,x,y], distr, distr_parvalues[:,b,x,y], p_val_th = this_p_thr):
+                            distr_parvalues[:,b,x,y] = np.nan
+
+                    for ip, par in enumerate(distr_parnames):
+                        this_par_data = distr_parvalues[ip]
+                        if par not in output:
+                            output[par] = {i: this_par_data}
+                        else:
+                            output[par][i] = this_par_data
+        
         return output
     
     # this is run for a single case, making things a lot easier
@@ -156,7 +166,9 @@ class SPI(DRYESStandardisedIndex):
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'gamma',
-        'pval_threshold' : None
+        'pval_threshold' : None,
+        'min_reference'  : 5,
+        'zero_threshold' : 0.0001,
     }
 
     @property
@@ -169,7 +181,8 @@ class SPEI(DRYESStandardisedIndex):
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'gev',
-        'pval_threshold' : None
+        'pval_threshold' : None,
+        'min_reference'  : 5,
     }
 
     #TODO: Should we assume that the input data is precipitation minus evapotranspiration? (and the rest is included in DAM)

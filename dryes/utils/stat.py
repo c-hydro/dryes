@@ -10,12 +10,10 @@ from typing import Iterable
 
 # Gets parameters of a gamma distribution fitted to the data x
 def compute_distr_parameters(x: Iterable[float], distribution: str,
-                             min_obs: int = 5,
-                             positive_only: bool = True) -> list[float]:
+                             min_obs: int = 5) -> list[float]:
     x = np.array(x)
 
     if distribution == 'gamma':
-        positive_only = True
         parnames = ['a', 'loc', 'scale']
         this_distr = distr.gam
     elif distribution == 'normal':
@@ -28,16 +26,11 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
         parnames = ['c', 'loc', 'scale']
         this_distr = distr.gev
 
-    if positive_only:
-        dpd = x[np.where(x > 0)]  # only non null values
-    else:
-        dpd = x
-
-    if len(dpd) <= min_obs:
+    if len(x) <= min_obs:
         return [np.nan]*len(parnames)
 
     try:
-        fit_dict = this_distr.lmom_fit(dpd)
+        fit_dict = this_distr.lmom_fit(x)
     except:
         return [np.nan]*len(parnames)
 
@@ -48,8 +41,7 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
 # Checks if the p-value of the Kolmogorov-Smirnov test is above the threshold
 def check_pval(x: Iterable[float], distribution: str,
                fit = np.ndarray,
-               p_val_th: float = None,
-               positive_only: bool = True) -> bool:
+               p_val_th: float = None) -> bool:
 
     if any(np.isnan(fit)):
         return False
@@ -58,18 +50,13 @@ def check_pval(x: Iterable[float], distribution: str,
 
     x = np.array(x)
 
-    if distribution == 'gamma':
-        positive_only = True
-    elif distribution == 'normal':
+    if distribution == 'normal':
         distribution = 'norm' # this is the name used by scipy
     elif distribution == 'gev':
         distribution = 'genextreme' # this is the name used by scipy
 
-    if positive_only:
-        dpd = x[np.where(x > 0)]  # only non null values
-
     fit = list(fit)
-    _, p_value = stat.kstest(dpd, distribution, args=fit)
+    _, p_value = stat.kstest(x, distribution, args=fit)
     if p_value < p_val_th:
         return False
     else:

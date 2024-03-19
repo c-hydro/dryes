@@ -193,10 +193,12 @@ class DRYESIndex:
             # get last available timestep, if any
             last_timestep = []
             for case in self.cases['agg']:
-                last_timestep.append(self._data.get_times(time_range, **case['tags'])[-1])
+                available_ts = self._data.get_times(time_range, **case['tags'])
+                if len(available_ts) > 0:
+                    last_timestep.append(self._data.get_times(time_range, **case['tags'])[-1])
             if len(last_timestep) > 0:
                 # if different aggregations have different last timesteps, we need to use the earliest
-                start = min(last_timestep)
+                start = min(last_timestep + [time_range.start])
             else:
                 start = time_range.start
             return create_timesteps(start, time_range.end, timesteps_per_year)
@@ -246,7 +248,7 @@ class DRYESIndex:
             # and can just compute the missing ones
             # if there is a post aggregation function, each timesteps depends on the previous one(s)
             # so we need to compute them in order from the first missing one onwards
-            if agg_name in time_agg.postaggfun.keys():
+            if agg_name in time_agg.postaggfun.keys() and len(these_ts_to_compute) > 0:
                 first_missing = min(these_ts_to_compute)
                 these_ts_to_compute = [time for time in timesteps if time >= first_missing]
             
@@ -297,6 +299,7 @@ class DRYESIndex:
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
 
         data_timesteps = self.make_data_timesteps(history, timesteps_per_year)
+        
         # make aggregated data for the parameters
         self.make_input_data(data_timesteps)
 

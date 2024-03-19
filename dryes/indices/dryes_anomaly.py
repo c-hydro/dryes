@@ -107,4 +107,7 @@ class DRYESAnomaly(DRYESIndex):
         else:
             raise ValueError(f"Unknown type {case['options']['type']} for anomaly index.")
         
+        if hasattr(data, 'attrs'):
+            anomaly_data.attrs = data.attrs
+
         return anomaly_data

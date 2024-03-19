@@ -144,6 +144,10 @@ class DRYESStandardisedIndex(DRYESIndex):
         probVal = get_prob(data, distribution, parameters)
 
         stindex_data = map_prob_to_normal(probVal)
+
+        if hasattr(data, 'attrs'):
+            stindex_data.attrs = data.attrs
+            
         return stindex_data
     
 class SPI(DRYESStandardisedIndex):

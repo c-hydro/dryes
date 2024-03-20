@@ -26,9 +26,11 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
         parnames = ['c', 'loc', 'scale']
         this_distr = distr.gev
 
-    if len(x) <= min_obs:
-        return [np.nan]*len(parnames)
+    # filter the nans out of the data
+    x = x[~np.isnan(x)]
 
+    if len(x) < min_obs:
+        return [np.nan]*len(parnames)
     try:
         fit_dict = this_distr.lmom_fit(x)
     except:

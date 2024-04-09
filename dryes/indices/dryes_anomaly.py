@@ -130,6 +130,6 @@ class DRYESAnomaly(DRYESIndex):
             index_info = {}
 
         if hasattr(parameters[self.parameters[0]], 'attrs'):
-            index_info.update(self.parameters[0].attrs)
+            index_info.update(parameters[self.parameters[0]].attrs)
 
         return anomaly_data, index_info

@@ -27,7 +27,12 @@ class DRYESIndex:
         these_options = self.default_options.copy()
         these_options.update({'post_fn': None})
         for k in these_options.keys():
+            this_opt_type = type(these_options[k])
             if k in options:
+                try:
+                    options[k] = this_opt_type(options[k])
+                except:
+                    raise ValueError(f'Option {k} must be of type {this_opt_type}.')
                 these_options[k] = options[k]
             else:
                 self.log.info(f'No option {k} specified, using default value: {these_options[k]}.')

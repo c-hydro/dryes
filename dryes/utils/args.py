@@ -97,7 +97,7 @@ def parse_json_options(file):
                     env = 'pp' 
                 index_options['post_fn'][key] = create_obj_from_dict(value, env)
     
-    # then the  options
+    # then the io options
     io_options = data['io_options']
     io_options = substitute_values(io_options, data["tags"])
     for key, value in io_options.items():

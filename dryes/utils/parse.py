@@ -11,8 +11,8 @@ def substitute_values(structure, tag_dict, rec = False):
         return {key: substitute_values(value, tag_dict, rec) for key, value in structure.items()}
     elif isinstance(structure, list):
         return [substitute_values(value, tag_dict, rec) for value in structure]
-    elif isinstance(structure, int):
-        return substitute_string(str(structure), tag_dict, rec)
+    # elif isinstance(structure, int):
+    #     return substitute_string(str(structure), tag_dict, rec)
     elif isinstance(structure, str):
         return substitute_string(structure, tag_dict, rec)
     else:

@@ -27,30 +27,7 @@ class DRYESIndex:
         these_options = self.default_options.copy()
         these_options.update({'post_fn': None})
         for k in these_options.keys():
-            this_opt_type = type(these_options[k])
             if k in options:
-                if this_opt_type is not type(None) and not isinstance(options[k], this_opt_type):
-                    if this_opt_type == float:
-                        try:
-                            options[k] = float(options[k])
-                        except:
-                            raise ValueError(f'Option {k} must be a float.')
-                    elif this_opt_type == int:
-                        try:
-                            options[k] = int(options[k])
-                        except:
-                            raise ValueError(f'Option {k} must be an int.')
-                    elif this_opt_type == bool:
-                        if options[k] == 'True':
-                            options[k] = True
-                        elif options[k] == 'False':
-                            options[k] = False
-                        else:
-                            raise ValueError(f'Option {k} must be a bool.')
-                    elif this_opt_type == str:
-                        options[k] = str(options[k])
-                    else:
-                        raise ValueError(f'Option {k} must be a {this_opt_type}.')
                 these_options[k] = options[k]
             else:
                 self.log.info(f'No option {k} specified, using default value: {these_options[k]}.')

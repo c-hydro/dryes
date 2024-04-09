@@ -70,32 +70,16 @@ def parse_json_options(file):
     index_options = substitute_values(index_options, data["tags"])
     if 'agg_fn' in index_options:
         if 'type' in index_options['agg_fn']:
-            if 'env' in index_options['agg_fn']:
-                env = index_options['agg_fn'].pop('env')
-            else:
-                env = 'agg' 
-            index_options['agg_fn'] = create_obj_from_dict(index_options['agg_fn'], env)
+            index_options['agg_fn'] = create_obj_from_dict(index_options['agg_fn'], 'agg')
         else:
             for key, value in index_options['agg_fn'].items():
-                if 'env' in index_options['agg_fn'][key]:
-                    env = index_options['agg_fn'][key].pop('env')
-                else:
-                    env = 'agg' 
-                index_options['agg_fn'][key] = create_obj_from_dict(value, env)
+                index_options['agg_fn'][key] = create_obj_from_dict(value, 'agg')
     if 'post_fn' in index_options:
         if 'type' in index_options['post_fn']:
-            if 'env' in index_options['post_fn']:
-                env = index_options['post_fn'].pop('env')
-            else:
-                env = 'pp' 
-            index_options['post_fn'] = create_obj_from_dict(index_options['post_fn'], env)
+            index_options['post_fn'] = create_obj_from_dict(index_options['post_fn'], 'pp')
         else:
             for key, value in index_options['post_fn'].items():
-                if 'env' in index_options['post_fn'][key]:
-                    env = index_options['post_fn'][key].pop('env')
-                else:
-                    env = 'pp' 
-                index_options['post_fn'][key] = create_obj_from_dict(value, env)
+                index_options['post_fn'][key] = create_obj_from_dict(value, 'pp')
     
     # then the io options
     io_options = data['io_options']

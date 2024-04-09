@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Callable, List, Iterable
-import xarray as xr
+import numpy as np
 from copy import deepcopy
 
 from ..time_aggregation.time_aggregation import TimeAggregation
@@ -263,31 +263,22 @@ class DRYESIndex:
         #agg_data = {n:[] for n in agg_names if agg_name in time_agg.postaggfun.keys()}
         for i, time in enumerate(timesteps_to_iterate):
             self.log.info(f' #Timestep {time:%d-%m-%Y} ({i+1}/{len(timesteps_to_iterate)})...')
-            for agg_name in agg_names:
+            for agg in agg_cases:
+                agg_name = agg['name']
+                agg_tags = agg['tags']
                 self.log.info(f'  Aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
                     agg_data, agg_info = time_agg.aggfun[agg_name](variable_in, time)
                     if agg_name not in time_agg.postaggfun.keys():
-                        variable_out.write_data(agg_data, time = time, agg_fn = agg_name, **agg_info)
+                        variable_out.write_data(agg_data, time = time, tags = agg_tags, **agg_info)
                     else:
                         postagg_data, postagg_info = time_agg.postaggfun[agg_name](agg_data, variable_out, time)
                         for key in postagg_info:
                             if key in agg_info:
-                                agg_info[key] += ', {postagg_info[key]}'
+                                agg_info[key] += f'; {postagg_info[key]}'
                             else:
                                 agg_info[key] = postagg_info[key]
-                        variable_out.write_data(postagg_data, time = time, agg_fn = agg_name, **agg_info)
-
-        #                 agg_data[agg_name].append(data)
-        
-        # for agg_name in agg_names:
-        #     if agg_name in time_agg.postaggfun.keys():
-        #         self.log.info(f'Completing time aggregation: {agg_name}...')
-        #         agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in, timesteps_to_compute[agg_name])
-
-        #         for i, data in enumerate(agg_data[agg_name]):
-        #             this_time = timesteps_to_compute[agg_name][i]
-        #             variable_out.write_data(data, time = this_time, agg_fn = agg_name)
+                        variable_out.write_data(postagg_data, time = time, tags = agg_tags, **agg_info)
     
     def make_parameters(self,
                         history: TimeRange|tuple[datetime, datetime],
@@ -360,13 +351,16 @@ class DRYESIndex:
                 day   = time.day
                 self.log.info(f'   {day:02d}/{month:02d}')
 
-                pars_data = self.calc_parameters(time, variable, history, par_cases)
+                pars_data, pars_info = self.calc_parameters(time, variable, history, par_cases)
 
                 for parname in pars_data:
                     par = parameters[parname]
                     for case, data in pars_data[parname].items():
                         tags = self.cases['opt'][case]['tags']
-                        par.write_data(data, time = time, time_format = '%d/%m', **tags)
+                        metadata = self.cases['opt'][case]['options']
+                        metadata.update(pars_info)
+                        if 'time' in metadata: metadata.pop('time')
+                        par.write_data(data, time = time, time_format = '%d/%m', tags = tags, **metadata)
 
     def make_index(self, current:   TimeRange|tuple[datetime, datetime],
                          reference: TimeRange|tuple[datetime, datetime]|Callable,
@@ -417,8 +411,11 @@ class DRYESIndex:
                         self.log.info(f'   {time:%d/%m/%Y}')
                         history = reference_fn(time)
                         case['tags'].update({'history_start': history.start, 'history_end': history.end})      
-                        index_data = self.calc_index(time, history, case)
-                        index.write_data(index_data, time = time)
+                        index_data, index_info = self.calc_index(time, history, case)
+                        metadata = case['options']
+                        metadata.update(index_info)
+                        if 'time' in metadata: metadata.pop('time')
+                        index.write_data(index_data, time = time, tags = case['tags'], **metadata)
 
                 # now do the post-processing
                 for post_case in self.cases['post']:
@@ -436,29 +433,36 @@ class DRYESIndex:
                         case['tags'].update({'history_start': history.start, 'history_end': history.end})
                         index_data = index.get_data(time)
                         post_fn = post_case['post_fn']
-                        ppindex_data = post_fn(index_data)
-                        ppindex.write_data(ppindex_data, time = time)
+                        ppindex_data, ppindex_info = post_fn(index_data)
+
+                        metadata = case['options']
+                        metadata.update(ppindex_info)
+                        metadata.update(index_data.attrs)
+                        if 'time' in metadata: metadata.pop('time')
+                        ppindex.write_data(ppindex_data, time = time, tags = case['tags'], **metadata)
 
     def calc_parameters(self,
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
-        time, variable, history, par_cases
-        Calculates the parameters for the index.
+        Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        2 outputs are returned:
+        - a dictionary with the following structure:
+            {par: {case1: parcase1, case2: parcase1, ...}}
+            where parcase1 is the parameter par for case1 as a numpy.ndarray.
+        - a dictionary with info about parameter calculations.
         """
         raise NotImplementedError
     
-    def calc_index(self, time,  reference: TimeRange, case: dict) -> xr.DataArray:
+    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
         """
         Calculates the index for the given time and reference period.
+        Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
         raise NotImplementedError

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Generator
 from datetime import datetime
 from functools import cached_property
 from methodtools import lru_cache
@@ -44,7 +44,7 @@ class LocalIOHandler(IOHandler):
         for time in self._get_times(TimeRange(time_start, time_end)):
             return time
     
-    def _get_times(self, time_range: TimeRange, **kwargs) -> datetime:
+    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[datetime, None, None]:
         for time in time_range:
             if self.check_data(time, **kwargs):
                 yield time
@@ -68,6 +68,17 @@ class LocalIOHandler(IOHandler):
     def get_data(self, time: Optional[datetime] = None, **kwargs):
         if self.check_data(time, **kwargs):
             data = rioxarray.open_rasterio(self.path(time, **kwargs))
+
+            # ensure that the data has descending latitudes
+            y_dim = data.rio.y_dim
+            if y_dim is None:
+                for dim in data.dims:
+                    if 'lat' in dim.lower() | 'y' in dim.lower():
+                        y_dim = dim
+                        break
+            if data[y_dim][0] < data[y_dim][-1]:
+                data = data.sortby(y_dim, ascending = False)
+
             if not hasattr(self, 'template') or self.template is None:
                 self.template = self.make_template_from_data(data)
             return data
@@ -95,28 +106,35 @@ class LocalIOHandler(IOHandler):
         
     def write_data(self, data: xr.DataArray,
                    time: Optional[datetime] = None,
-                   time_format: str = '%Y-%m-%d', **kwargs):
+                   time_format: str = '%Y-%m-%d',
+                   tags = {},
+                   **kwargs):
         
         if data is None or data.size == 0:
             output = self.template
         else:
             output = self.template.copy(data = data)
 
-        output_file = self.path(time, **kwargs)
+        output_file = self.path(time, **tags)
 
         # create the directory if it does not exist
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
         # add metadata
-        metadata = {'name': self.name,
-                    'time_produced': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        if time is not None: metadata['time'] = time.strftime(time_format)
-        metadata.update(self.tags)
+        metadata = {}
+        
         metadata.update(kwargs)
         if hasattr(data, 'attrs'):
             metadata.update(data.attrs)
-        output.attrs.update(metadata)
         
+        metadata['time_produced'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if time is not None: metadata['time'] = time.strftime(time_format)
+
+        metadata['name'] = self.name
+        if 'long_name' in metadata:
+            metadata.pop('long_name')
+
+        output.attrs.update(metadata)
         output.name = self.name
 
         # save the data to a geotiff

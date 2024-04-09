@@ -43,10 +43,12 @@ def average_of_window(size: int, unit: str) -> Callable:
         # mean = variable.template.copy(data = mean_data)
         # mean = mean.assign_coords(time = time)
         
-        agg_info = {'agg_type': 'average',
+        unit_singular = unit[:-1] if unit[-1] == 's' else unit
+        su_string = f'{_size} {unit_singular}{"" if _size == 1 else "s"}'
+        agg_info = {'agg_type' : f'average, {su_string}',
                     'agg_start': f'{min(times_to_get):%Y-%m-%d}',
-                    'agg_end':   f'{max(times_to_get):%Y-%m-%d}',
-                    'agg_n': len(times_to_get)}
+                    'agg_end'  : f'{max(times_to_get):%Y-%m-%d}',
+                    'agg_n'    : len(times_to_get)}
 
         return mean_data, agg_info
     
@@ -94,11 +96,12 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[tuple[int, str]] = N
         # sum_data = np.sum(all_data, axis = 0)
         # sum = variable.template.copy(data = sum_data)
         # sum = sum.assign_coords(time = time)
-
-        agg_info = {'agg_type': 'sum',
+        unit_singular = unit[:-1] if unit[-1] == 's' else unit
+        su_string = f'{_size} {unit_singular}{"" if _size == 1 else "s"}'
+        agg_info = {'agg_type' : f'sum, {su_string}',
                     'agg_start': f'{min(times_to_get):%Y-%m-%d}',
-                    'agg_end':   f'{max(times_to_get):%Y-%m-%d}',
-                    'agg_n': len(times_to_get)}
+                    'agg_end'  : f'{max(times_to_get):%Y-%m-%d}',
+                    'agg_n'    : len(times_to_get)}
 
         return data, agg_info
     

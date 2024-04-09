@@ -65,17 +65,18 @@ class DRYESStandardisedIndex(DRYESIndex):
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
-        time, variable, history, par_cases
-        Calculates the parameters for the index.
+        Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        2 outputs are returned:
+        - a dictionary with the following structure:
+            {par: {case1: parcase1, case2: parcase1, ...}}
+            where parcase1 is the parameter par for case1 as a numpy.ndarray.
+        - a dictionary with info about parameter calculations.
         """
 
         history_years = range(history.start.year, history.end.year + 1)
@@ -129,11 +130,26 @@ class DRYESStandardisedIndex(DRYESIndex):
                             output[par] = {i: this_par_data}
                         else:
                             output[par][i] = this_par_data
-        
-        return output
+
+        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
+        par_info = {'reference_dates': data_dates,
+                    'reference_start': history.start.strftime('%Y-%m-%d'),
+                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+
+        if hasattr(data_[0], 'attrs'):
+            data_info = data_[0].attrs
+            if 'agg_type' in data_info:
+                par_info['agg_type'] = data_info['agg_type']
+
+        return output, par_info
     
     # this is run for a single case, making things a lot easier
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+        """
+        Calculates the index for the given time and reference period (history).
+        Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
+        """
+
         # load the data for the index
         data = self._data.get_data(time, **case['tags'])
 
@@ -155,11 +171,15 @@ class DRYESStandardisedIndex(DRYESIndex):
 
         stindex_data = map_prob_to_normal(probVal)
 
-        stindex = self._index.template.copy(data = stindex_data)
         if hasattr(data, 'attrs'):
-            stindex.attrs = data.attrs
-            
-        return stindex
+            index_info = data.attrs
+        else:
+            index_info = {}
+
+        if hasattr(parameters[self.parameters[0]], 'attrs'):
+            index_info.update(parameters[self.parameters[0]].attrs)
+
+        return stindex_data, index_info
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI (Standardised Precipitaion Index)'

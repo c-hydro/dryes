@@ -15,7 +15,7 @@ class IOHandler:
         """
         raise NotImplementedError
     
-    def write_data(self, data: xr.DataArray, time: Optional[datetime], **kwargs):
+    def write_data(self, data: xr.DataArray, time: Optional[datetime], tags: dict, **kwargs):
         """
         Write the data for a given time.
         """

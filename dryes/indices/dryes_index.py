@@ -107,7 +107,7 @@ class DRYESIndex:
         ## and combine them
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}
 
-    def _check_io_options(self, io_options: dict) -> None:
+    def _check_io_options(self, io_options: dict, update_existing = False) -> None:
 
         # check that we have all the necessary options
         # for most indices, we need 'data' (for aggregated input data) and 'data_raw' (for raw input data)
@@ -125,25 +125,31 @@ class DRYESIndex:
         elif 'data_raw' not in io_options:
             io_options['data_raw'] = io_options['data']
 
-        self._raw_data = io_options['data_raw']
-        template = self._raw_data.get_template()
+        if not hasattr(self, '_raw_data') or update_existing:
+            self._raw_data = io_options['data_raw']
+            template = self._raw_data.get_template()
+        else:
+            template = self._raw_data.template
 
-        self._data     = io_options['data']
-        self._data.set_template(template)
+        if not hasattr(self, '_data') or update_existing:
+            self._data = io_options['data']
+            self._data.set_template(template)
 
-        # check that we have output specifications for all the parameters in self.parameters
-        self._parameters = {}
-        for par in self.parameters:
-            if par not in io_options:
-                raise ValueError(f'No output path for parameter {par}.')
-            self._parameters[par] = io_options[par]
-            self._parameters[par].set_template(template)
+        if not hasattr(self, '_parameters') or update_existing:
+            # check that we have output specifications for all the parameters in self.parameters
+            self._parameters = {}
+            for par in self.parameters:
+                if par not in io_options:
+                    raise ValueError(f'No output path for parameter {par}.')
+                self._parameters[par] = io_options[par]
+                self._parameters[par].set_template(template)
 
-        # check that we have an output specification for the index
-        if 'index' not in io_options:
-            raise ValueError('No output path for index.')
-        self._index = io_options['index']
-        self._index.set_template(template)
+        if not hasattr(self, '_index') or update_existing:
+            # check that we have an output specification for the index
+            if 'index' not in io_options:
+                raise ValueError('No output path for index.')
+            self._index = io_options['index']
+            self._index.set_template(template)
 
     def compute(self, current:   tuple[datetime, datetime],
                       reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]],

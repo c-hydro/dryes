@@ -1,4 +1,4 @@
-from typing import Optional, Generator
+from typing import Optional, Generator, Callable
 from datetime import datetime
 from functools import cached_property
 from methodtools import lru_cache
@@ -48,6 +48,9 @@ class LocalIOHandler(IOHandler):
         for time in time_range:
             if self.check_data(time, **kwargs):
                 yield time
+            elif hasattr(self, 'parents') and self.parents is not None:
+                if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
+                    yield time
 
     def get_times(self, time_range: TimeRange, **kwargs) -> list[datetime]:
         """
@@ -79,11 +82,35 @@ class LocalIOHandler(IOHandler):
             if data[y_dim][0] < data[y_dim][-1]:
                 data = data.sortby(y_dim, ascending = False)
 
+            # round the coordinates to 1/1000 of the resolution
+            for dim in data.dims:
+                if len(data[dim]) == 1:
+                    continue
+                res = data[dim].values[1] - data[dim].values[0]
+                # get the position of the first significant digit
+                pos = -int(np.floor(np.log10(abs(res))))
+                # round the coordinate to 1/1000 of the resolution (3 significant digits more than the resolution)
+                data[dim] = np.round(data[dim].values, pos+3)
+
+            # make sure the nodata value is set to np.nan
+            if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):
+                data = data.where(data != data.attrs['_FillValue'])
+                data.attrs['_FillValue'] = np.nan
+
             if not hasattr(self, 'template') or self.template is None:
                 self.template = self.make_template_from_data(data)
             return data
+        elif hasattr(self, 'parents') and self.parents is not None:
+            parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
+            data = self.fn(**parent_data)
+            self.write_data(data, time, **kwargs)
+            return data
         else:
             raise ValueError(f'File {self.path(time, **kwargs)} does not exist.')
+
+    def set_parents(self, parents:dict[str:IOHandler], fn:Callable):
+        self.parents = parents
+        self.fn = fn
 
     def update(self, in_place = False, **kwargs):
         if in_place:

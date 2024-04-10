@@ -176,8 +176,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         else:
             index_info = {}
 
-        if hasattr(parameters[self.parameters[0]], 'attrs'):
-            index_info.update(parameters[self.parameters[0]].attrs)
+        if hasattr(list(parameters.values())[0], 'attrs'):
+            index_info.update(list(parameters.values())[0].attrs)
 
         return stindex_data, index_info
     

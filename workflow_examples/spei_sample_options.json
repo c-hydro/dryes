@@ -12,7 +12,7 @@
         "agg_fn": {
             "1": {"type": "sum_of_window", "size": 1, "unit": "months"}
         },
-        "distribution": "gamma",
+        "distribution": "pearson3",
         "pval_threshold": 0.05,
         "post_fn": {
             "Sigma2": {"type": "gaussian_smoothing", "sigma": 2}
@@ -40,16 +40,16 @@
             "name": "P-PET (aggregated)", "path": "{AGGDATA}",
             "file": "PminusPET_{agg_fn}months_%Y%m%d.tif"
         },
-        "gamma.a": {"type": "local",
-            "name": "gamma.a (SPI)", "path": "{PARAMS}/a/",
-            "file": "aAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        "pearson3.skew": {"type": "local",
+        "name": "pearson3.skew (SPEI)", "path": "{PARAMS}/skew/",
+        "file": "skewAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
         },
-        "gamma.loc": {"type": "local",
-            "name": "gamma.loc (SPI)", "path": "{PARAMS}/loc/",
+        "pearson3.loc": {"type": "local",
+            "name": "pearson3.loc (SPEI)", "path": "{PARAMS}/loc/",
             "file": "locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
         },
-        "gamma.scale": {"type": "local",
-            "name": "gamma.scale (SPI)", "path": "{PARAMS}/scale/",
+        "pearson3.scale": {"type": "local",
+            "name": "pearson3.scale (SPEI)", "path": "{PARAMS}/scale/",
             "file": "scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
         },
         "log": {"type": "local",
@@ -58,7 +58,7 @@
         },
         "index": {"type": "local",
             "name": "Standardised Precipitation Index (SPI)", "path": "{OUTPUT}",
-            "file": "SPI{agg_fn}_%Y%m%d000000.tif"
+            "file": "SPEI_{agg_fn}month{post_fn}_%Y%m%d000000.tif"
         }
     }
 }

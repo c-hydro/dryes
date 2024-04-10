@@ -201,7 +201,7 @@ class SPEI(DRYESStandardisedIndex):
     positive_only = False
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
-        'distribution'   : 'gev',
+        'distribution'   : 'pearson3',
         'pval_threshold' : None,
         'min_reference'  : 5,
     }

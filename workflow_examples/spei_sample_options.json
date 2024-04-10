@@ -1,0 +1,64 @@
+{   
+    "tags": {
+        "HOME" : "/home/luca/Documents/CIMA_code/tests/SPEI",
+        "INPUT": "{HOME}/data",
+
+        "ARCHIVE": "{HOME}/archive",
+        "AGGDATA": "{ARCHIVE}/data/%Y/%m/%d/",
+        "PARAMS" : "{ARCHIVE}/parameters/{history_start:%Y%m%d}-{history_end:%Y%m%d}",
+        "OUTPUT" : "{ARCHIVE}/maps/%Y/%m/%d/"
+    },
+    "index_options": {
+        "agg_fn": {
+            "1": {"type": "sum_of_window", "size": 1, "unit": "months"}
+        },
+        "distribution": "gamma",
+        "pval_threshold": 0.05,
+        "post_fn": {
+            "Sigma2": {"type": "gaussian_smoothing", "sigma": 2}
+        }
+    },
+    "run_options": {
+        "history_start": "2015-01-01",
+        "history_end": "2023-12-31",
+        "timesteps_per_year" : 12
+    },
+    "io_options": {
+        "P_raw":  {"type": "local",
+            "name": "precipitation", "path": "{INPUT}/P/%Y/%m",
+            "file": "volta_final_CHIRPS_%Y%m%d.tif"
+        },
+        "PET_raw": {"type": "local",
+            "name": "PET", "path": "{INPUT}/PET/%Y/%m/%d",
+            "file": "ERA5_PET-HS_%Y%m%d.tif"
+        },
+        "data_raw": {"type": "local",
+            "name": "P-PET", "path": "{INPUT}/PminusPET/%Y/%m",
+            "file": "PminusPET_%Y%m%d.tif"
+        },
+        "data": {"type": "local",
+            "name": "P-PET (aggregated)", "path": "{AGGDATA}",
+            "file": "PminusPET_{agg_fn}months_%Y%m%d.tif"
+        },
+        "gamma.a": {"type": "local",
+            "name": "gamma.a (SPI)", "path": "{PARAMS}/a/",
+            "file": "aAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "gamma.loc": {"type": "local",
+            "name": "gamma.loc (SPI)", "path": "{PARAMS}/loc/",
+            "file": "locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "gamma.scale": {"type": "local",
+            "name": "gamma.scale (SPI)", "path": "{PARAMS}/scale/",
+            "file": "scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif"
+        },
+        "log": {"type": "local",
+            "name": "log SPEI", "path": "{HOME}",
+            "file": "log.txt"
+        },
+        "index": {"type": "local",
+            "name": "Standardised Precipitation Index (SPI)", "path": "{OUTPUT}",
+            "file": "SPI{agg_fn}_%Y%m%d000000.tif"
+        }
+    }
+}

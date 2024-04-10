@@ -206,5 +206,22 @@ class SPEI(DRYESStandardisedIndex):
         'min_reference'  : 5,
     }
 
-    #TODO: Should we assume that the input data is precipitation minus evapotranspiration? (and the rest is included in DAM)
-    #      Or should we allow the user to specify two variables, one for precipitation and one for evapotranspiration?
+    def _check_io_options(self, io_options: dict) -> None:
+        # for the SPEI, we need an additional step, we also need to check that we have both P_raw and PET_raw!
+
+        if 'PET_raw' not in io_options and 'PET' not in io_options:
+            raise ValueError('Either PET or PET_raw must be specified.')
+        elif 'P_raw' not in io_options and 'P' not in io_options:
+            raise ValueError('Either P or P_raw must be specified.')
+        
+        self._raw_inputs = {'P': io_options['P_raw'], 'PET': io_options['PET_raw']}
+        template = self._raw_inputs['P'].get_template()
+
+        if 'data_raw' not in io_options:
+            raise ValueError('data_raw must be specified.')
+        
+        self._raw_data = io_options['data_raw']
+        self._raw_data.set_template(template)
+        self._raw_data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
+
+        super()._check_io_options(io_options)

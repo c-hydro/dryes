@@ -7,6 +7,8 @@ from typing import Iterable
 # gamma
 # normal
 # pearson3
+# gev
+# beta
 
 # Gets parameters of a gamma distribution fitted to the data x
 def compute_distr_parameters(x: Iterable[float], distribution: str,
@@ -25,6 +27,27 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
     elif distribution == 'gev':
         parnames = ['c', 'loc', 'scale']
         this_distr = distr.gev
+    elif distribution == 'beta':
+        parnames = ['a', 'b']
+
+        # filter the nans out of the data
+        x = x[~np.isnan(x)]
+
+        # get mean and variance
+        mean = np.mean(x)
+        var = np.var(x)
+
+        # get the parameters
+        a = mean * ((mean * (1 - mean)) / var - 1)
+        b = (1 - mean) * ((mean * (1 - mean)) / var - 1)
+
+        # return the parameters
+        fit = [a, b]
+
+        # assign the parnames to the parameters
+        fit = dict(zip(parnames, fit))
+
+        return fit
 
     # filter the nans out of the data
     x = x[~np.isnan(x)]
@@ -77,6 +100,8 @@ def get_prob(data: np.ndarray, distribution: str,
             randvar = stat.pearson3
         elif distribution == 'gev':
             randvar = stat.genextreme
+        elif distribution == 'beta':
+            randvar = stat.beta
 
         # remove the name of the distribution from the parameters name and only select the ones for this distribution
         pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}

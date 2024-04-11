@@ -225,3 +225,14 @@ class SPEI(DRYESStandardisedIndex):
         self._raw_data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
 
         super()._check_io_options(io_options)
+
+class SSMI(DRYESStandardisedIndex):
+    index_name = 'SSMI (Standardised Soil Moisture Index)'
+    positive_only = True
+    default_options = {
+        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
+        'distribution'   : 'beta',
+        'pval_threshold' : None,
+        'min_reference'  : 5,
+        'zero_threshold' : 0.0001,
+    }

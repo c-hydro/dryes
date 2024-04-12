@@ -26,7 +26,8 @@ def average_of_window(size: int, unit: str) -> Callable:
         times_to_get = variable.get_times(window)
 
         data_sum = variable.get_data(times_to_get[0])
-        valid_n  = np.isfinite(data_sum)
+        valid_n = np.isfinite(data_sum).astype(int)
+
         for time in times_to_get[1:]:
             this_data = variable.get_data(time)
             data_stack = np.stack([data_sum, this_data], axis = 0)

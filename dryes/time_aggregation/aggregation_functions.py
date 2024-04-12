@@ -34,7 +34,9 @@ def average_of_window(size: int, unit: str) -> Callable:
             data_sum = np.nansum(data_stack, axis = 0)
             valid_n += np.isfinite(this_data)
 
-        mean_data = data_sum / valid_n
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            mean_data = data_sum / valid_n
 
         # data = [variable.get_data(time) for time in times_to_get]
         # all_data = np.stack(data, axis = 0)

@@ -340,7 +340,11 @@ class DRYESIndex:
             timesteps_to_do = {}
             for parname, par in parameters.items():
                 for case in self.cases['opt']:
-                    if 'distribution' in case['options'] and case['options']['distribution'] not in parname:
+                    # check if this parameter is relevant for this case (this is the case for distribution parameters)
+                    has_distr = 'distribution' in self.options
+                    is_distr_par = has_distr and any([distr in parname for distr in self.options['distribution']])
+                    is_this_distr_par = is_distr_par and case['options']['distribution'] in parname
+                    if is_distr_par and not is_this_distr_par:
                         continue
                     this_ts_done = par.get_times(TimeRange(min(timesteps), max(timesteps)), **case['tags'])
                     this_ts_todo = [time for time in timesteps if time not in this_ts_done]

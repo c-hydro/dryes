@@ -44,9 +44,6 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
         # return the parameters
         fit = [a, b]
 
-        # assign the parnames to the parameters
-        fit = dict(zip(parnames, fit))
-
         return fit
 
     # filter the nans out of the data

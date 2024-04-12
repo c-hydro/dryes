@@ -83,6 +83,7 @@ class LocalIOHandler(IOHandler):
                 data = data.sortby(y_dim, ascending = False)
 
             # round the coordinates to 1/1000 of the resolution
+            # (we do this in case the coordinates are not exactly the same for all the files)
             for dim in data.dims:
                 if len(data[dim]) == 1:
                     continue
@@ -90,7 +91,7 @@ class LocalIOHandler(IOHandler):
                 # get the position of the first significant digit
                 pos = -int(np.floor(np.log10(abs(res))))
                 # round the coordinate to 1/1000 of the resolution (3 significant digits more than the resolution)
-                data[dim] = np.round(data[dim].values, pos+3)
+                data[dim] = np.ceil(data[dim].values * 10**(pos+3))/10**(pos+3)
 
             # make sure the nodata value is set to np.nan
             if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):

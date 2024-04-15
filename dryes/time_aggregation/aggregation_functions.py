@@ -127,3 +127,108 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
         return data, agg_info
     
     return partial(_sum_of_window, _size = size, _unit = unit, _input_agg = input_agg)
+
+def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weights = 'overlap') -> Callable:
+    """
+    Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
+    weights can be 'overlap' or 'inv_distance' (to end) 
+    input_agg expects a dictionary specifying the aggregation of the input data, with the following keys:
+        - 'size':  int,  the size of the aggregation window.
+        - 'unit':  str,  the unit of the aggregation window.
+        - 'start': bool, whether the timestep is the start or the end of the aggregation window.
+        - 'truncate_at_end_year': bool, whether to truncate the aggregation window at the end of the year or roll over.
+        [for VIIRS data: input_agg = 'viirs' means {'size': 8, 'unit': 'days', 'start': True, 'truncate_at_end_year': True}]
+    """
+
+    if isinstance(input_agg, str) and input_agg == 'viirs':
+        input_agg = {'size': 8, 'unit': 'days', 'start': True, 'truncate_at_end_year': True}
+    elif isinstance(input_agg, dict):
+        if 'size' not in input_agg or 'unit' not in input_agg:
+            raise ValueError('input_agg must have keys "size" and "unit"')
+        if 'start' not in input_agg: input_agg['start'] = False
+        if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
+
+    if weights not in ['overlap', 'inv_distance']:
+        raise ValueError('weights must be either "overlap" or "inv_distance"')
+
+    def _weighted_average_of_window(variable: IOHandler, time: dt.datetime,
+                                    _size: int, _unit: str, _input_agg: dict, _weights = 'overlap') -> np.ndarray:
+        """
+        Aggregates the FAPAR data to the current timestep using inverse time distance of the previous 
+        """
+        end    = time                                    # this is where the current period ends
+        window = get_window(time, _size, _unit)
+        start  = window.start                            # this is where the averaging period starts
+
+        # get the window of the relevant data (this is the range of times that we should search the data for the cover the window)
+        if _input_agg['start']:
+            data_start = window.start - dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+            data_end = window.end
+        else:
+            data_start = window.start
+            data_end = window.end + dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+
+        available_data = variable.get_times(TimeRange(data_start, data_end))
+        if len(available_data) == 0:
+            return variable.template.values, {}
+
+        overlap = []
+        distance = []
+        for data_time in available_data:
+            if _input_agg['start']:
+                data_start = data_time
+                data_end = data_time + dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+                if _input_agg['truncate_at_end_year'] and data_end.year != data_time.year:
+                    data_end = dt.datetime(data_time.year, 12, 31)
+            else:
+                data_end = data_time
+                data_start = data_time - dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+                if _input_agg['truncate_at_end_year'] and data_start.year != data_time.year:
+                    data_start = dt.datetime(data_time.year, 1, 1)
+
+            distance.append(abs((end - data_end).days) + 1)
+            overlap.append((min(end, data_end) - max(start, data_start)).days + 1)
+
+        # open all the data
+        databrick = np.stack([variable.get_data(t).values for t in available_data], axis = 0)
+
+        # calculate the weights
+        if _weights == 'overlap':
+            weights = np.array(overlap)
+        elif _weights == 'inv_distance':
+            weights = 1/np.array(distance)
+
+        # multiply each data in the brick by the weight, b is the band of the raster (which is always 1)
+        weighted_data = np.einsum('i,ibjk->ibjk', weights, databrick)
+        
+        # sum all the weighted data and divide by the total weight, protecting nans
+        mask = np.isfinite(weighted_data) # <- this is a mask of all the nans in the weighted data
+        weights_3d = np.broadcast_to(weights[:, np.newaxis, np.newaxis, np.newaxis], weighted_data.shape)
+        selected_weights = np.where(mask, weights_3d, 0)
+        total_weights = np.sum(selected_weights, axis=0)
+
+        # sum all the non-nan weighted data
+        weighted_sum = np.nansum(weighted_data, axis = 0)
+        
+        # divide by the total weights
+        # to avoid division by zero, we add a small number to the total weights, these points will be masked anyways
+        total_weights = np.where(total_weights < 1e-3, 1e-3, total_weights)
+        weighted_mean = weighted_sum / total_weights
+
+        # Remove where the total sum of weights is less than half the total weights
+        weighted_mean = np.where(total_weights/sum(weights) < 0.5, np.nan, weighted_mean)
+        #weighted_mean = np.where(total_weights < 0.2, np.nan, weighted_mean)
+
+        timesteps_str = ', '.join([t.strftime('%Y-%m-%d') for t in available_data])
+        weights_str   = ', '.join([f'{w:.2f}' for w in weights])
+
+        agg_method_str = f'weighted ({_weights}) average, {_size} {_unit}'
+
+        agg_info = {'agg_method': agg_method_str,
+                    'agg_timesteps': timesteps_str,
+                    'agg_n_timesteps': len(available_data),
+                    'agg_weights': weights_str}
+
+        return weighted_mean, agg_info
+
+    return partial(_weighted_average_of_window, _size = size, _unit = unit, _input_agg = input_agg, _weights = weights)

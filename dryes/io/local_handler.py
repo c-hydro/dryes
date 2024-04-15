@@ -82,32 +82,30 @@ class LocalIOHandler(IOHandler):
             if data[y_dim][0] < data[y_dim][-1]:
                 data = data.sortby(y_dim, ascending = False)
 
-            # round the coordinates to 1/1000 of the resolution
-            # (we do this in case the coordinates are not exactly the same for all the files)
-            for dim in data.dims:
-                if len(data[dim]) == 1:
-                    continue
-                res = data[dim].values[1] - data[dim].values[0]
-                # get the position of the first significant digit
-                pos = -int(np.floor(np.log10(abs(res))))
-                # round the coordinate to 1/1000 of the resolution (3 significant digits more than the resolution)
-                data[dim] = np.ceil(data[dim].values * 10**(pos+3))/10**(pos+3)
-
             # make sure the nodata value is set to np.nan
             if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):
                 data = data.where(data != data.attrs['_FillValue'])
                 data.attrs['_FillValue'] = np.nan
-
-            if not hasattr(self, 'template') or self.template is None:
-                self.template = self.make_template_from_data(data)
-            return data
+        
+        # if the data is not available, try to calculate it from the parents
         elif hasattr(self, 'parents') and self.parents is not None:
             parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
             data = self.fn(**parent_data)
             self.write_data(data, time, **kwargs)
-            return data
         else:
             raise ValueError(f'File {self.path(time, **kwargs)} does not exist.')
+        
+        # if there is no template for the dataset, create it from the data
+        if not hasattr(self, 'template') or self.template is None:
+            self.template = self.make_template_from_data(data)
+        else:
+            # otherwise, update the data in the template
+            # (this will make sure there is no errors in the coordinates due to minor rounding)
+            attrs = data.attrs
+            data = self.template.copy(data = data)
+            data.attrs.update(attrs)
+
+        return data
 
     def set_parents(self, parents:dict[str:IOHandler], fn:Callable):
         self.parents = parents

@@ -152,23 +152,41 @@ def ntimesteps_to_md(timesteps_per_year: int) -> list[tuple[int, int]]:
     timesteps = create_timesteps(datetime(1987, 1, 1), datetime(1987, 12, 31), timesteps_per_year)
     return [(time.month, time.day) for time in timesteps] 
 
-def get_window(time: datetime, size: int, unit: str) -> TimeRange:
+def get_window(time: datetime, size: int, unit: str, start = False) -> TimeRange:
         if unit[-1] != 's': unit += 's'
         if unit in ['months', 'years', 'days', 'weeks']:
-            time_start = time + timedelta(days=1) - relativedelta(**{unit: size})
+            if start:
+                time_start = time
+                time_end = time + timedelta(days=1) + relativedelta(**{unit: size}) - timedelta(days=2)
+            else:
+                time_start = time + timedelta(days=1) - relativedelta(**{unit: size})
+                time_end = time
         elif unit == 'dekads':
-            if (time + timedelta(days=1)).day not in  [1, 11, 21]:
-                raise ValueError('Dekads can only start on the 1st, 11th, or 21st of the month')
-            dekad_end   = get_interval(time, 36)
-            dekad_start = dekad_end - size + 1
-            year = time.year
-            while interval_start < 1:
-                interval_start += 36
-                year -= 1
-            time_start = get_date_from_interval(dekad_start, year, 36)
+            if start:
+                if time.day not in  [1, 11, 21]:
+                    raise ValueError('Dekads can only start on the 1st, 11th, or 21st of the month')
+                time_start = time
+                dekad_start = get_interval(time, 36)
+                dekad_end = dekad_start + size - 1
+                year = time.year
+                while dekad_end > 36:
+                    dekad_end -= 36
+                    year += 1
+                time_end = get_date_from_interval(dekad_end, year, 36, end = True)
+            else:
+                if (time + timedelta(days=1)).day not in  [1, 11, 21]:
+                    raise ValueError('Dekads can only start on the 1st, 11th, or 21st of the month')
+                dekad_end   = get_interval(time, 36)
+                dekad_start = dekad_end - size + 1
+                year = time.year
+                while dekad_start < 1:
+                    dekad_start += 36
+                    year -= 1
+                time_start = get_date_from_interval(dekad_start, year, 36)
+                time_end = time
         else:
             raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
-        return TimeRange(time_start, time)
+        return TimeRange(time_start, time_end)
 
 def is_leap(year: int) -> bool:
     if year % 4 != 0:

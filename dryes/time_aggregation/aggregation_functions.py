@@ -69,13 +69,14 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
     input_agg allows to pass if the input is already a sum, and discards some timesteps that are already included
     """
 
-    if 'size' not in input_agg or 'unit' not in input_agg:
-        raise ValueError('input_agg must have keys "size" and "unit"')
-    if 'start' not in input_agg: input_agg['start'] = False
-    if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
+    if input_agg is not None:
+        if 'size' not in input_agg or 'unit' not in input_agg:
+            raise ValueError('input_agg must have keys "size" and "unit"')
+        if 'start' not in input_agg: input_agg['start'] = False
+        if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
 
     def _sum_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str,
-                       _input_agg: Optional[tuple[int, str]] = None) -> np.ndarray:
+                       _input_agg: Optional[dict] = None) -> np.ndarray:
         
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.

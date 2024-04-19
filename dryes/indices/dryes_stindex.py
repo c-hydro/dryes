@@ -217,6 +217,8 @@ class SPEI(DRYESStandardisedIndex):
         
         self._raw_inputs = {'P': io_options['P_raw'], 'PET': io_options['PET_raw']}
         template = self._raw_inputs['P'].get_template()
+        for raw_input in self._raw_inputs.values():
+            raw_input.set_template(template)
 
         if 'data_raw' not in io_options:
             raise ValueError('data_raw must be specified.')

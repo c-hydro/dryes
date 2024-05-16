@@ -98,8 +98,11 @@ class DRYESAnomaly(DRYESIndex):
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
 
-        # load the data for the index
-        data = self._data.get_data(time, **case['tags'])
+        # load the data for the index - allow for missing data
+        if self._data.check_data(time, **case['tags']):
+            data = self._data.get_data(time, **case['tags'])
+        else:
+            return self._data.template, {"NOTE": "missing data"}
 
         # load the parameters
         if 'history_start' not in case['tags']:

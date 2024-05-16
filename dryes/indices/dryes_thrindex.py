@@ -108,7 +108,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             if len(data_dates) == 0: continue
             
             # get the data for these dates
-            data_ = [variable.get_data(time) for time in data_dates]
+            data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
             data = np.stack(data_, axis = 0)
 
             # calculate the thresholds for each case that has this window size

@@ -49,7 +49,7 @@ class DRYESAnomaly(DRYESIndex):
         all_dates  = get_md_dates(history_years, time.month, time.day)
         data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
-        data_ = [variable.get_data(time) for time in data_dates]
+        data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
         data = np.stack(data_, axis = 0)
 
         pardata = {}

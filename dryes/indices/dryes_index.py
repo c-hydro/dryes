@@ -96,6 +96,7 @@ class DRYESIndex:
         ## finally add the post-processing, if it exists
         post_cases = []
         if post_processing is not None:
+            i = 0
             for post_name, post_fn in post_processing.items():
                 this_case = dict()
                 this_case['id']   = i
@@ -103,6 +104,7 @@ class DRYESIndex:
                 this_case['tags'] = {'post_fn': post_name}
                 this_case['post_fn'] = post_fn
                 post_cases.append(this_case)
+                i += 1
 
         ## and combine them
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}

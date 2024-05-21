@@ -5,7 +5,7 @@ import warnings
 import glob
 import os
 
-from typing import List, Optional
+from typing import List, Optional, Generator
 
 from .dryes_index import DRYESIndex
 
@@ -66,7 +66,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:np.ndarray]]:
         """
         This will only do the threshold calculation.
         par_and_cases is a dictionary with the following structure:
@@ -118,7 +118,17 @@ class DRYESThrBasedIndex(DRYESIndex):
                 # save the threshold
                 output['threshold'][case] = threshold_data
 
-        return output
+        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
+        par_info = {'reference_dates': data_dates,
+                    'reference_start': history.start.strftime('%Y-%m-%d'),
+                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+
+        if hasattr(data_[0], 'attrs'):
+            data_info = data_[0].attrs
+            if 'agg_type' in data_info:
+                par_info['agg_type'] = data_info['agg_type']
+
+        return output, par_info
 
     def make_ddi(self,
                  time_range: Optional[TimeRange], 
@@ -172,10 +182,11 @@ class DRYESThrBasedIndex(DRYESIndex):
                     ddi_dict[thrcase][cid] = ddi
                     cum_deviation_dict[thrcase][cid] += cum_deviation
                     if time in timesteps:
-                    # save the current ddi
+                        # save the current ddi
                         tags = cases[thrcase][cid]['tags']
                         tags.update(thresholds[thrcase].tags)
-                        self.save_ddi(ddi, time, tags)
+                        metadata = cases[thrcase][cid]['options']
+                        self.save_ddi(ddi, time, tags, **metadata)
 
         if keep_historical:
             return cum_deviation_dict
@@ -240,12 +251,12 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         return ddi
 
-    def save_ddi(self, ddi: np.ndarray, time: datetime, tags):
+    def save_ddi(self, ddi: np.ndarray, time: datetime, tags, **kwargs) -> None:
         # now let's save the ddi at the end of the history period
         for i in range(3):
             data = ddi[i]
             output = self._parameters[self.ddi_names[i]].update(**tags)
-            output.write_data(data, time)
+            output.write_data(data, time, tags = tags, **kwargs)
 
 class LFI(DRYESThrBasedIndex):
     name = 'LFI (Low Flow Index)'
@@ -319,7 +330,8 @@ class LFI(DRYESThrBasedIndex):
                     mean_deficit[this_cum_drought[1] < min_nevents] = np.nan
                     lambda_data = 1/mean_deficit
                 
-                parlambda.write_data(lambda_data, **lamcase['tags'])
+                metadata = lamcase['options']
+                parlambda.write_data(lambda_data, tags = lamcase['tags'], **metadata)
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # take the current ddi from the superclass
@@ -334,7 +346,8 @@ class LFI(DRYESThrBasedIndex):
         lambda_data = self._parameters['lambda'].update(**case['tags']).get_data(time)
 
         lfi_data = 1 - np.exp(-lambda_data * deficit)
-        return lfi_data
+        lfi_info = lambda_data.attrs
+        return lfi_data, lfi_info
 
 class HWI(DRYESThrBasedIndex):
     name = 'HWI (Heat Wave Index)'
@@ -350,14 +363,14 @@ class HWI(DRYESThrBasedIndex):
         ddi = self.get_ddi(time, history, case)
         # the first time this runs, it will calculate the ddi from the beginning of history to the current time
         # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
-        # for the HWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
+        # for the HCWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
         # so we could start like 1 month before the current time or something like that
         #time_range = TimeRange(time-timedelta(days = 30), time)
         #ddi = super().calc_index(time, time_range, case)
         # after the first time, it will take the most recent ddi and update from there, so this is really only an initialization problem
 
         duration = ddi[1]
-        return duration
+        return duration, case['options']
 
 class CWI(DRYESThrBasedIndex):
     name = 'CWI (Cold Wave Index)'
@@ -373,19 +386,20 @@ class CWI(DRYESThrBasedIndex):
         ddi = self.get_ddi(time, history, case)
         # the first time this runs, it will calculate the ddi from the beginning of history to the current time
         # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
-        # for the HWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
+        # for the HCWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
         # so we could start like 1 month before the current time or something like that
         #time_range = TimeRange(time-timedelta(days = 30), time)
         #ddi = super().calc_index(time, time_range, case)
         # after the first time, it will take the most recent ddi and update from there, so this is really only an initialization problem
 
         duration = ddi[1]
-        return duration
+        return duration, case['options']
 
 def get_deviations(streamflow: IOHandler,
                    threshold: dict[int:IOHandler],
                    time_range:TimeRange,
-                   direction: int) -> (datetime, dict[int:np.ndarray]):
+                   direction: int) -> Generator[tuple[datetime, dict[int:np.ndarray]],
+                                                None, None]:
     """
     This function will calculate the deviations for the given time_range.
     thresholds allows to specify different thresholds for different cases.
@@ -400,7 +414,7 @@ def get_deviations(streamflow: IOHandler,
         thresholds = {case: th.get_data(time) for case, th in threshold.items()}
         deviation = {}
         for case, thr in thresholds.items():
-            this_deviation = data.values - thr.values * direction
+            this_deviation = (data.values - thr.values) * direction
             this_deviation[this_deviation < 0] = 0
             deviation[case] = this_deviation#np.squeeze(this_deficit)
 
@@ -409,7 +423,7 @@ def get_deviations(streamflow: IOHandler,
 def pool_deviation(deviation: np.ndarray,
                    options: dict[str, float],
                    current_conditions: np.ndarray,
-                    ) -> [np.ndarray, np.ndarray]:
+                    ) -> tuple[np.ndarray, np.ndarray]:
     """
     This function will pool the deviation for a single timestep.
     The inputs are:
@@ -455,7 +469,7 @@ def pool_deviation_singlepixel(deviation: float,
                                min_duration: int = 1,
                                min_interval: int = 1,
                                current_conditions: np.ndarray = np.zeros(3)
-                               ) -> [np.ndarray, np.ndarray]:
+                               ) -> tuple[np.ndarray, np.ndarray]:
     """
     Same as pool_deviation, but for a single pixel.
     """

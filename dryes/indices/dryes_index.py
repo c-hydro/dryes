@@ -20,7 +20,10 @@ class DRYESIndex:
         
         # set the logging
         index_name = self.index_name
-        self.log = logging.getLogger(f'{index_name}') #setup_logging(io_options['log'], io_options['log'].name)
+        self.log = logging.getLogger(f'{index_name}')
+        if 'log' in io_options:
+            logging.basicConfig(filename = io_options['log'], level = logging.INFO,
+                                format = '%(asctime)s - %(name)s - %(message)s', force=True)
 
         self._check_index_options(index_options)
         self._get_cases()

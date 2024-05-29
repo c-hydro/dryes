@@ -2,21 +2,25 @@ from datetime import datetime
 from typing import Callable, List, Iterable
 import numpy as np
 from copy import deepcopy
+import logging
 
 from ..time_aggregation.time_aggregation import TimeAggregation
 from ..io import IOHandler
 
-from ..utils.log import setup_logging
+#from ..utils.log import setup_logging
 from ..utils.time import TimeRange, create_timesteps, ntimesteps_to_md
 from ..utils.parse import options_to_cases
 
 class DRYESIndex:
+    index_name = 'dryes_index'
+
     def __init__(self,
                  index_options: dict,
                  io_options: dict) -> None:
         
         # set the logging
-        self.log = setup_logging(io_options['log'], io_options['log'].name)
+        index_name = self.index_name
+        self.log = logging.getLogger(f'{index_name}') #setup_logging(io_options['log'], io_options['log'].name)
 
         self._check_index_options(index_options)
         self._get_cases()

@@ -13,7 +13,6 @@ from ..io import IOHandler
 
 from ..utils.time import TimeRange, create_timesteps
 from ..utils.parse import make_case_hierarchy
-from ..utils.log import log
 
 class DRYESThrBasedIndex(DRYESIndex):
     """
@@ -306,7 +305,7 @@ class LFI(DRYESThrBasedIndex):
                     n+=1
 
         all_cases = sum(len(v) for v in lam_cases)
-        log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
+        self.log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
         if n == 0: return
 
         # Now do the DDI calculation, this will be useful for lambda later

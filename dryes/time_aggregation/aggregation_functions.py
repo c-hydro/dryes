@@ -20,7 +20,7 @@ def average_of_window(size: int, unit: str) -> Callable:
         window = get_window(time, _size, _unit)
 
         if window.start < variable.start:
-            return None
+            return None, {}
 
         #variable.make(window)
         times_to_get = variable.get_times(window)
@@ -83,7 +83,7 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
         """
         window = get_window(time, _size, _unit)
         if window.start < variable.start:
-            return None
+            return None, {}
         
         #variable.make(window)
         all_times = variable.get_times(window)

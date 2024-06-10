@@ -10,7 +10,8 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange, get_md_dates
+#from ..utils.time import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange, get_md_dates
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'

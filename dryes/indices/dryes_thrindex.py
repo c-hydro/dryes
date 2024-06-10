@@ -5,13 +5,15 @@ import warnings
 import glob
 import os
 
-from typing import List, Optional, Generator
+from typing import Optional, Generator
 
 from .dryes_index import DRYESIndex
 
 from ..io import IOHandler
 
-from ..utils.time import TimeRange, create_timesteps
+#from ..utils.time import TimeRange, create_timesteps
+from ..tools.timestepping import TimeRange
+from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
 from ..utils.parse import make_case_hierarchy
 
 class DRYESThrBasedIndex(DRYESIndex):
@@ -65,7 +67,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:np.ndarray]]:
+                        par_and_cases: dict[str:list[int]]) -> dict[str:dict[int:np.ndarray]]:
         """
         This will only do the threshold calculation.
         par_and_cases is a dictionary with the following structure:
@@ -149,7 +151,9 @@ class DRYESThrBasedIndex(DRYESIndex):
         Use update_ddi to update the DDI from a previous timestep.
         """
 
-        timesteps = create_timesteps(time_range.start, time_range.end, timesteps_per_year)
+        timesteps:list[FixedNTimeStep] = time_range.get_timesteps_from_tsnumber(timesteps_per_year)
+        ts_ends = [ts.end for ts in timesteps]
+        #create_timesteps(time_range.start, time_range.end, timesteps_per_year)
 
         # get all the deviations for the history period
         #input_path = self.output_paths['data']
@@ -180,7 +184,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                     # update the ddi and cumulative drought
                     ddi_dict[thrcase][cid] = ddi
                     cum_deviation_dict[thrcase][cid] += cum_deviation
-                    if time in timesteps:
+                    if time in ts_ends:
                         # save the current ddi
                         tags = cases[thrcase][cid]['tags']
                         tags.update(thresholds[thrcase].tags)

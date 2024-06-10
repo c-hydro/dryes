@@ -9,7 +9,7 @@ import xarray as xr
 
 from .io_handler import IOHandler
 
-from ..utils.time import TimeRange
+from ..tools.timestepping import TimeRange
 from ..utils.parse import substitute_string
 
 class LocalIOHandler(IOHandler):
@@ -45,7 +45,8 @@ class LocalIOHandler(IOHandler):
             return time
     
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[datetime, None, None]:
-        for time in time_range:
+        for timestep in time_range.gen_timesteps_from_tsnumber(365):
+            time = timestep.end
             if self.check_data(time, **kwargs):
                 yield time
             elif hasattr(self, 'parents') and self.parents is not None:

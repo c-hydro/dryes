@@ -10,7 +10,7 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange, get_md_dates
 from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 

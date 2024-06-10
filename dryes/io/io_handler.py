@@ -3,7 +3,7 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from ..utils.time import TimeRange
+from ..tools.timestepping import TimeRange
 
 class IOHandler:
     def __init__(self) -> None:

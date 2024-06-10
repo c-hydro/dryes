@@ -7,7 +7,7 @@ import warnings
 from functools import partial
 
 from ..io import IOHandler
-from ..utils.time import get_window, get_interval_date, TimeRange
+from ..tools.timestepping import TimeRange, get_window
 
 def average_of_window(size: int, unit: str) -> Callable:
     """

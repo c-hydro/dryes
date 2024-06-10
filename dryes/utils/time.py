@@ -2,8 +2,11 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
 
+from deprecated import deprecated
+
 from typing import Iterable
 
+@deprecated(reason="Use dryes.tools.timestepping.TimeRange instead")
 class TimeRange():
     def __init__(self, start: datetime, end: datetime):
         """
@@ -26,6 +29,7 @@ class TimeRange():
         self.now+= timedelta(days=1)
         return now
 
+@deprecated(reason="Use the dryes.tools.timestepping.TimeRange method get_timesteps_from_tsnumber() instead")
 def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int) -> list[datetime]:
     """
     Creates a list of timesteps between two dates.
@@ -70,6 +74,7 @@ def create_timesteps(time_start: datetime, time_end: datetime, n_intervals: int)
 
     return timesteps
 
+@deprecated(reason="Use the methods of the dryes.tools.timestepping.TimeRange class instead")
 def get_interval(date: datetime, num_intervals: int = 12) -> int:
     if num_intervals not in [1, 2, 3, 4, 6, 12, 24, 36]:
         raise ValueError("Invalid number of intervals. Must be a positive integer that divides 12, 24, or 36 evenly.")
@@ -92,10 +97,12 @@ def get_interval(date: datetime, num_intervals: int = 12) -> int:
     
     return int(interval)
 
+@deprecated(reason="Use the methods of the dryes.tools.timestepping.TimeRange class instead")
 def get_interval_date(date: datetime, num_intervals: int = 12, end: bool = False) -> datetime:
     interval = get_interval(date, num_intervals)
     return(get_date_from_interval(interval, date.year, num_intervals, end))
-    
+
+@deprecated(reason="Use the methods of the dryes.tools.timestepping.TimeRange class instead")
 def get_date_from_interval(interval: int, year: int, num_intervals: int = 12, end: bool = False) -> datetime:
     if num_intervals not in [1, 2, 3, 4, 6, 12, 24, 36]:
         raise ValueError("Invalid number of intervals. Must be a positive integer that divides 12, 24, or 36 evenly.")
@@ -140,6 +147,7 @@ def get_date_from_interval(interval: int, year: int, num_intervals: int = 12, en
             date = datetime(year, month, day)
         return date
 
+@deprecated(reason="Use the methods of the dryes.tools.timestepping.TimeRange class instead")
 def doy_to_md(doy:int) -> tuple[int, int]:
     """
     Converts day of year to month and day. Ignores 29 February.
@@ -148,10 +156,12 @@ def doy_to_md(doy:int) -> tuple[int, int]:
     date = datetime(1987, 1, 1) + timedelta(days = doy - 1)
     return (date.month, date.day)
 
+@deprecated(reason="Use the methods of the dryes.tools.timestepping.TimeRange class instead")
 def ntimesteps_to_md(timesteps_per_year: int) -> list[tuple[int, int]]:
     timesteps = create_timesteps(datetime(1987, 1, 1), datetime(1987, 12, 31), timesteps_per_year)
     return [(time.month, time.day) for time in timesteps] 
 
+@deprecated(reason="Use dryes.tools.timestepping.get_window instead")
 def get_window(time: datetime, size: int, unit: str, start = False) -> TimeRange:
         if unit[-1] != 's': unit += 's'
         if unit in ['months', 'years', 'days', 'weeks']:
@@ -188,6 +198,7 @@ def get_window(time: datetime, size: int, unit: str, start = False) -> TimeRange
             raise ValueError('Unit for aggregator not recognized: must be one of dekads, months, years, days, weeks')
         return TimeRange(time_start, time_end)
 
+@deprecated(reason="Use dryes.tools.timestepping.Year and its is_leap() method instead")
 def is_leap(year: int) -> bool:
     if year % 4 != 0:
         return False
@@ -198,6 +209,7 @@ def is_leap(year: int) -> bool:
     else:
         return True
 
+@deprecated(reason="Use dryes.tools.timestepping.get_date_from_str() instead")
 def get_md_dates(years: Iterable[int], month: int, day: int) -> list[datetime]:
     if month == 2 and day in [28, 29]:
         leaps = [year for year in years if is_leap(year)]

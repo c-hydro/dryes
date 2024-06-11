@@ -3,6 +3,7 @@ from typing import Callable, List, Iterable
 import numpy as np
 from copy import deepcopy
 import logging
+import os
 
 from ..time_aggregation.time_aggregation import TimeAggregation
 from ..io import IOHandler
@@ -24,7 +25,9 @@ class DRYESIndex:
         index_name = self.index_name
         self.log = logging.getLogger(f'{index_name}')
         if 'log' in io_options:
-            logging.basicConfig(filename = io_options['log'].path(), level = logging.INFO,
+            logpath = io_options['log'].path()
+            os.makedirs(os.path.dirname(logpath), exist_ok=True)
+            logging.basicConfig(filename = logpath, level = logging.INFO,
                                 format = '%(asctime)s - %(name)s - %(message)s', force=True)
 
         self._check_index_options(index_options)

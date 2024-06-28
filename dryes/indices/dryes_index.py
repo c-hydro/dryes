@@ -24,11 +24,21 @@ class DRYESIndex:
         # set the logging
         index_name = self.index_name
         self.log = logging.getLogger(f'{index_name}')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
         if 'log' in io_options:
             logpath = io_options['log'].path()
             os.makedirs(os.path.dirname(logpath), exist_ok=True)
-            logging.basicConfig(filename = logpath, level = logging.INFO,
-                                format = '%(asctime)s - %(name)s - %(message)s', force=True)
+
+            #logging.basicConfig(filename = logpath, level = logging.INFO,
+            #                    format = '%(asctime)s - %(name)s - %(message)s', force=True)
+    
+            handler_file = logging.FileHandler(logpath)
+            handler_file.setFormatter(formatter)
+            self.log.addHandler(handler_file)
+        else:
+            handler_console = logging.StreamHandler()
+            handler_console.setFormatter(formatter)
+            self.log.addHandler(handler_console)
 
         self._check_index_options(index_options)
         self._get_cases()

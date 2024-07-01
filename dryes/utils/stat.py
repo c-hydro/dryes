@@ -105,13 +105,14 @@ def get_prob(data: np.ndarray, distribution: str,
 
         # compute SPI
         probVal = randvar.cdf(data, **pars)
-        probVal[probVal == 0] = corr_extremes
-        probVal[probVal == 1] = 1 - corr_extremes
 
         # correct for the probability of zero, if needed
         if 'prob0' in parameters.keys():
             prob0 = parameters['prob0']
             probVal = prob0 + ((1 - prob0) * probVal)
+
+        probVal[probVal == 0] = corr_extremes
+        probVal[probVal == 1] = 1 - corr_extremes
 
         return probVal
 

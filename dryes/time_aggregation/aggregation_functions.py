@@ -9,11 +9,13 @@ from functools import partial
 from ..io import IOHandler
 from ..tools.timestepping import TimeRange, get_window
 
-def average_of_window(size: int, unit: str) -> Callable:
+def average_of_window(size: int, unit: str,
+                      propagate_metadata: Optional[str] = None) -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
     """
-    def _average_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str) -> np.ndarray:
+    def _average_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str,
+                           _propagate_metadata: Optional[str] = None) -> np.ndarray:
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
         """
@@ -25,14 +27,24 @@ def average_of_window(size: int, unit: str) -> Callable:
         #variable.make(window)
         times_to_get = variable.get_times(window)
 
-        data_sum = variable.get_data(times_to_get[0])
-        valid_n = np.isfinite(data_sum).astype(int)
+        data_sum = np.zeros(variable.get_template().shape, dtype = np.float64)
+        valid_n = data_sum.copy()
 
-        for time in times_to_get[1:]:
-            this_data = variable.get_data(time)
-            data_stack = np.stack([data_sum, this_data], axis = 0)
+        if _propagate_metadata is not None:
+            metadata_list = []
+
+        for time in times_to_get:
+            new_data = variable.get_data(time)
+            data_stack = np.stack([data_sum, new_data], axis = 0)
             data_sum = np.nansum(data_stack, axis = 0)
-            valid_n += np.isfinite(this_data)
+            valid_n += np.isfinite(new_data)
+
+            if _propagate_metadata is not None:
+                if _propagate_metadata in new_data.attrs:
+                    this_metadata = new_data.attrs[_propagate_metadata]
+                else:
+                    this_metadata = ' '
+                metadata_list.append(this_metadata)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -55,10 +67,12 @@ def average_of_window(size: int, unit: str) -> Callable:
 
         return mean_data, agg_info
     
-    return partial(_average_of_window, _size = size, _unit = unit)
+    return partial(_average_of_window, _size = size, _unit = unit, _propagate_metadata = propagate_metadata)
 
 # TODO: make sum safe for missing data
-def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Callable:
+def sum_of_window(size: int, unit: str,
+                  input_agg: Optional[dict] = None,
+                  propagate_metadata: Optional[str] = None) -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.
     input_agg expects a dictionary specifying the aggregation of the input data, with the following keys:
@@ -67,6 +81,8 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
     - 'start': bool, whether the timestep is the start or the end of the aggregation window.
     - 'truncate_at_end_year': bool, whether to truncate the aggregation window at the end of the year or roll over.
     input_agg allows to pass if the input is already a sum, and discards some timesteps that are already included
+
+    propagate_metadata: str, if not None, the metadata key to propagate from the input data to the output data
     """
 
     if input_agg is not None:
@@ -76,7 +92,7 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
         if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
 
     def _sum_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str,
-                       _input_agg: Optional[dict] = None) -> np.ndarray:
+                       _input_agg: Optional[dict] = None, _propagate_metadata: Optional[str] = None) -> np.ndarray:
         
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.
@@ -108,10 +124,19 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
         all_times.sort()
         times_to_get = all_times
 
-        data = variable.get_data(times_to_get[0])
-        for time in times_to_get[1:]:
-            data_stack = np.stack([data, variable.get_data(time)], axis = 0)
+        data = np.zeros(variable.get_template().shape, dtype = np.float64)
+        if _propagate_metadata is not None:
+            metadata_list = []
+        for time in times_to_get:
+            new_data = variable.get_data(time)
+            data_stack = np.stack([data, new_data], axis = 0)
             data = np.sum(data_stack, axis = 0)
+            if _propagate_metadata is not None:
+                if _propagate_metadata in new_data.attrs:
+                    this_metadata = new_data.attrs[_propagate_metadata]
+                else:
+                    this_metadata = ' '
+                metadata_list.append(this_metadata)
 
         # data = [variable.get_data(time) for time in times_to_get]
         # all_data = np.stack(data, axis = 0)
@@ -124,10 +149,12 @@ def sum_of_window(size: int, unit: str, input_agg: Optional[dict] = None) -> Cal
                     'agg_start': f'{min(times_to_get):%Y-%m-%d}',
                     'agg_end'  : f'{max(times_to_get):%Y-%m-%d}',
                     'agg_n'    : len(times_to_get)}
+        if _propagate_metadata is not None:
+            agg_info[_propagate_metadata] = ','.join(metadata_list)
 
         return data, agg_info
     
-    return partial(_sum_of_window, _size = size, _unit = unit, _input_agg = input_agg)
+    return partial(_sum_of_window, _size = size, _unit = unit, _input_agg = input_agg, _propagate_metadata = propagate_metadata)
 
 def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weights = 'overlap') -> Callable:
     """

@@ -1,22 +1,44 @@
 from datetime import datetime
 from typing import Callable, List, Iterable
-import xarray as xr
+import numpy as np
 from copy import deepcopy
+import logging
+import os
 
 from ..time_aggregation.time_aggregation import TimeAggregation
 from ..io import IOHandler
 
-from ..utils.log import setup_logging
-from ..utils.time import TimeRange, create_timesteps, ntimesteps_to_md
+#from ..utils.log import setup_logging
+#from ..utils.time import TimeRange, create_timesteps, ntimesteps_to_md
 from ..utils.parse import options_to_cases
+from ..tools.timestepping import TimeRange
+from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 class DRYESIndex:
+    index_name = 'dryes_index'
+
     def __init__(self,
                  index_options: dict,
                  io_options: dict) -> None:
         
         # set the logging
-        self.log = setup_logging(io_options['log'], io_options['log'].name)
+        index_name = self.index_name
+        self.log = logging.getLogger(f'{index_name}')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+        if 'log' in io_options:
+            logpath = io_options['log'].path()
+            os.makedirs(os.path.dirname(logpath), exist_ok=True)
+
+            #logging.basicConfig(filename = logpath, level = logging.INFO,
+            #                    format = '%(asctime)s - %(name)s - %(message)s', force=True)
+    
+            handler_file = logging.FileHandler(logpath)
+            handler_file.setFormatter(formatter)
+            self.log.addHandler(handler_file)
+        else:
+            handler_console = logging.StreamHandler()
+            handler_console.setFormatter(formatter)
+            self.log.addHandler(handler_console)
 
         self._check_index_options(index_options)
         self._get_cases()
@@ -96,6 +118,7 @@ class DRYESIndex:
         ## finally add the post-processing, if it exists
         post_cases = []
         if post_processing is not None:
+            i = 0
             for post_name, post_fn in post_processing.items():
                 this_case = dict()
                 this_case['id']   = i
@@ -103,11 +126,12 @@ class DRYESIndex:
                 this_case['tags'] = {'post_fn': post_name}
                 this_case['post_fn'] = post_fn
                 post_cases.append(this_case)
+                i += 1
 
         ## and combine them
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}
 
-    def _check_io_options(self, io_options: dict) -> None:
+    def _check_io_options(self, io_options: dict, update_existing = False) -> None:
 
         # check that we have all the necessary options
         # for most indices, we need 'data' (for aggregated input data) and 'data_raw' (for raw input data)
@@ -125,32 +149,38 @@ class DRYESIndex:
         elif 'data_raw' not in io_options:
             io_options['data_raw'] = io_options['data']
 
-        self._raw_data = io_options['data_raw']
-        template = self._raw_data.get_template()
+        if not hasattr(self, '_raw_data') or update_existing:
+            self._raw_data = io_options['data_raw']
+            template = self._raw_data.get_template()
+        else:
+            template = self._raw_data.template
 
-        self._data     = io_options['data']
-        self._data.set_template(template)
+        if not hasattr(self, '_data') or update_existing:
+            self._data = io_options['data']
+            self._data.set_template(template)
 
-        # check that we have output specifications for all the parameters in self.parameters
-        self._parameters = {}
-        for par in self.parameters:
-            if par not in io_options:
-                raise ValueError(f'No output path for parameter {par}.')
-            self._parameters[par] = io_options[par]
-            self._parameters[par].set_template(template)
+        if not hasattr(self, '_parameters') or update_existing:
+            # check that we have output specifications for all the parameters in self.parameters
+            self._parameters = {}
+            for par in self.parameters:
+                if par not in io_options:
+                    raise ValueError(f'No output path for parameter {par}.')
+                self._parameters[par] = io_options[par]
+                self._parameters[par].set_template(template)
 
-        # check that we have an output specification for the index
-        if 'index' not in io_options:
-            raise ValueError('No output path for index.')
-        self._index = io_options['index']
-        self._index.set_template(template)
+        if not hasattr(self, '_index') or update_existing:
+            # check that we have an output specification for the index
+            if 'index' not in io_options:
+                raise ValueError('No output path for index.')
+            self._index = io_options['index']
+            self._index.set_template(template)
 
     def compute(self, current:   tuple[datetime, datetime],
                       reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]],
                       timesteps_per_year: int) -> None:
         
         # turn the current period into a TimeRange object
-        current = TimeRange(current[0], current[1])
+        current: TimeRange = TimeRange(current[0], current[1])
         raw_reference = deepcopy(reference)
         # make the reference period a function of time, for extra flexibility
         if isinstance(reference, tuple) or isinstance(reference, list):
@@ -169,9 +199,10 @@ class DRYESIndex:
         # self.make_input_data(data_timesteps)
 
         # get the timesteps for which we need to calculate the index
-        timesteps = create_timesteps(current.start, current.end, timesteps_per_year)
+        timesteps:list[FixedNTimeStep] = current.get_timesteps_from_tsnumber(timesteps_per_year)
+        #create_timesteps(current.start, current.end, timesteps_per_year)
         # get the reference periods that we need to calculate parameters for
-        reference_periods = self.make_reference_periods(timesteps, reference_fn)
+        reference_periods:list[TimeRange] = self.make_reference_periods(timesteps, reference_fn)
 
         # calculate the parameters
         for reference_ in reference_periods:
@@ -182,13 +213,14 @@ class DRYESIndex:
     
     def make_data_timesteps(self,
                             time_range: TimeRange,
-                            timesteps_per_year: int) -> List[datetime]:
+                            timesteps_per_year: int) -> list[FixedNTimeStep]:
         """
         This function will return the timesteps for which the data needs to be computed.
         """
         
         if not self.iscontinuous:
-            return create_timesteps(time_range.start, time_range.end, timesteps_per_year)
+            return time_range.get_timesteps_from_tsnumber(timesteps_per_year)
+            #return create_timesteps(time_range.start, time_range.end, timesteps_per_year)
         else:
             # get last available timestep, if any
             last_timestep = []
@@ -201,10 +233,11 @@ class DRYESIndex:
                 start = min(last_timestep + [time_range.start])
             else:
                 start = time_range.start
-            return create_timesteps(start, time_range.end, timesteps_per_year)
+            return TimeRange(start, time_range.end).get_timesteps_from_tsnumber(timesteps_per_year)
+            #return create_timesteps(start, time_range.end, timesteps_per_year)
     
     def make_reference_periods(self, current_timesteps: Iterable[datetime],
-                               reference_fn: Callable[[datetime], TimeRange]) -> List[TimeRange]:
+                               reference_fn: Callable[[datetime], TimeRange]) -> list[TimeRange]:
         """
         This function will return the reference periods for which the parameters need to be computed.
         """
@@ -220,7 +253,7 @@ class DRYESIndex:
         references_as_tr = [TimeRange(start, end) for start, end in references]
         return references_as_tr
 
-    def make_input_data(self, timesteps: List[datetime]):# -> dict[str:str]:
+    def make_input_data(self, timesteps: list[FixedNTimeStep]):# -> dict[str:str]:
         """
         This function will gather compute and aggregate the input data
         """
@@ -229,6 +262,8 @@ class DRYESIndex:
         variable_out = self._data
         time_agg = self.time_aggregation
         
+        ts_ends = [ts.end for ts in timesteps]
+
         # if there are no aggregations to compute, just get the data in the paths
         agg_cases = self.cases['agg']
         if len(agg_cases) == 0:
@@ -239,18 +274,18 @@ class DRYESIndex:
 
         # check what timesteps have already been computed for each aggregation
         timesteps_to_compute = {agg_name:[] for agg_name in agg_names}
-        time_range = TimeRange(min(timesteps), max(timesteps))
+        time_range = TimeRange(min(ts_ends), max(ts_ends))
         for agg_name in agg_names:
             available_ts = variable_out.get_times(time_range, agg_fn = agg_name)
 
-            these_ts_to_compute = [time for time in timesteps if time not in available_ts]
+            these_ts_to_compute = [time for time in ts_ends if time not in available_ts]
             # if there is no post aggregation function, we don't care for the order of the timesteps
             # and can just compute the missing ones
             # if there is a post aggregation function, each timesteps depends on the previous one(s)
             # so we need to compute them in order from the first missing one onwards
             if agg_name in time_agg.postaggfun.keys() and len(these_ts_to_compute) > 0:
                 first_missing = min(these_ts_to_compute)
-                these_ts_to_compute = [time for time in timesteps if time >= first_missing]
+                these_ts_to_compute = [time for time in ts_ends if time >= first_missing]
             
             timesteps_to_compute[agg_name] = these_ts_to_compute
 
@@ -263,31 +298,22 @@ class DRYESIndex:
         #agg_data = {n:[] for n in agg_names if agg_name in time_agg.postaggfun.keys()}
         for i, time in enumerate(timesteps_to_iterate):
             self.log.info(f' #Timestep {time:%d-%m-%Y} ({i+1}/{len(timesteps_to_iterate)})...')
-            for agg_name in agg_names:
+            for agg in agg_cases:
+                agg_name = agg['name']
+                agg_tags = agg['tags']
                 self.log.info(f'  Aggregation {agg_name}...')
                 if time in timesteps_to_compute[agg_name]:
                     agg_data, agg_info = time_agg.aggfun[agg_name](variable_in, time)
                     if agg_name not in time_agg.postaggfun.keys():
-                        variable_out.write_data(agg_data, time = time, agg_fn = agg_name, **agg_info)
+                        variable_out.write_data(agg_data, time = time, tags = agg_tags, **agg_info)
                     else:
                         postagg_data, postagg_info = time_agg.postaggfun[agg_name](agg_data, variable_out, time)
                         for key in postagg_info:
                             if key in agg_info:
-                                agg_info[key] += ', {postagg_info[key]}'
+                                agg_info[key] += f'; {postagg_info[key]}'
                             else:
                                 agg_info[key] = postagg_info[key]
-                        variable_out.write_data(postagg_data, time = time, agg_fn = agg_name, **agg_info)
-
-        #                 agg_data[agg_name].append(data)
-        
-        # for agg_name in agg_names:
-        #     if agg_name in time_agg.postaggfun.keys():
-        #         self.log.info(f'Completing time aggregation: {agg_name}...')
-        #         agg_data[agg_name] = time_agg.postaggfun[agg_name](agg_data[agg_name], variable_in, timesteps_to_compute[agg_name])
-
-        #         for i, data in enumerate(agg_data[agg_name]):
-        #             this_time = timesteps_to_compute[agg_name][i]
-        #             variable_out.write_data(data, time = this_time, agg_fn = agg_name)
+                        variable_out.write_data(postagg_data, time = time, tags = agg_tags, **agg_info)
     
     def make_parameters(self,
                         history: TimeRange|tuple[datetime, datetime],
@@ -298,7 +324,7 @@ class DRYESIndex:
 
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
 
-        data_timesteps = self.make_data_timesteps(history, timesteps_per_year)
+        data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
         
         # make aggregated data for the parameters
         self.make_input_data(data_timesteps)
@@ -311,8 +337,9 @@ class DRYESIndex:
 
         # get the timesteps for which we need to calculate the parameters
         # this depends on the time aggregation step, not the index calculation step
-        md_timesteps = ntimesteps_to_md(timesteps_per_year)
-        timesteps = [datetime(1900, month, day) for month, day in md_timesteps]
+        timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
+        #md_timesteps = ntimesteps_to_md(timesteps_per_year)
+        #timesteps = [datetime(1900, month, day) for month, day in md_timesteps]
         # the year for time_range and timesteps is fictitious here, parameters don't have a year.
 
         # parameters need to be calculated individually for each agg case
@@ -337,14 +364,22 @@ class DRYESIndex:
                             variable: IOHandler,
                             parameters: dict[str:IOHandler],
                             history: TimeRange,
-                            timesteps: List[datetime]) -> dict:
+                            timesteps: list[FixedNTimeStep]) -> dict:
             
+            ts_ends = [ts.end for ts in timesteps]
+
             # check timesteps that have already been calculated for each parameter
             timesteps_to_do = {}
             for parname, par in parameters.items():
                 for case in self.cases['opt']:
-                    this_ts_done = par.get_times(TimeRange(min(timesteps), max(timesteps)), **case['tags'])
-                    this_ts_todo = [time for time in timesteps if time not in this_ts_done]
+                    # check if this parameter is relevant for this case (this is the case for distribution parameters)
+                    has_distr = 'distribution' in self.options
+                    is_distr_par = has_distr and any([distr in parname for distr in self.options['distribution']])
+                    is_this_distr_par = is_distr_par and case['options']['distribution'] in parname
+                    if is_distr_par and not is_this_distr_par:
+                        continue
+                    this_ts_done = par.get_times(TimeRange(min(ts_ends), max(ts_ends)), **case['tags'])
+                    this_ts_todo = [time for time in ts_ends if time not in this_ts_done]
                     for ts in this_ts_todo:
                         if ts not in timesteps_to_do:
                             timesteps_to_do[ts] = {}
@@ -360,13 +395,16 @@ class DRYESIndex:
                 day   = time.day
                 self.log.info(f'   {day:02d}/{month:02d}')
 
-                pars_data = self.calc_parameters(time, variable, history, par_cases)
+                pars_data, pars_info = self.calc_parameters(time, variable, history, par_cases)
 
                 for parname in pars_data:
                     par = parameters[parname]
                     for case, data in pars_data[parname].items():
                         tags = self.cases['opt'][case]['tags']
-                        par.write_data(data, time = time, time_format = '%d/%m', **tags)
+                        metadata = self.cases['opt'][case]['options']
+                        metadata.update(pars_info)
+                        if 'time' in metadata: metadata.pop('time')
+                        par.write_data(data, time = time, time_format = '%d/%m', tags = tags, **metadata)
 
     def make_index(self, current:   TimeRange|tuple[datetime, datetime],
                          reference: TimeRange|tuple[datetime, datetime]|Callable,
@@ -376,7 +414,8 @@ class DRYESIndex:
             current = TimeRange(current[0], current[1])
         self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
 
-        timesteps = self.make_data_timesteps(current, timesteps_per_year)
+        timesteps:list[FixedNTimeStep] = self.make_data_timesteps(current, timesteps_per_year)
+        ts_ends = [ts.end for ts in timesteps]
         # make aggregated data for the parameters
         self.make_input_data(timesteps)
 
@@ -406,8 +445,8 @@ class DRYESIndex:
 
                 case['name'] = case['name'] if len(agg_name) == 0 else ', '.join([f'Aggregation {agg_name}', case['name']])
 
-                ts_done = index.get_times(TimeRange(min(timesteps), max(timesteps)))
-                ts_todo = [time for time in timesteps if time not in ts_done]
+                ts_done = index.get_times(TimeRange(min(ts_ends), max(ts_ends)))
+                ts_todo = [time for time in ts_ends if time not in ts_done]
 
                 if len(ts_todo) == 0:
                     self.log.info(f' #Case {case["name"]}: already calculated.')
@@ -417,15 +456,18 @@ class DRYESIndex:
                         self.log.info(f'   {time:%d/%m/%Y}')
                         history = reference_fn(time)
                         case['tags'].update({'history_start': history.start, 'history_end': history.end})      
-                        index_data = self.calc_index(time, history, case)
-                        index.write_data(index_data, time = time)
+                        index_data, index_info = self.calc_index(time, history, case)
+                        metadata = case['options']
+                        metadata.update(index_info)
+                        if 'time' in metadata: metadata.pop('time')
+                        index.write_data(index_data, time = time, tags = case['tags'], **metadata)
 
                 # now do the post-processing
                 for post_case in self.cases['post']:
                     case['tags'].update(post_case['tags'])
                     ppindex = self._index.update(**case['tags'])
-                    ts_done = ppindex.get_times(TimeRange(min(timesteps), max(timesteps)))
-                    ts_todo = [time for time in timesteps if time not in ts_done]
+                    ts_done = ppindex.get_times(TimeRange(min(ts_ends), max(ts_ends)))
+                    ts_todo = [time for time in ts_ends if time not in ts_done]
                     if len(ts_todo) == 0:
                         self.log.info(f'  Post-processing {post_case["name"]}: already calculated.')
                         continue
@@ -436,29 +478,36 @@ class DRYESIndex:
                         case['tags'].update({'history_start': history.start, 'history_end': history.end})
                         index_data = index.get_data(time)
                         post_fn = post_case['post_fn']
-                        ppindex_data = post_fn(index_data)
-                        ppindex.write_data(ppindex_data, time = time)
+                        ppindex_data, ppindex_info = post_fn(index_data)
+
+                        metadata = case['options']
+                        metadata.update(ppindex_info)
+                        metadata.update(index_data.attrs)
+                        if 'time' in metadata: metadata.pop('time')
+                        ppindex.write_data(ppindex_data, time = time, tags = case['tags'], **metadata)
 
     def calc_parameters(self,
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
-        time, variable, history, par_cases
-        Calculates the parameters for the index.
+        Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        2 outputs are returned:
+        - a dictionary with the following structure:
+            {par: {case1: parcase1, case2: parcase1, ...}}
+            where parcase1 is the parameter par for case1 as a numpy.ndarray.
+        - a dictionary with info about parameter calculations.
         """
         raise NotImplementedError
     
-    def calc_index(self, time,  reference: TimeRange, case: dict) -> xr.DataArray:
+    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
         """
         Calculates the index for the given time and reference period.
+        Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
         raise NotImplementedError

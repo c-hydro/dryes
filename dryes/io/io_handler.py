@@ -3,7 +3,7 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from ..utils.time import TimeRange
+from ..tools.timestepping import TimeRange
 
 class IOHandler:
     def __init__(self) -> None:
@@ -15,7 +15,7 @@ class IOHandler:
         """
         raise NotImplementedError
     
-    def write_data(self, data: xr.DataArray, time: Optional[datetime], **kwargs):
+    def write_data(self, data: xr.DataArray, time: Optional[datetime], tags: dict, **kwargs):
         """
         Write the data for a given time.
         """

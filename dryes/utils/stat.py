@@ -7,6 +7,8 @@ from typing import Iterable
 # gamma
 # normal
 # pearson3
+# gev
+# beta
 
 # Gets parameters of a gamma distribution fitted to the data x
 def compute_distr_parameters(x: Iterable[float], distribution: str,
@@ -25,6 +27,24 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
     elif distribution == 'gev':
         parnames = ['c', 'loc', 'scale']
         this_distr = distr.gev
+    elif distribution == 'beta':
+        parnames = ['a', 'b']
+
+        # filter the nans out of the data
+        x = x[~np.isnan(x)]
+
+        # get mean and variance
+        mean = np.mean(x)
+        var = np.var(x)
+
+        # get the parameters
+        a = mean * ((mean * (1 - mean)) / var - 1)
+        b = (1 - mean) * ((mean * (1 - mean)) / var - 1)
+
+        # return the parameters
+        fit = [a, b]
+
+        return fit
 
     # filter the nans out of the data
     x = x[~np.isnan(x)]
@@ -77,19 +97,22 @@ def get_prob(data: np.ndarray, distribution: str,
             randvar = stat.pearson3
         elif distribution == 'gev':
             randvar = stat.genextreme
+        elif distribution == 'beta':
+            randvar = stat.beta
 
         # remove the name of the distribution from the parameters name and only select the ones for this distribution
         pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}
 
         # compute SPI
         probVal = randvar.cdf(data, **pars)
-        probVal[probVal == 0] = corr_extremes
-        probVal[probVal == 1] = 1 - corr_extremes
 
         # correct for the probability of zero, if needed
         if 'prob0' in parameters.keys():
             prob0 = parameters['prob0']
             probVal = prob0 + ((1 - prob0) * probVal)
+
+        probVal = np.where(probVal == 0, corr_extremes, probVal)
+        probVal = np.where(probVal == 1, 1 - corr_extremes, probVal)
 
         return probVal
 

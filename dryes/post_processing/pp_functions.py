@@ -12,6 +12,10 @@ def gaussian_smoothing(sigma):
             original_shape = data.shape
             data = np.squeeze(data)
             smooth_data = convolve(data, kernel, nan_treatment = 'interpolate', preserve_nan = True)
-            return np.reshape(smooth_data, original_shape)
+
+            post_info = {'smoothing_type': 'gaussian',
+                         'smoothing_sigma': _sigma}
+
+            return np.reshape(smooth_data, original_shape), post_info
         
     return partial(_gaussian_smoothing, _sigma = sigma)

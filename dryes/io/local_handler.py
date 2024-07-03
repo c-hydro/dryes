@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Generator, Callable
 from datetime import datetime
 from functools import cached_property
 from methodtools import lru_cache
@@ -9,7 +9,7 @@ import xarray as xr
 
 from .io_handler import IOHandler
 
-from ..utils.time import TimeRange
+from ..tools.timestepping import TimeRange
 from ..utils.parse import substitute_string
 
 class LocalIOHandler(IOHandler):
@@ -44,10 +44,14 @@ class LocalIOHandler(IOHandler):
         for time in self._get_times(TimeRange(time_start, time_end)):
             return time
     
-    def _get_times(self, time_range: TimeRange, **kwargs) -> datetime:
-        for time in time_range:
+    def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[datetime, None, None]:
+        for timestep in time_range.gen_timesteps_from_tsnumber(365):
+            time = timestep.end
             if self.check_data(time, **kwargs):
                 yield time
+            elif hasattr(self, 'parents') and self.parents is not None:
+                if all(parent.check_data(time, **kwargs) for parent in self.parents.values()):
+                    yield time
 
     def get_times(self, time_range: TimeRange, **kwargs) -> list[datetime]:
         """
@@ -68,11 +72,45 @@ class LocalIOHandler(IOHandler):
     def get_data(self, time: Optional[datetime] = None, **kwargs):
         if self.check_data(time, **kwargs):
             data = rioxarray.open_rasterio(self.path(time, **kwargs))
-            if not hasattr(self, 'template') or self.template is None:
-                self.template = self.make_template_from_data(data)
-            return data
+
+            # ensure that the data has descending latitudes
+            y_dim = data.rio.y_dim
+            if y_dim is None:
+                for dim in data.dims:
+                    if 'lat' in dim.lower() | 'y' in dim.lower():
+                        y_dim = dim
+                        break
+            if data[y_dim][0] < data[y_dim][-1]:
+                data = data.sortby(y_dim, ascending = False)
+
+            # make sure the nodata value is set to np.nan
+            if '_FillValue' in data.attrs and not np.isnan(data.attrs['_FillValue']):
+                data = data.where(data != data.attrs['_FillValue'])
+                data.attrs['_FillValue'] = np.nan
+        
+        # if the data is not available, try to calculate it from the parents
+        elif hasattr(self, 'parents') and self.parents is not None:
+            parent_data = {name: parent.get_data(time, **kwargs) for name, parent in self.parents.items()}
+            data = self.fn(**parent_data)
+            self.write_data(data, time, **kwargs)
         else:
             raise ValueError(f'File {self.path(time, **kwargs)} does not exist.')
+        
+        # if there is no template for the dataset, create it from the data
+        if not hasattr(self, 'template') or self.template is None:
+            self.template = self.make_template_from_data(data)
+        else:
+            # otherwise, update the data in the template
+            # (this will make sure there is no errors in the coordinates due to minor rounding)
+            attrs = data.attrs
+            data = self.template.copy(data = data)
+            data.attrs.update(attrs)
+
+        return data
+
+    def set_parents(self, parents:dict[str:IOHandler], fn:Callable):
+        self.parents = parents
+        self.fn = fn
 
     def update(self, in_place = False, **kwargs):
         if in_place:
@@ -95,28 +133,35 @@ class LocalIOHandler(IOHandler):
         
     def write_data(self, data: xr.DataArray,
                    time: Optional[datetime] = None,
-                   time_format: str = '%Y-%m-%d', **kwargs):
+                   time_format: str = '%Y-%m-%d',
+                   tags = {},
+                   **kwargs):
         
         if data is None or data.size == 0:
             output = self.template
         else:
             output = self.template.copy(data = data)
 
-        output_file = self.path(time, **kwargs)
+        output_file = self.path(time, **tags)
 
         # create the directory if it does not exist
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
         # add metadata
-        metadata = {'name': self.name,
-                    'time_produced': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        if time is not None: metadata['time'] = time.strftime(time_format)
-        metadata.update(self.tags)
+        metadata = {}
+        
         metadata.update(kwargs)
         if hasattr(data, 'attrs'):
             metadata.update(data.attrs)
-        output.attrs.update(metadata)
         
+        metadata['time_produced'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if time is not None: metadata['time'] = time.strftime(time_format)
+
+        metadata['name'] = self.name
+        if 'long_name' in metadata:
+            metadata.pop('long_name')
+
+        output.attrs.update(metadata)
         output.name = self.name
 
         # save the data to a geotiff

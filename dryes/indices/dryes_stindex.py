@@ -10,7 +10,7 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange, get_md_dates
 from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 
@@ -33,7 +33,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         'gamma':    ['gamma.a', 'gamma.loc', 'gamma.scale'],
         'normal':   ['normal.loc', 'normal.scale'],
         'pearson3': ['pearson3.skew', 'pearson3.loc', 'pearson3.scale'],
-        'gev':      ['gev.c', 'gev.loc', 'gev.scale']
+        'gev':      ['gev.c', 'gev.loc', 'gev.scale'],
+        'beta':     ['beta.a', 'beta.b'],
     }
 
     # @property
@@ -65,24 +66,25 @@ class DRYESStandardisedIndex(DRYESIndex):
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
-        time, variable, history, par_cases
-        Calculates the parameters for the index.
+        Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        2 outputs are returned:
+        - a dictionary with the following structure:
+            {par: {case1: parcase1, case2: parcase1, ...}}
+            where parcase1 is the parameter par for case1 as a numpy.ndarray.
+        - a dictionary with info about parameter calculations.
         """
 
         history_years = range(history.start.year, history.end.year + 1)
         all_dates  = get_md_dates(history_years, time.month, time.day)
         data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
-        data_ = [variable.get_data(time) for time in data_dates]
+        data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
         data = np.stack(data_, axis = 0)
 
         output = {}
@@ -129,13 +131,31 @@ class DRYESStandardisedIndex(DRYESIndex):
                             output[par] = {i: this_par_data}
                         else:
                             output[par][i] = this_par_data
-        
-        return output
+
+        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
+        par_info = {'reference_dates': data_dates,
+                    'reference_start': history.start.strftime('%Y-%m-%d'),
+                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+
+        if hasattr(data_[0], 'attrs'):
+            data_info = data_[0].attrs
+            if 'agg_type' in data_info:
+                par_info['agg_type'] = data_info['agg_type']
+
+        return output, par_info
     
     # this is run for a single case, making things a lot easier
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-        # load the data for the index
-        data = self._data.get_data(time, **case['tags'])
+    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+        """
+        Calculates the index for the given time and reference period (history).
+        Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
+        """
+
+        # load the data for the index - allow for missing data
+        if self._data.check_data(time, **case['tags']):
+            data = self._data.get_data(time, **case['tags'])
+        else:
+            return self._data.template, {"NOTE": "missing data"}
 
         # load the parameters
         if 'history_start' not in case['tags']:
@@ -155,11 +175,15 @@ class DRYESStandardisedIndex(DRYESIndex):
 
         stindex_data = map_prob_to_normal(probVal)
 
-        stindex = self._index.template.copy(data = stindex_data)
         if hasattr(data, 'attrs'):
-            stindex.attrs = data.attrs
-            
-        return stindex
+            index_info = data.attrs
+        else:
+            index_info = {}
+
+        if hasattr(list(parameters.values())[0], 'attrs'):
+            index_info.update(list(parameters.values())[0].attrs)
+
+        return stindex_data, index_info
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI (Standardised Precipitaion Index)'
@@ -181,10 +205,40 @@ class SPEI(DRYESStandardisedIndex):
     positive_only = False
     default_options = {
         'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
-        'distribution'   : 'gev',
+        'distribution'   : 'pearson3',
         'pval_threshold' : None,
         'min_reference'  : 5,
     }
 
-    #TODO: Should we assume that the input data is precipitation minus evapotranspiration? (and the rest is included in DAM)
-    #      Or should we allow the user to specify two variables, one for precipitation and one for evapotranspiration?
+    def _check_io_options(self, io_options: dict) -> None:
+        # for the SPEI, we need an additional step, we also need to check that we have both P_raw and PET_raw!
+
+        if 'PET_raw' not in io_options and 'PET' not in io_options:
+            raise ValueError('Either PET or PET_raw must be specified.')
+        elif 'P_raw' not in io_options and 'P' not in io_options:
+            raise ValueError('Either P or P_raw must be specified.')
+        
+        self._raw_inputs = {'P': io_options['P_raw'], 'PET': io_options['PET_raw']}
+        template = self._raw_inputs['P'].get_template()
+        for raw_input in self._raw_inputs.values():
+            raw_input.set_template(template)
+
+        if 'data_raw' not in io_options:
+            raise ValueError('data_raw must be specified.')
+        
+        self._raw_data = io_options['data_raw']
+        self._raw_data.set_template(template)
+        self._raw_data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
+
+        super()._check_io_options(io_options)
+
+class SSMI(DRYESStandardisedIndex):
+    index_name = 'SSMI (Standardised Soil Moisture Index)'
+    positive_only = True
+    default_options = {
+        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
+        'distribution'   : 'beta',
+        'pval_threshold' : None,
+        'min_reference'  : 5,
+        'zero_threshold' : 0.0001,
+    }

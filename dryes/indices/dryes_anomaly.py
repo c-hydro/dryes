@@ -10,7 +10,8 @@ from .dryes_index import DRYESIndex
 from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..utils.time import TimeRange, get_md_dates
+#from ..utils.time import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange, get_md_dates
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
@@ -31,23 +32,25 @@ class DRYESAnomaly(DRYESIndex):
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> dict[str:dict[int:xr.DataArray]]:
+                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
         Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:
         {par: [case1, case2, ...]}
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
+        2 outputs are returned:
+        - a dictionary with the following structure:
+            {par: {case1: parcase1, case2: parcase1, ...}}
+            where parcase1 is the parameter par for case1 as a numpy.ndarray.
+        - a dictionary with info about parameter calculations.
         """
         
         history_years = range(history.start.year, history.end.year + 1)
         all_dates  = get_md_dates(history_years, time.month, time.day)
         data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
 
-        data_ = [variable.get_data(time) for time in data_dates]
+        data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
         data = np.stack(data_, axis = 0)
 
         pardata = {}
@@ -78,11 +81,29 @@ class DRYESAnomaly(DRYESIndex):
                 this_par_data = np.where(valid_data >= this_min_reference, pardata[par], np.nan)
                 output[par][case] = this_par_data
         
-        return output
+        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
+        par_info = {'reference_dates': data_dates,
+                    'reference_start': history.start.strftime('%Y-%m-%d'),
+                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+
+        if hasattr(data_[0], 'attrs'):
+            data_info = data_[0].attrs
+            if 'agg_type' in data_info:
+                par_info['agg_type'] = data_info['agg_type']
+
+        return output, par_info
     
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-        # load the data for the index
-        data = self._data.get_data(time, **case['tags'])
+    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+        """
+        Calculates the index for the given time and reference period (history).
+        Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
+        """
+
+        # load the data for the index - allow for missing data
+        if self._data.check_data(time, **case['tags']):
+            data = self._data.get_data(time, **case['tags'])
+        else:
+            return self._data.template, {"NOTE": "missing data"}
 
         # load the parameters
         if 'history_start' not in case['tags']:
@@ -108,6 +129,11 @@ class DRYESAnomaly(DRYESIndex):
             raise ValueError(f"Unknown type {case['options']['type']} for anomaly index.")
         
         if hasattr(data, 'attrs'):
-            anomaly_data.attrs = data.attrs
+            index_info = data.attrs
+        else:
+            index_info = {}
 
-        return anomaly_data
+        if hasattr(list(parameters.values())[0], 'attrs'):
+            index_info.update(list(parameters.values())[0].attrs)
+
+        return anomaly_data, index_info

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..utils.time import TimeRange
+from ..tools.timestepping import TimeRange
 
 from .io_handler import IOHandler
 

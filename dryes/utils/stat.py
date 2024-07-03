@@ -111,8 +111,8 @@ def get_prob(data: np.ndarray, distribution: str,
             prob0 = parameters['prob0']
             probVal = prob0 + ((1 - prob0) * probVal)
 
-        probVal[probVal == 0] = corr_extremes
-        probVal[probVal == 1] = 1 - corr_extremes
+        probVal = np.where(probVal == 0, corr_extremes, probVal)
+        probVal = np.where(probVal == 1, 1 - corr_extremes, probVal)
 
         return probVal
 

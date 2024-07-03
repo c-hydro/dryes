@@ -1,0 +1,39 @@
+name: Generate Changelog
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    name: Add changelog to release
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        
+    - name: Changelog from Conventional Commits
+      id: changelog
+      uses: requarks/changelog-action@v1.10.2
+      with:
+        tag: ${{ github.ref_name }}
+        writeToFile: true
+        includeInvalidCommits: false
+        token:  ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create Release with changelog
+      uses: svenstaro/upload-release-action@v2
+      with:
+        file: CHANGELOG.md
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ github.ref_name }}
+        overwrite: true
+        body: ${{ steps.changelog.outputs.changes }}

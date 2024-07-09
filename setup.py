@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='dryes',
-    version='0.1',
+    version='3.0.1',
     packages=find_packages(),
     description='A package for operational calculation of environmental indices for drought monitoring',
     author='Luca Trotter',

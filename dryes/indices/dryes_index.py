@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Callable, List, Iterable
+from typing import Callable, Iterable
 import numpy as np
 from copy import deepcopy
 import logging
@@ -175,8 +175,8 @@ class DRYESIndex:
             self._index = io_options['index']
             self._index.set_template(template)
 
-    def compute(self, current:   tuple[datetime, datetime],
-                      reference: tuple[datetime, datetime]|Callable[[datetime], tuple[datetime, datetime]],
+    def compute(self, current:   Iterable[datetime],
+                      reference: Iterable[datetime]|Callable[[datetime], Iterable[datetime]],
                       timesteps_per_year: int) -> None:
         
         # turn the current period into a TimeRange object
@@ -316,10 +316,10 @@ class DRYESIndex:
                         variable_out.write_data(postagg_data, time = time, tags = agg_tags, **agg_info)
     
     def make_parameters(self,
-                        history: TimeRange|tuple[datetime, datetime],
+                        history: TimeRange|Iterable[datetime, datetime],
                         timesteps_per_year: int) -> None:
 
-        if isinstance(history, tuple):
+        if isinstance(history, tuple) or isinstance(history, list):
             history = TimeRange(history[0], history[1])
 
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
@@ -406,11 +406,11 @@ class DRYESIndex:
                         if 'time' in metadata: metadata.pop('time')
                         par.write_data(data, time = time, time_format = '%d/%m', tags = tags, **metadata)
 
-    def make_index(self, current:   TimeRange|tuple[datetime, datetime],
-                         reference: TimeRange|tuple[datetime, datetime]|Callable,
+    def make_index(self, current:   TimeRange|Iterable[datetime],
+                         reference: TimeRange|Iterable[datetime]|Callable,
                          timesteps_per_year: int) -> None:
 
-        if isinstance(current, tuple):
+        if isinstance(current, tuple) or isinstance(current, list):
             current = TimeRange(current[0], current[1])
         self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
 
@@ -490,7 +490,7 @@ class DRYESIndex:
                         time: datetime,
                         variable: IOHandler,
                         history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
+                        par_and_cases: dict[str:list[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
         Calculates the parameters for the Anomaly.
         par_and_cases is a dictionary with the following structure:

@@ -64,10 +64,15 @@ def parse_json_options(file):
             data["tags"] = substitute_values(data["tags"], data["tags"])
     else:
         data["tags"] = {}
-    
+
+    index_options, io_options, run_options = parse_dict_options(data)
+    return index_options, io_options, run_options
+
+def parse_dict_options(options:dict):
+
     # start with the index options
-    index_options = data['index_options']
-    index_options = substitute_values(index_options, data["tags"])
+    index_options = options['index_options']
+    index_options = substitute_values(index_options, options["tags"])
     if 'agg_fn' in index_options:
         if 'type' in index_options['agg_fn']:
             index_options['agg_fn'] = create_obj_from_dict(index_options['agg_fn'], 'agg')
@@ -82,14 +87,14 @@ def parse_json_options(file):
                 index_options['post_fn'][key] = create_obj_from_dict(value, 'pp')
     
     # then the io options
-    io_options = data['io_options']
-    io_options = substitute_values(io_options, data["tags"])
+    io_options = options['io_options']
+    io_options = substitute_values(io_options, options["tags"])
     for key, value in io_options.items():
         value["type"] = value["type"].capitalize() + "IOHandler"
         io_options[key] = create_obj_from_dict(value, '')
 
     # then the run options
-    run_options = data['run_options']
+    run_options = options['run_options']
     history_start = run_options.pop('history_start')
     history_end   = run_options.pop('history_end')
     run_options.update({'reference': (history_start, history_end)})

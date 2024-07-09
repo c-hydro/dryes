@@ -46,7 +46,7 @@ class LocalIOHandler(IOHandler):
     
     def _get_times(self, time_range: TimeRange, **kwargs) -> Generator[datetime, None, None]:
         for timestep in time_range.gen_timesteps_from_tsnumber(365):
-            time = timestep.end
+            time = timestep.start 
             if self.check_data(time, **kwargs):
                 yield time
             elif hasattr(self, 'parents') and self.parents is not None:

@@ -316,7 +316,7 @@ class DRYESIndex:
                         variable_out.write_data(postagg_data, time = time, tags = agg_tags, **agg_info)
     
     def make_parameters(self,
-                        history: TimeRange|Iterable[datetime, datetime],
+                        history: TimeRange|Iterable[datetime],
                         timesteps_per_year: int) -> None:
 
         if isinstance(history, tuple) or isinstance(history, list):

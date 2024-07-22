@@ -201,3 +201,27 @@ def options_to_cases(options):
         opt_cases.append(this_case)
 
     return opt_cases
+
+# def permutate_cases(*cases):
+#     permutated = cases[0]
+#     if len(cases) == 1: return permutated
+
+#     for i in range(1, len(cases)):
+#         these_cases = cases[i]
+#         for j in range(len(permutated)):
+#             for this_case in these_cases:
+#                 new_case = copy.deepcopy(permutated[j])
+
+#                 if 'options' not in new_case: new_case['options'] = {}
+#                 new_case['options'].update(this_case['options'])
+
+#                 if 'tags' not in new_case: new_case['tags'] = {}
+#                 new_case['tags'].update(this_case['tags'])
+
+#                 new_case['name'] = new_case['name'] + ',' + this_case['name']
+#                 if new_case['name'].endswith(','): new_case['name'] = new_case['name'][:-1]
+#                 if new_case['name'].startswith(','): new_case['name'] = new_case['name'][1:]
+
+#                 permutated[j] = new_case
+    
+#     return permutated

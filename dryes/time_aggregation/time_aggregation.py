@@ -2,10 +2,11 @@ import xarray as xr
 from typing import Optional, Callable
 from datetime import datetime
 
-from ..io import IOHandler
+from ..tools.data import Dataset
+from ..tools.timestepping.timestep import TimeStep
 
-AggFunction = Callable[[IOHandler, datetime,], xr.Dataset]
-PostAggFunction = Callable[[list[xr.DataArray], IOHandler], list[xr.DataArray]]
+AggFunction = Callable[[Dataset, datetime,], xr.Dataset]
+PostAggFunction = Callable[[list[xr.DataArray], Dataset], list[xr.DataArray]]
 
 class TimeAggregation:
     def __init__(self, #timesteps_per_year: int,
@@ -16,9 +17,10 @@ class TimeAggregation:
         else:
             self.aggfun = {}
         self.postaggfun = {}
+        self.tags = {}
 
-    def add_aggregation(self, name:str,\
-                        function: AggFunction,\
+    def add_aggregation(self, name:str,
+                        function: AggFunction,
                         post_function: Optional[PostAggFunction] = None) -> 'TimeAggregation':
         """
         Adds an aggregation (and possibly a post_aggregation) function to the TimeAggregation object.
@@ -29,3 +31,39 @@ class TimeAggregation:
         if post_function is not None:
             self.postaggfun[name] = post_function
         return self
+    
+    def aggregate_data(self, timesteps_to_compute: dict[str:list[TimeStep]], variable_in: Dataset, variable_out: Dataset) -> None:
+                       
+        """
+        Aggregates the input data in variable_in and writes the output in variable_out.
+        The aggregation is performed according to the aggregation functions in self.aggfun and self.postaggfun.
+
+        The timesteps to compute are passed as a dictionary of lists of TimeStep objects, where the keys are the names of the aggregations to perform.
+        """
+
+        # put all the timesteps in the same list, this is what we have to iterate over
+        timesteps_to_iterate = []
+        for agg_ts in timesteps_to_compute.values():
+            timesteps_to_iterate += [ts for ts in agg_ts if ts not in timesteps_to_iterate]
+    
+        timesteps_to_iterate.sort()
+
+        if len(timesteps_to_iterate) == 0:
+            return
+
+        for this_ts in timesteps_to_iterate:
+            for agg_name, agg_fn in self.aggfun.items():
+                if this_ts in timesteps_to_compute[agg_name]:
+                    time_varin = variable_in.get_time_signature(this_ts)
+                    agg_data, agg_info = agg_fn(variable_in, time_varin)
+                    if agg_name not in self.postaggfun.keys():
+                        variable_out.write_data(agg_data, time = this_ts, metadata = agg_info, agg_fn = agg_name)
+                    else:
+                        time_varout = variable_out.get_time_signature(this_ts)
+                        postagg_data, postagg_info = self.postaggfun[agg_name](agg_data, variable_out, time_varout)
+                        for key in postagg_info:
+                            if key in agg_info:
+                                agg_info[key] += f'; {postagg_info[key]}'
+                            else:
+                                agg_info[key] = postagg_info[key]
+                        variable_out.write_data(postagg_data, time = this_ts, metadata = agg_info, agg_fn = agg_name)

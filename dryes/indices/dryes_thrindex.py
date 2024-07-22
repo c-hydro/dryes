@@ -5,15 +5,15 @@ import warnings
 import glob
 import os
 
-from typing import Optional, Generator
+from typing import Optional, Generator, Iterable
 
 from .dryes_index import DRYESIndex
 
-from ..io import IOHandler
-
-#from ..utils.time import TimeRange, create_timesteps
 from ..tools.timestepping import TimeRange
 from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from ..tools.timestepping.timestep import TimeStep
+
+from ..tools.data import Dataset
 from ..utils.parse import make_case_hierarchy
 
 class DRYESThrBasedIndex(DRYESIndex):
@@ -64,8 +64,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         self.parameters = parameters_all
 
     def calc_parameters(self,
-                        time: datetime,
-                        variable: IOHandler,
+                        time: TimeStep,
+                        variable: Dataset,
                         history: TimeRange,
                         par_and_cases: dict[str:list[int]]) -> dict[str:dict[int:np.ndarray]]:
         """
@@ -79,8 +79,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
 
-        history_years = range(history.start.year, history.end.year + 1)
-        dates  = [datetime(year, time.month, time.day) for year in history_years]
+        # get the dates for the reference period
+        data_timesteps = time.get_history_timesteps(history)
 
         #input_path = in_path
         output = {'threshold': {}} # this is the output dictionary
@@ -97,19 +97,19 @@ class DRYESThrBasedIndex(DRYESIndex):
         for window, cases in window_cases.items():
             halfwindow = np.floor(window/2)
             # get all dates within the window of this month and day in the reference period
-            data_dates = []
-            for date in dates:
-                this_date = date - timedelta(days = halfwindow)
-                while this_date <= date + timedelta(days = halfwindow):
-                    if this_date >= history.start and this_date <= history.end:
-                        data_dates.append(this_date)
-                    this_date += timedelta(days = 1)
+            all_data_timesteps = []
+            for timestep in data_timesteps:
+                this_ts = timestep - halfwindow
+                while this_ts <= timestep + halfwindow:
+                    if this_ts.start >= history.start and this_ts.end <= history.end:
+                        all_data_timesteps.append(this_ts)
+                    this_ts += 1
             
             # if there are no dates, skip
-            if len(data_dates) == 0: continue
+            if len(all_data_timesteps) == 0: continue
             
             # get the data for these dates
-            data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
+            data_ = [variable.get_data(ts) for ts in all_data_timesteps if variable.check_data(ts)]
             data = np.stack(data_, axis = 0)
 
             # calculate the thresholds for each case that has this window size
@@ -119,6 +119,8 @@ class DRYESThrBasedIndex(DRYESIndex):
                 # save the threshold
                 output['threshold'][case] = threshold_data
 
+        # get the metadata
+        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
         data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
         par_info = {'reference_dates': data_dates,
                     'reference_start': history.start.strftime('%Y-%m-%d'),
@@ -134,7 +136,7 @@ class DRYESThrBasedIndex(DRYESIndex):
     def make_ddi(self,
                  time_range: Optional[TimeRange], 
                  timesteps_per_year: int,
-                 thresholds: dict[int:IOHandler],
+                 thresholds: dict[int:Dataset],
                  cases: dict[int:list[dict]],
                  keep_historical = False) -> dict:
 
@@ -153,25 +155,24 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         timesteps:list[FixedNTimeStep] = time_range.get_timesteps_from_tsnumber(timesteps_per_year)
         ts_ends = [ts.end for ts in timesteps]
-        #create_timesteps(time_range.start, time_range.end, timesteps_per_year)
 
-        # get all the deviations for the history period
-        #input_path = self.output_paths['data']
+        # get all the (daily) deviations for the history period
         input = self._data
-        #test_period = TimeRange(history.start, history.start + timedelta(days = 365))
-        all_deviations = get_deviations(input, thresholds, time_range, self.direction)
+        days = time_range.get_timesteps_from_tsnumber(365)
+        all_deviations = get_deviations(input, thresholds, days, self.direction)
 
         # set the starting conditions for each case we need to calculate
-        start_ddi  = np.full((3,*input.template.shape), np.nan)
+        start_ddi  = np.full((3,*input.get_template().shape), np.nan)
         ddi_dict = {k:{v['id']:start_ddi.copy() for v in v} for k,v in cases.items()}
 
         # set the cumulative deficit/surplus, we only need the average deficit to
         # calculate the lambda for the LFI, so we keep track of the cumulative drought
         # and the number of droughts
-        cum_deviation_raw = np.zeros((2, *input.template.shape))
+        cum_deviation_raw = np.zeros((2, *input.get_template().shape))
         cum_deviation_dict = {k:{v['id']:cum_deviation_raw.copy() for v in v} for k,v in cases.items()}
 
-        for time, deviation_dict in all_deviations:
+        i = 0
+        for timestep, deviation_dict in all_deviations:
             for thrcase, deviation in deviation_dict.items():
                 for case in cases[thrcase]:
                     cid = case['id']
@@ -184,20 +185,21 @@ class DRYESThrBasedIndex(DRYESIndex):
                     # update the ddi and cumulative drought
                     ddi_dict[thrcase][cid] = ddi
                     cum_deviation_dict[thrcase][cid] += cum_deviation
-                    if time in ts_ends:
+                    if timestep.end >= ts_ends[i]:
                         # save the current ddi
                         tags = cases[thrcase][cid]['tags']
                         tags.update(thresholds[thrcase].tags)
                         metadata = cases[thrcase][cid]['options']
-                        self.save_ddi(ddi, time, tags, **metadata)
+                        self.save_ddi(ddi, timesteps[i], metadata = metadata, **tags)
+                        i += 1
 
         if keep_historical:
             return cum_deviation_dict
 
     def update_ddi(self,
-                   ddi_start: np.ndarray,
-                   ddi_time: datetime,
-                   time: datetime,
+                   ddi_start: Optional[np.ndarray],
+                   ddi_time: TimeStep,
+                   time: TimeStep,
                    case: dict,
                    history: TimeRange) -> np.ndarray:
         
@@ -214,13 +216,16 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         # get the deviations from the last available DDI to the current time
         input = self._data
-        all_deviations = get_deviations(input, {0:threshold}, TimeRange(ddi_time, time), self.direction)
+        start = (ddi_time + 1).start
+        end = time.end
+        missing_days = TimeRange(start, end).get_timesteps_from_tsnumber(365)
+        all_deviations = get_deviations(input, {0:threshold}, missing_days, self.direction)
 
         # get the options
         options = case['options']
 
         if ddi_start is None:
-            ddi_start = np.full((3, *input.template.shape), np.nan)
+            ddi_start = np.full((3, *input.get_template().shape), np.nan)
         
         # pool the deficit
         ddi = ddi_start
@@ -230,7 +235,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         return ddi
 
-    def get_ddi(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+    def get_ddi(self, time: TimeStep,  history: TimeRange, case: dict) -> xr.DataArray:
         
         tags = case['tags']
         tags.update({'history_start': history.start, 'history_end': history.end})
@@ -247,19 +252,19 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         if ddi is None:
             # calculate the current deviation
-            ddi = self.update_ddi(ddi_start, ddi_time, time - timedelta(1), case, history)
+            ddi = self.update_ddi(ddi_start, ddi_time, time, case, history)
 
         # save the ddi for the next timestep
-        self.save_ddi(ddi, time, tags)
+        self.save_ddi(ddi, time, metadata = case['options'], **tags)
 
         return ddi
 
-    def save_ddi(self, ddi: np.ndarray, time: datetime, tags, **kwargs) -> None:
+    def save_ddi(self, ddi: np.ndarray, time: TimeStep, metadata:dict = {}, **kwargs) -> None:
         # now let's save the ddi at the end of the history period
         for i in range(3):
             data = ddi[i]
-            output = self._parameters[self.ddi_names[i]].update(**tags)
-            output.write_data(data, time, tags = tags, **kwargs)
+            output = self._parameters[self.ddi_names[i]].update(**kwargs)
+            output.write_data(data, time, metadata = metadata, **kwargs)
 
 class LFI(DRYESThrBasedIndex):
     name = 'LFI (Low Flow Index)'
@@ -278,7 +283,11 @@ class LFI(DRYESThrBasedIndex):
         self.parameters = ['threshold', 'lambda'] + self.ddi_names
         super().__init__(*args, **kwargs)
     
-    def make_parameters(self, history: TimeRange, timesteps_per_year: int):
+    def make_parameters(self, history: TimeRange|Iterable[datetime], timesteps_per_year: int):
+
+        if isinstance(history, tuple) or isinstance(history, list):
+            history = TimeRange(history[0], history[1])
+
         # the thresholds are calculated from the superclass
         super().make_parameters(history, 365)
 
@@ -309,7 +318,7 @@ class LFI(DRYESThrBasedIndex):
                     n+=1
 
         all_cases = sum(len(v) for v in lam_cases)
-        self.log(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
+        self.log.info(f'  - lambda: {all_cases-n}/{all_cases} with lambda alredy computed')
         if n == 0: return
 
         # Now do the DDI calculation, this will be useful for lambda later
@@ -334,7 +343,7 @@ class LFI(DRYESThrBasedIndex):
                     lambda_data = 1/mean_deficit
                 
                 metadata = lamcase['options']
-                parlambda.write_data(lambda_data, tags = lamcase['tags'], **metadata)
+                parlambda.write_data(lambda_data, metadata = metadata, **lamcase['tags'])
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
         # take the current ddi from the superclass
@@ -398,30 +407,30 @@ class CWI(DRYESThrBasedIndex):
         duration = ddi[1]
         return duration, case['options']
 
-def get_deviations(streamflow: IOHandler,
-                   threshold: dict[int:IOHandler],
-                   time_range:TimeRange,
-                   direction: int) -> Generator[tuple[datetime, dict[int:np.ndarray]],
+def get_deviations(streamflow: Dataset,
+                   threshold: dict[int:Dataset],
+                   timesteps: list[TimeStep],
+                   direction: int) -> Generator[tuple[TimeStep, dict[int:np.ndarray]],
                                                 None, None]:
     """
-    This function will calculate the deviations for the given time_range.
+    This function will calculate the deviations for the given timesteps.
     thresholds allows to specify different thresholds for different cases.
     thresholds = {case1: threshold1}
     direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
     the output is a generator that yields the time and the deviations for each case
     the deviations are a dictionary with the same keys as the thresholds
     """
-    for time in time_range:
-        if (time.month, time.day) == (2,29): continue
-        data = streamflow.get_data(time)
-        thresholds = {case: th.get_data(time) for case, th in threshold.items()}
+
+    for ts in timesteps:
+        data = streamflow.get_data(ts)
+        thresholds = {case: th.get_data(ts) for case, th in threshold.items()}
         deviation = {}
         for case, thr in thresholds.items():
             this_deviation = (data.values - thr.values) * direction
             this_deviation[this_deviation < 0] = 0
             deviation[case] = this_deviation#np.squeeze(this_deficit)
 
-        yield time, deviation
+        yield ts, deviation
 
 def pool_deviation(deviation: np.ndarray,
                    options: dict[str, float],
@@ -515,34 +524,16 @@ def pool_deviation_singlepixel(deviation: float,
     final_conditions = np.array([current_deviation, duration, interval])
     return final_conditions, cum_spell
 
-def get_recent_ddi(time, ddi):
+def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset]) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
     """
     returns the most recent ddi for the given time
     """
-    ddi_times = {}
-    for var in ddi:
-        this_ddi_path = var.path()
-        this_ddi_path_glob = this_ddi_path.replace('%Y', '*').\
-                                           replace('%m', '*').\
-                                           replace('%d', '*')
-        all_ddi_paths = glob.glob(this_ddi_path_glob)
-        times = []
-        for path in all_ddi_paths:
-            this_time = datetime.strptime(os.path.basename(path), os.path.basename(this_ddi_path))
-            times.append(this_time)
-        
-        #times = [datetime.strptime(os.path.basename(path), this_ddi_path) for path in all_ddi_paths]
-        ddi_times[var.name] = set(times)
-    
-    # get the timesteps common to all ddi variables
-    common_times = set.intersection(*ddi_times.values())
-    common_times_before_time = {t for t in common_times if t <= time}
-    if common_times_before_time == set(): return None, None
 
-    # get the most recent timestep
-    recent_time = max(common_times_before_time)
-    deviation, duration, interval = [var.get_data(recent_time) for var in ddi]
+    while not all([var.find_times([time]) for var in ddi]):
+        time -= 1
+        if time.start < ddi[0].start: return None, None
 
+    deviation, duration, interval = [var.get_data(time) for var in ddi]
     ddi = np.stack([deviation, duration, interval], axis = 0)
 
-    return recent_time, ddi
+    return time, ddi

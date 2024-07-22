@@ -5,7 +5,6 @@ from datetime import datetime
 
 from ..utils.parse import substitute_values
 
-from ..io import *
 from ..time_aggregation import aggregation_functions as agg
 from ..post_processing import pp_functions as pp
 

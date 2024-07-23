@@ -3,7 +3,7 @@ import argparse
 import os
 from datetime import datetime
 
-from ..utils.parse import substitute_values
+from ..tools.config.parse import substitute_values
 
 from ..time_aggregation import aggregation_functions as agg
 from ..post_processing import pp_functions as pp

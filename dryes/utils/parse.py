@@ -2,6 +2,10 @@ from datetime import datetime
 import itertools
 import copy
 
+from deprecated import deprecated
+
+
+@deprecated(reason="Use dryes.tools.config.parse.substitute_values instead")
 def substitute_values(structure, tag_dict, rec = False):
     """
     replace the {tags} in the structure with the values in the tag_dict
@@ -17,7 +21,8 @@ def substitute_values(structure, tag_dict, rec = False):
         return substitute_string(structure, tag_dict, rec)
     else:
         return structure
-    
+
+@deprecated(reason="Use dryes.tools.parse.substitute_string instead")
 def substitute_string(string, tag_dict, rec = False):
     """
     replace the {tags} in the string with the values in the tag_dict

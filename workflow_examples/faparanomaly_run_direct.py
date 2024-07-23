@@ -34,11 +34,14 @@ def main():
                         file = 'std{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
 
             # outputs
-            'index': Local(name = 'FAPAR Anomaly', time_signature = 'end+1',
-                        path = OUTPUT, file = 'FAPARAnomaly{agg_fn}{post_fn}_%Y%m%d000000.tif')}
+            'index': Local(name = 'FAPAR Anomaly', path = OUTPUT,
+                           time_signature = 'end+1',
+                           file = 'FAPARAnomaly{agg_fn}{post_fn}_%Y%m%d000000.tif',
+                           thumbnail = {'colors' :'/home/luca/Documents/viz/FAPAR.txt', 'size': 0.5, 'dpi': 150,
+                                        'overlay':'/home/luca/Downloads/Limiti01012024_g/Reg01012024_g/Reg01012024_g_WGS84.shp'})}
 )
 
-    current   = (datetime(2024,1,1), datetime(2024,4,30))
+    current   = (datetime(2024,1,1), datetime(2024,1,31))
     reference = (datetime(2012,1,1), datetime(2020,1,31))
     timesteps_per_year = 36
 

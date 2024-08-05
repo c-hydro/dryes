@@ -27,8 +27,8 @@ setup(
         'scipy>=1.8.0',
         'xarray>=2023.9.0',
         'deprecated>=1.2.12',
-        'matplotlib>=3.9.1',
-        'geopandas>=1.0.1',
+        'matplotlib>=3.8.4',
+        'geopandas',
     ],
     python_requires='>=3.10',
     test_suite='tests'

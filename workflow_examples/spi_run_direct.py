@@ -4,17 +4,16 @@ from dryes.time_aggregation import aggregation_functions as agg
 from dryes.post_processing import pp_functions as pp
 from dryes.indices import SPI
 
-from dryes.io import LocalIOHandler as Local
+from dryes.tools.data import LocalDataset as Local
 
 def main():
 
-    HOME = '/home/luca/Documents/CIMA_code/tests/SPI/Italia'
-    INPUT = f'{HOME}/data/%Y/%m/'
+    HOME = '/home/luca/Documents/CIMA_code/tests/SPI_test'
+    INPUT = f'{HOME}/1d/%Y/%m'
 
-    ARCHIVE = f'{HOME}/archive'
-    AGGDATA = f'{ARCHIVE}/data/%Y/%m/%d/'
-    PARAMS  = ARCHIVE + '/parameters/{history_start:%Y%m%d}-{history_end:%Y%m%d}'
-    OUTPUT = f'{ARCHIVE}/maps/%Y/%m/%d/'
+    AGGDATA = HOME + '/{agg_fn}m/%Y/%m/%d/'
+    PARAMS  = HOME + '/parameters/{history_start:%Y%m%d}-{history_end:%Y%m%d}'
+    OUTPUT = f'{HOME}/maps/%Y/%m/%d/'
 
     spi_mcm_ita = SPI(
         index_options = {
@@ -30,17 +29,17 @@ def main():
             },
         io_options = {
             'data_raw': Local(name = 'precipitation', path = INPUT,
-                            file = 'PrecipMCM_nonnegative_%Y%m%d.tif'), 
+                            file = 'volta_final_CHIRPS_%Y%m%d.tif'), 
             'data':     Local(name = 'precipitation (aggregated)', path = AGGDATA,
-                            file = 'PrecipMCM{agg_fn}Months_%Y%m%d.tif'),
+                            file = 'volta_final_CHIRPS_{agg_fn}_%Y%m%d.tif'),
 
             # parameters
             'gamma.a':       Local(name = 'gamma.a (SPI)',     path = PARAMS,
-                                file = 'gamma/a/aAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+                                   file = 'gamma/a/aAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             'gamma.loc':     Local(name = 'gamma.loc (SPI)',   path = PARAMS,
-                                file = 'gamma/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+                                   file = 'gamma/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             'gamma.scale':   Local(name = 'gamma.scale (SPI)', path = PARAMS,
-                                file = 'gamma/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+                                   file = 'gamma/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             # 'normal.loc':    Local(name = 'normal.loc (SPI)',   path = PARAMS,
             #                     file = 'normal/loc/locAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             # 'normal.scale':  Local(name = 'normal.scale (SPI)', path = PARAMS,
@@ -52,14 +51,14 @@ def main():
             # 'pearson3.scale':Local(name = 'pearson3gamma.scale (SPI)', path = PARAMS,
             #                     file = 'pearson3/scale/scaleAgg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             'prob0':         Local(name = 'prob_0 (SPI)',      path = PARAMS,
-                                file = 'prob0/prob0Agg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
+                                   file = 'prob0/prob0Agg{agg_fn}_{history_start:%Y%m%d}-{history_end:%Y%m%d}_%m%d.tif'),
             
             # outputs
-            'log'  : Local(name = 'log SPI', path = HOME, file =  'log.txt'),
             'index': Local(name = 'Standardised Precipitation Index (SPI)', 
-                        path = OUTPUT, file = 'SPI{agg_fn}_%Y%m%d000000.tif')}
+                           path = OUTPUT, file = 'SPI{agg_fn}_%Y%m%d000000.tif',
+                           time_signature = 'end+1')}
     )
-
+    
     current   = (datetime(2020,1,1), datetime(2020,12,31))
     reference = (datetime(2010,1,1), datetime(2019,12,31))
     timesteps_per_year = 36

@@ -7,10 +7,11 @@ from typing import List
 
 from .dryes_index import DRYESIndex
 
-from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-from ..tools.timestepping import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange
+from ..tools.timestepping.timestep import TimeStep
+from ..tools.data import Dataset
 from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 
@@ -63,8 +64,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         return parameters
 
     def calc_parameters(self,
-                        time: datetime,
-                        variable: IOHandler,
+                        time: TimeStep,
+                        variable: Dataset,
                         history: TimeRange,
                         par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
@@ -80,11 +81,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         - a dictionary with info about parameter calculations.
         """
 
-        history_years = range(history.start.year, history.end.year + 1)
-        all_dates  = get_md_dates(history_years, time.month, time.day)
-        data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
-
-        data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
+        data_timesteps = time.get_history_timesteps(history)
+        data_ = [variable.get_data(time) for time in data_timesteps if variable.check_data(time)]
         data = np.stack(data_, axis = 0)
 
         output = {}
@@ -132,6 +130,8 @@ class DRYESStandardisedIndex(DRYESIndex):
                         else:
                             output[par][i] = this_par_data
 
+        # get the metadata
+        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
         data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
         par_info = {'reference_dates': data_dates,
                     'reference_start': history.start.strftime('%Y-%m-%d'),
@@ -145,7 +145,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         return output, par_info
     
     # this is run for a single case, making things a lot easier
-    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+    def calc_index(self, time:TimeStep,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
         """
         Calculates the index for the given time and reference period (history).
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
@@ -167,8 +167,8 @@ class DRYESStandardisedIndex(DRYESIndex):
         pars_to_get  = self.distr_par[distribution].copy()
         if 'prob0' in self._parameters:
             pars_to_get += ['prob0']
-        par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
-        parameters = {par: p.get_data(par_time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
+        #par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
+        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
 
         # calculate the index
         probVal = get_prob(data, distribution, parameters)

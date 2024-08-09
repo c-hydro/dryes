@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 import numpy as np
 from copy import deepcopy
 import logging
@@ -10,14 +10,15 @@ from ..time_aggregation.time_aggregation import TimeAggregation
 from ..utils.parse import options_to_cases
 from ..tools.timestepping import TimeRange
 from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from ..tools.timestepping.timestep import TimeStep
 from ..tools.data import Dataset
 
 class DRYESIndex:
     index_name = 'dryes_index'
 
     def __init__(self,
-                 index_options: dict,
-                 io_options: dict) -> None:
+                 io_options: dict,
+                 index_options: dict = {}) -> None:
         
         # set the logging
         index_name = self.index_name
@@ -130,8 +131,13 @@ class DRYESIndex:
         self.cases = {'agg': agg_cases, 'opt': opt_cases, 'post': post_cases}
 
     def _check_io_options(self, io_options: dict, update_existing = False) -> None:
-
         # check that we have all the necessary options
+        self._check_io_data(io_options, update_existing)
+        self._check_io_parameters(io_options, update_existing)
+        self._check_io_index(io_options, update_existing)
+
+    def _check_io_data(self, io_options: dict, update_existing = False) -> None:
+        
         # for most indices, we need 'data' (for aggregated input data) and 'data_raw' (for raw input data)
         # if we don't have 'data_raw', we check if the data needs to be aggregated, if not we can use 'data'
         has_agg = len(self.cases['agg']) > 0
@@ -149,7 +155,7 @@ class DRYESIndex:
 
         if not hasattr(self, '_raw_data') or update_existing:
             self._raw_data = io_options['data_raw']
-            template = self._raw_data.get_template()
+            template = self._raw_data.get_template(**self.cases['opt'][0]['tags'])
         else:
             template = self._raw_data.template
 
@@ -157,6 +163,9 @@ class DRYESIndex:
             self._data = io_options['data']
             self._data.set_template(template)
 
+        self.output_template = template
+
+    def _check_io_parameters(self, io_options: dict, update_existing = False) -> None:
         if not hasattr(self, '_parameters') or update_existing:
             # check that we have output specifications for all the parameters in self.parameters
             self._parameters = {}
@@ -164,14 +173,15 @@ class DRYESIndex:
                 if par not in io_options:
                     raise ValueError(f'No output path for parameter {par}.')
                 self._parameters[par] = io_options[par]
-                self._parameters[par].set_template(template)
+                self._parameters[par].set_template(self.output_template)
 
+    def _check_io_index(self, io_options: dict, update_existing = False) -> None:
         if not hasattr(self, '_index') or update_existing:
             # check that we have an output specification for the index
             if 'index' not in io_options:
                 raise ValueError('No output path for index.')
             self._index = io_options['index']
-            self._index.set_template(template)
+            self._index.set_template(self.output_template)
 
     def compute(self, current:   Iterable[datetime],
                       reference: Iterable[datetime]|Callable[[datetime], Iterable[datetime]],
@@ -340,6 +350,7 @@ class DRYESIndex:
             # if nothing needs to be calculated, skip
             if len(timesteps_to_do) == 0: return
             self.log.info(f'  -Iterating through {len(timesteps_to_do)} timesteps with missing parameters.')
+
             for time, par_cases in timesteps_to_do.items():
                 self.log.info(f'   {time}')
 
@@ -349,7 +360,7 @@ class DRYESIndex:
                     par = parameters[parname]
                     for case, data in pars_data[parname].items():
                         tags = self.cases['opt'][case]['tags']
-                        metadata = self.cases['opt'][case]['options']
+                        metadata = deepcopy(self.cases['opt'][case]['options'])
                         metadata.update(pars_info)
                         if 'time' in metadata: metadata.pop('time')
                         par.write_data(data, time = time, time_format = '%d/%m', metadata = metadata, **tags)
@@ -431,7 +442,7 @@ class DRYESIndex:
                         self._index.write_data(ppindex_data, time = time, metadata = metadata, **case['tags'])
 
     def calc_parameters(self,
-                        time: datetime,
+                        time: TimeStep,
                         variable: Dataset,
                         history: TimeRange,
                         par_and_cases: dict[str:list[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
@@ -449,7 +460,7 @@ class DRYESIndex:
         """
         raise NotImplementedError
     
-    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+    def calc_index(self, time: TimeStep,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
         """
         Calculates the index for the given time and reference period.
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.

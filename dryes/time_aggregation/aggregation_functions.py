@@ -21,7 +21,7 @@ def average_of_window(size: int, unit: str,
         """
         window = get_window(time, _size, _unit)
 
-        if window.start < variable.start:
+        if window.start < variable.get_start():
             return None, {}
 
         #variable.make(window)
@@ -98,7 +98,7 @@ def sum_of_window(size: int, unit: str,
         Aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.
         """
         window = get_window(time, _size, _unit)
-        if window.start < variable.start:
+        if window.start < variable.get_start():
             return None, {}
         
         #variable.make(window)

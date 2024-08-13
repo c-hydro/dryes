@@ -56,7 +56,7 @@ class DRYESCombinedIndicator(DRYESIndex):
                    time: FixedNTimeStep,
                    case: dict) -> tuple:
         
-        input_data, previous_data, _ = self.algorithm()
+        input_data, previous_data, output_data = self.algorithm()
         input_keys = list(k for k in input_data)
         previous_keys = list(k for k in previous_data)
 
@@ -64,10 +64,14 @@ class DRYESCombinedIndicator(DRYESIndex):
         this_previous_data = {k:self._parameters[k].get_data(time-1, **case['tags']) for k in previous_keys}
 
         this_output_data = self.algorithm(this_input_data, this_previous_data)
-        self.save_output_data(this_output_data, time, case['options'], **case['tags'])
+        self.save_output_data(this_output_data, time, case['options'], **case['options'])
 
-        return this_output_data['cdi'], {}
+        index_name = output_data[0]
+        index_data = this_output_data[index_name]
+        index_info = case['options']
 
+        return index_data, index_info
+    
     def save_output_data(self,
                          data: dict,
                          time: FixedNTimeStep,

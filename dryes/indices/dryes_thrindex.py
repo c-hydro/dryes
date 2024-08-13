@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import warnings
-import glob
-import os
 
 from typing import Optional, Generator, Iterable
 
@@ -14,7 +12,7 @@ from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
 from ..tools.timestepping.timestep import TimeStep
 
 from ..tools.data import Dataset
-from ..utils.parse import make_case_hierarchy
+from ..utils.parse import make_case_hierarchy, options_to_cases
 
 class DRYESThrBasedIndex(DRYESIndex):
     """
@@ -41,16 +39,6 @@ class DRYESThrBasedIndex(DRYESIndex):
         # must be implemented in the subclass
         raise NotImplementedError
     
-    @property
-    def ddi_names(self):
-        # this is the name of the ddi variables, depends on the direction
-        if self.direction < 0:
-            return ['deficit', 'duration', 'interval']
-        elif self.direction > 0:
-            return ['surplus', 'duration', 'interval']
-        else:
-            raise ValueError('The direction must be either -1 or 1')
-    
     def __init__(self, *args, **kwargs):
         if not hasattr(self, 'parameters'): 
             self.parameters = ['threshold'] + self.ddi_names
@@ -75,7 +63,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
 
         The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase1, ...}}
+        {par: {case1: parcase1, case2: parcase2, ...}}
         where parcase1 is the parameter par for case1 as a xarray.DataArray.
         """
 
@@ -101,8 +89,8 @@ class DRYESThrBasedIndex(DRYESIndex):
             for timestep in data_timesteps:
                 this_ts = timestep - halfwindow
                 while this_ts <= timestep + halfwindow:
-                    if this_ts.start >= history.start and this_ts.end <= history.end:
-                        all_data_timesteps.append(this_ts)
+                    #if this_ts.start >= history.start and this_ts.end <= history.end:
+                    all_data_timesteps.append(this_ts)
                     this_ts += 1
             
             # if there are no dates, skip
@@ -158,8 +146,8 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         # get all the (daily) deviations for the history period
         input = self._data
-        days = time_range.get_timesteps_from_tsnumber(365)
-        all_deviations = get_deviations(input, thresholds, days, self.direction)
+        days = time_range.days
+        all_deviations = self.get_deviations(input, thresholds, days)
 
         # set the starting conditions for each case we need to calculate
         start_ddi  = np.full((3,*input.get_template().shape), np.nan)
@@ -218,8 +206,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         input = self._data
         start = (ddi_time + 1).start
         end = time.end
-        missing_days = TimeRange(start, end).get_timesteps_from_tsnumber(365)
-        all_deviations = get_deviations(input, {0:threshold}, missing_days, self.direction)
+        missing_days = TimeRange(start, end).days
+        all_deviations = self.get_deviations(input, {0:threshold}, missing_days)
 
         # get the options
         options = case['options']
@@ -236,23 +224,24 @@ class DRYESThrBasedIndex(DRYESIndex):
         return ddi
 
     def get_ddi(self, time: TimeStep,  history: TimeRange, case: dict) -> xr.DataArray:
-        
+
         tags = case['tags']
         tags.update({'history_start': history.start, 'history_end': history.end})
 
-        ddi = [self._parameters[par].update(**tags) for par in self.parameters if par in self.ddi_names]
-        ddi_time, ddi_start = get_recent_ddi(time, ddi)
+        ddi_vars = [self._parameters[par].update(**tags) for par in self.parameters if par in self.ddi_names]
+        ddi_ts, ddi_start = get_recent_ddi(time, ddi_vars)
         # if there is no ddi, we need to calculate it from scratch,
         # otherwise we can just use the most recent one and update from there
         ddi = None
-        if ddi_time == time:
+        if ddi_ts is None:
+            ddi_date = history.start - timedelta(days = 1)
+            ddi_ts = type(time).from_date(ddi_date)
+        elif ddi_ts == time:
             ddi = ddi_start
-        elif ddi_time is None:
-            ddi_time = history.start
 
         if ddi is None:
             # calculate the current deviation
-            ddi = self.update_ddi(ddi_start, ddi_time, time, case, history)
+            ddi = self.update_ddi(ddi_start, ddi_ts, time, case, history)
 
         # save the ddi for the next timestep
         self.save_ddi(ddi, time, metadata = case['options'], **tags)
@@ -261,10 +250,34 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     def save_ddi(self, ddi: np.ndarray, time: TimeStep, metadata:dict = {}, **kwargs) -> None:
         # now let's save the ddi at the end of the history period
-        for i in range(3):
+        for i in range(len(self.ddi_names)):
             data = ddi[i]
             output = self._parameters[self.ddi_names[i]].update(**kwargs)
             output.write_data(data, time, metadata = metadata, **kwargs)
+
+    def get_deviations(self, variable: Dataset,
+                       threshold: dict[int:Dataset],
+                       timesteps: list[TimeStep]
+                       ) -> Generator[tuple[TimeStep, dict[int:np.ndarray]], None, None]:
+        """
+        This function will calculate the deviations for the given timesteps.
+        thresholds allows to specify different thresholds for different cases.
+        thresholds = {case1: threshold1}
+        direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
+        the output is a generator that yields the time and the deviations for each case
+        the deviations are a dictionary with the same keys as the thresholds
+        """
+
+        for ts in timesteps:
+            data = variable.get_data(ts)
+            thresholds = {case: th.get_data(ts) for case, th in threshold.items()}
+            deviation = {}
+            for case, thr in thresholds.items():
+                this_deviation = (data.values - thr.values) * self.direction
+                this_deviation[this_deviation < 0] = 0
+                deviation[case] = this_deviation#np.squeeze(this_deficit)
+
+            yield ts, deviation
 
 class LFI(DRYESThrBasedIndex):
     name = 'LFI (Low Flow Index)'
@@ -276,8 +289,10 @@ class LFI(DRYESThrBasedIndex):
         'min_interval' : 10,    # minimum interval between spells
         'min_nevents'  :  5     # minimum number of events in the historic period to calculate lambda (LFI only)
     }
-    
+
     direction = -1
+
+    ddi_names = ['deficit', 'duration', 'interval']
 
     def __init__(self, *args, **kwargs):
         self.parameters = ['threshold', 'lambda'] + self.ddi_names
@@ -361,76 +376,130 @@ class LFI(DRYESThrBasedIndex):
         lfi_info = lambda_data.attrs
         return lfi_data, lfi_info
 
-class HWI(DRYESThrBasedIndex):
+class HCWI(DRYESThrBasedIndex):
+    name = 'HCWI (Heat or Cold Wave Indices)'
+    default_options = {
+        'thr_window'   : 11,    # window size for the threshold calculation
+        'min_interval' :  1,    # minimum interval between spells
+        'min_duration' :  3,    # minimum duration of a spell
+        'Ttype'        : {'max' : 'max', 'min' : 'min'}  # type of temperature use both max and min temperature
+        # this entails that both the max and min temperature need to be above (below) the threshold to have a heat (cold) wave
+    }
+
+    ddi_names = ['intensity', 'duration', 'interval']
+
+    # def _check_io_options(self, io_options: dict, update_existing = False) -> None:
+    #     # check that we have all the necessary options
+    #     self._check_io_data(io_options, update_existing)
+    #     self._check_io_parameters(io_options, update_existing)
+    #     self._index = self._parameters['intensity']
+
+    def calc_parameters(self,
+                        time: TimeStep,
+                        variable: Dataset,
+                        history: TimeRange,
+                        par_and_cases: dict[str:list[int]]) -> dict[str:dict[int:np.ndarray]]:
+        
+        # let's separate the cases based on the ones that require Tmax and those that require Tmin
+        opt_groups = [['Ttype'], ['thr_quantile', 'thr_window', 'min_interval', 'min_duration']]
+        Ttype_cases, other_cases = make_case_hierarchy(self.cases['opt'], opt_groups)
+
+        name_ids = {v['name']:v['id'] for v in self.cases['opt']}
+
+        output = {'threshold': {}}
+        par_info = {}
+        for i, Ttype_case in enumerate(Ttype_cases):
+            this_variable = variable.update(**Ttype_case['tags'])
+
+            other_cases_id_map = {name_ids[v['name']]:v['id'] for v in other_cases[i]}
+            this_par_cases = {}
+            for k in par_and_cases.keys():
+                all_cases = par_and_cases[k]
+                for case_id in all_cases:
+                    if case_id in other_cases_id_map.keys():
+                        this_par_cases[k] = this_par_cases.get(k, []) + [int(case_id)]
+            
+            this_output, this_par_info = super().calc_parameters(time, this_variable, history, this_par_cases)
+            output['threshold'].update(this_output['threshold'])
+            par_info.update(this_par_info)
+
+        return output, par_info
+
+    def make_index(self, current: TimeRange, reference: TimeRange, timesteps_per_year: int):
+
+        # remove the min and max (Ttype) temperature from the options and run the superclass method.
+
+        options_without_minmax = self.default_options.copy()
+        options_without_minmax.pop('Ttype')
+
+        cases_without_minmax = options_to_cases(options_without_minmax)
+        self.cases['opt'] = cases_without_minmax
+
+        super().make_index(current, reference, timesteps_per_year)
+
+    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
+
+        ddi = self.get_ddi(time, history, case)
+
+        intensity  = ddi[0]
+        duration = ddi[1]
+        min_duration = case['options']['min_duration']
+
+        intensity[duration < min_duration] = 0
+        HWI_info = case['options']
+
+        return intensity, HWI_info
+        
+    def get_deviations(self,
+                       variable:  Dataset,
+                       threshold: dict[int:Dataset],
+                       timesteps: list[TimeStep]) -> Generator[tuple[TimeStep, dict[int:np.ndarray]],
+                                                               None, None]:
+        """
+        This function will calculate the deviations for the given timesteps.
+        thresholds allows to specify different thresholds for different cases.
+        thresholds = {case1: threshold1}
+        direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
+        the output is a generator that yields the time and the deviations for each case
+        the deviations are a dictionary with the same keys as the thresholds
+        """
+
+        Ttypes = ['max', 'min']
+
+        variables =  [variable.update(Ttype = Ttype) for Ttype in Ttypes]
+        thresholds = [{case: th.update(Ttype = Ttype) for case, th in threshold.items()} for Ttype in Ttypes]
+
+        deviations_Tmax = super().get_deviations(variables[0], thresholds[0], timesteps)
+        deviations_Tmin = super().get_deviations(variables[1], thresholds[1], timesteps)
+
+        for (ts_max, deviation_Tmax), (ts_min, deviation_Tmin) in zip(deviations_Tmax, deviations_Tmin):
+            if ts_max != ts_min:
+                raise ValueError(f'The time steps for Tmax {ts_max} and Tmin {ts_min} do not match')
+            deviation = {}
+            for case in deviation_Tmax.keys():
+                deviation[case] = np.where((deviation_Tmax[case] == 0) | (deviation_Tmin[case] == 0), 0, (deviation_Tmax[case] + deviation_Tmin[case]) / 2)
+
+            yield ts_max, deviation
+
+class HWI(HCWI):
     name = 'HWI (Heat Wave Index)'
     direction = 1
-    default_options = {
-        'thr_quantile' :   0.9, # quantile for the threshold calculation
-        'thr_window'   :  11,   # window size for the threshold calculation
-        'min_interval' :   2    # minimum interval between spells
-    }
 
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-        # take the current ddi from the superclass
-        ddi = self.get_ddi(time, history, case)
-        # the first time this runs, it will calculate the ddi from the beginning of history to the current time
-        # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
-        # for the HCWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
-        # so we could start like 1 month before the current time or something like that
-        #time_range = TimeRange(time-timedelta(days = 30), time)
-        #ddi = super().calc_index(time, time_range, case)
-        # after the first time, it will take the most recent ddi and update from there, so this is really only an initialization problem
+    @property
+    def default_options(self):
+        defopts = super().default_options 
+        defopts.update({'thr_quantile' : 0.9}) # quantile for the threshold calculation
+        return defopts
 
-        duration = ddi[1]
-        return duration, case['options']
-
-class CWI(DRYESThrBasedIndex):
+class CWI(HCWI):
     name = 'CWI (Cold Wave Index)'
     direction = -1
-    default_options = {
-        'thr_quantile' :   0.1, # quantile for the threshold calculation
-        'thr_window'   :  11,   # window size for the threshold calculation
-        'min_interval' :   2    # minimum interval between spells
-    }
-
-    def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-        # take the current ddi from the superclass
-        ddi = self.get_ddi(time, history, case)
-        # the first time this runs, it will calculate the ddi from the beginning of history to the current time
-        # for the LFI, we do this in the make_parameters function, becuase we need this information to calculate the lambda
-        # for the HCWI, we don't need this information, so we do it here, however this may be overkill, as we only need the current ddi
-        # so we could start like 1 month before the current time or something like that
-        #time_range = TimeRange(time-timedelta(days = 30), time)
-        #ddi = super().calc_index(time, time_range, case)
-        # after the first time, it will take the most recent ddi and update from there, so this is really only an initialization problem
-
-        duration = ddi[1]
-        return duration, case['options']
-
-def get_deviations(streamflow: Dataset,
-                   threshold: dict[int:Dataset],
-                   timesteps: list[TimeStep],
-                   direction: int) -> Generator[tuple[TimeStep, dict[int:np.ndarray]],
-                                                None, None]:
-    """
-    This function will calculate the deviations for the given timesteps.
-    thresholds allows to specify different thresholds for different cases.
-    thresholds = {case1: threshold1}
-    direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
-    the output is a generator that yields the time and the deviations for each case
-    the deviations are a dictionary with the same keys as the thresholds
-    """
-
-    for ts in timesteps:
-        data = streamflow.get_data(ts)
-        thresholds = {case: th.get_data(ts) for case, th in threshold.items()}
-        deviation = {}
-        for case, thr in thresholds.items():
-            this_deviation = (data.values - thr.values) * direction
-            this_deviation[this_deviation < 0] = 0
-            deviation[case] = this_deviation#np.squeeze(this_deficit)
-
-        yield ts, deviation
+    
+    @property
+    def default_options(self):
+        defopts = super().default_options
+        defopts.update({'thr_quantile' : 0.1}) # quantile for the threshold calculation
+        return defopts
 
 def pool_deviation(deviation: np.ndarray,
                    options: dict[str, float],
@@ -461,8 +530,12 @@ def pool_deviation(deviation: np.ndarray,
     # initialize the output
     historical_cum_deviation = np.full((2, *deviation.shape), np.nan)
 
-    # get the indices where we have a streamflow deficit
-    indices = np.where(~np.isnan(deviation))
+    # get the indices where we have data and where we have a deviation or a current condition
+    any_data = ~np.isnan(deviation)
+    #any_deviation = deviation>0
+    #any_current = (current_conditions[0,:,:] > 0) | (current_conditions[1,:,:] > 0) | (current_conditions[2,:,:] > min_interval)
+    #indices = np.where(np.all([any_data, np.any([any_deviation, any_current], axis=0)], axis = 0))
+    indices = np.where(any_data)
     for b,x,y in zip(*indices):
         this_deviation = deviation[0,x,y]
         this_current_conditions = current_conditions[:,b,x,y]
@@ -524,16 +597,19 @@ def pool_deviation_singlepixel(deviation: float,
     final_conditions = np.array([current_deviation, duration, interval])
     return final_conditions, cum_spell
 
-def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset]) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
+def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset], **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
     """
     returns the most recent ddi for the given time
     """
 
-    while not all([var.find_times([time]) for var in ddi]):
-        time -= 1
-        if time.start < ddi[0].start: return None, None
+    if not all([var.get_start(**kwargs) for var in ddi]):
+        return None, None
 
-    deviation, duration, interval = [var.get_data(time) for var in ddi]
-    ddi = np.stack([deviation, duration, interval], axis = 0)
+    while not all([var.find_times([time], **kwargs) for var in ddi]):
+        time -= 1
+        if (time + 1).end < ddi[0].get_start(**kwargs):
+            return None, None
+
+    ddi = np.stack([var.get_data(time,**kwargs) for var in ddi], axis = 0)
 
     return time, ddi

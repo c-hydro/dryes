@@ -70,6 +70,11 @@ class DRYESCombinedIndicator(DRYESIndex):
         index_data = this_output_data[index_name]
         index_info = case['options']
 
+        parents = this_input_data
+        parents.update(this_previous_data)
+
+        index_info['parents'] = parents
+
         return index_data, index_info
     
     def save_output_data(self,

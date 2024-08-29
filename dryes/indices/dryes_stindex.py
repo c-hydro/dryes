@@ -183,6 +183,11 @@ class DRYESStandardisedIndex(DRYESIndex):
         if hasattr(list(parameters.values())[0], 'attrs'):
             index_info.update(list(parameters.values())[0].attrs)
 
+        # add the parents to the metadata
+        parents = parameters
+        parameters.update({'data': data})
+        index_info['parents'] = parents
+
         return stindex_data, index_info
     
 class SPI(DRYESStandardisedIndex):

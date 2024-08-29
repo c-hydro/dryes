@@ -370,10 +370,14 @@ class LFI(DRYESThrBasedIndex):
         deficit[duration < min_duration] = 0
 
         # get the lambda
-        lambda_data = self._parameters['lambda'].update(**case['tags']).get_data(time)
+        lambda_data = self._parameters['lambda'].get_data(time, **case['tags'])
 
         lfi_data = 1 - np.exp(-lambda_data * deficit)
         lfi_info = lambda_data.attrs
+
+        parents = {'lambda': lambda_data, 'duration': duration, 'interval': ddi[2]}
+        lfi_info['parents'] = parents
+
         return lfi_data, lfi_info
 
 class HCWI(DRYESThrBasedIndex):
@@ -447,6 +451,8 @@ class HCWI(DRYESThrBasedIndex):
 
         intensity[duration < min_duration] = 0
         HWI_info = case['options']
+
+        HWI_info['parents'] = {'duration': duration, 'interval': ddi[2]}
 
         return intensity, HWI_info
         

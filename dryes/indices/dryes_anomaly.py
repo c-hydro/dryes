@@ -135,4 +135,9 @@ class DRYESAnomaly(DRYESIndex):
         if hasattr(list(parameters.values())[0], 'attrs'):
             index_info.update(list(parameters.values())[0].attrs)
 
+        # add the parents to the metadata
+        parents = parameters
+        parents.update({'data': data})
+        index_info['parents'] = parents
+
         return anomaly_data, index_info

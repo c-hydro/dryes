@@ -2,12 +2,15 @@ from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import warnings
+import tempfile
+import subprocess
+import shutil
 
 from typing import Optional, Generator, Iterable
 
 from .dryes_index import DRYESIndex
 
-from ..tools.timestepping import TimeRange
+from ..tools.timestepping import TimeRange, Day
 from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
 from ..tools.timestepping.timestep import TimeStep
 
@@ -28,9 +31,10 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     # default options
     default_options = {
-        'thr_quantile' :  0.1,  # quantile for the threshold calculation
-        'thr_window'   :  1,    # window size for the threshold calculation
-        'min_interval' :  1     # minimum interval between spells
+        'thr_quantile' :  0.1,   # quantile for the threshold calculation
+        'thr_window'   :  1,     # window size for the threshold calculation
+        'min_interval' :  1,     # minimum interval between spells
+        'cdo_path'     :  '/usr/bin/cdo' # path to the cdo executable
     }
 
     @property
@@ -44,82 +48,105 @@ class DRYESThrBasedIndex(DRYESIndex):
             self.parameters = ['threshold'] + self.ddi_names
         super().__init__(*args, **kwargs)
 
-    def make_parameters(self, history: TimeRange, timesteps_per_year: int):
-        # Only the thresholds is calculated from the superclass
-        parameters_all = self.parameters
-        self.parameters = ('threshold',)
-        super().make_parameters(history, 365) # <- regardless of the timesteps_per_year, we always need to calculate the thresholds on a daily basis
-        self.parameters = parameters_all
+    def make_parameters(self,
+                        history: TimeRange|Iterable[datetime],
+                        timesteps_per_year: int) -> None:
 
-    def calc_parameters(self,
-                        time: TimeStep,
-                        variable: Dataset,
-                        history: TimeRange,
-                        par_and_cases: dict[str:list[int]]) -> dict[str:dict[int:np.ndarray]]:
-        """
-        This will only do the threshold calculation.
-        par_and_cases is a dictionary with the following structure:
-        {par: [case1, case2, ...]}
-        indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
+        if isinstance(history, tuple) or isinstance(history, list):
+            history = TimeRange(history[0], history[1])
 
-        The output is a dictionary with the following structure:
-        {par: {case1: parcase1, case2: parcase2, ...}}
-        where parcase1 is the parameter par for case1 as a xarray.DataArray.
-        """
+        self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
 
-        # get the dates for the reference period
-        data_timesteps = time.get_history_timesteps(history)
-
-        #input_path = in_path
-        output = {'threshold': {}} # this is the output dictionary
-
-        # loop over all cases, let's do this in a smart way so that we don't have to load the data multiple times
-        window_cases = {}
-        for case in self.cases['opt']:
-            if case['id'] not in par_and_cases['threshold']: continue
-            # get the window
-            window = case['options']['thr_window']
-            # add the case to the dictionary
-            window_cases[window] = window_cases.get(window, []) + [case['id']]
+        data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
+        timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').days
         
-        for window, cases in window_cases.items():
-            halfwindow = np.floor(window/2)
-            # get all dates within the window of this month and day in the reference period
-            all_data_timesteps = []
-            for timestep in data_timesteps:
-                this_ts = timestep - halfwindow
-                while this_ts <= timestep + halfwindow:
-                    #if this_ts.start >= history.start and this_ts.end <= history.end:
-                    all_data_timesteps.append(this_ts)
-                    this_ts += 1
-            
-            # if there are no dates, skip
-            if len(all_data_timesteps) == 0: continue
-            
-            # get the data for these dates
-            data_ = [variable.get_data(ts) for ts in all_data_timesteps if variable.check_data(ts)]
-            data = np.stack(data_, axis = 0)
+        # make aggregated data for the parameters
+        self.make_input_data(data_timesteps)
 
-            # calculate the thresholds for each case that has this window size
-            for case in cases:
-                threshold_quantile = self.cases['opt'][case]['options']['thr_quantile']
-                threshold_data = np.quantile(data, threshold_quantile, axis = 0)
-                # save the threshold
-                output['threshold'][case] = threshold_data
+        # The only parameter we are calculating here is the Threshold
+        self._parameters['threshold'].update(history_start = history.start, history_end = history.end, in_place = True)
 
-        # get the metadata
-        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
-        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
-        par_info = {'reference_dates': data_dates,
-                    'reference_start': history.start.strftime('%Y-%m-%d'),
-                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+        # check cases that have already been calculated
+        cases_to_do = []
+        for case in self.cases['opt']:
+            this_ts_todo = self._parameters['threshold'].find_times(timesteps, rev = True, **case['tags'])
+            if len(this_ts_todo) > 0:
+                cases_to_do.append(case)
 
-        if hasattr(data_[0], 'attrs'):
-            data_info = data_[0].attrs
-            if 'agg_type' in data_info:
-                par_info['agg_type'] = data_info['agg_type']
+        # if nothing needs to be calculated, skip
+        if len(cases_to_do) == 0: return
+        self.log.info(f'  -Iterating through {len(cases_to_do)} cases with missing parameters.')
 
-        return output, par_info
+        for case in cases_to_do:
+            variable = self._data.update(**case['tags'])
+            thresholds = self.calc_thresholds_cdo(variable, history, case)
+            for thr, thr_info in thresholds:
+                this_timestep = Day.from_date(thr_info.pop('time'))
+                metadata = case['options']
+                metadata.update(thr_info)
+                self._parameters['threshold'].write_data(thr, this_timestep, metadata = metadata, **case['tags'])
+
+    def calc_thresholds_cdo(self,
+                            variable: Dataset,
+                            history: TimeRange,
+                            case: dict) -> Generator[tuple[xr.DataArray, dict], None, None]:
+        """
+        This will only do the threshold calculation using CDO.
+        """
+
+        days = history.days
+
+        threshold_info = {'reference_start': history.start.strftime('%Y-%m-%d'),
+                          'reference_end':   history.end.strftime('%Y-%m-%d')}
+        
+        tmpdir = tempfile.mkdtemp()
+
+        # save the data to a temporary file as netcdf with a time dimension
+        days = history.days
+        datasets = [variable.get_data(day, as_is=True, **case['tags']).squeeze().expand_dims('time').assign_coords(time=[day.start]) for day in days]
+        combined = xr.concat(datasets, dim='time')
+        data_nc = f'{tmpdir}/data.nc'
+        combined.to_netcdf(data_nc)
+
+        # calculate running max and min of data using CDO
+        window_size = case['options']['thr_window']
+        datamin_nc = f'{tmpdir}/datamin.nc'
+        datamax_nc = f'{tmpdir}/datamax.nc'
+
+        cdo_path = case['options']['cdo_path']
+        cdo_cmd =  f'{cdo_path} ydrunmin,{window_size},rm=c {data_nc} {datamin_nc}'
+        subprocess.run(cdo_cmd, shell = True)
+
+        cdo_cmd = f'{cdo_path} ydrunmax,{window_size},rm=c {data_nc} {datamax_nc}'
+        subprocess.run(cdo_cmd, shell = True)
+
+        # calculate the thresholds
+        threshold_quantile = int(case['options']['thr_quantile']*100)
+        threshold_nc = f'{tmpdir}/threshold.nc'
+
+        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
+        subprocess.run(cdo_cmd, shell = True)
+
+        # read the threshold data
+        thresholds = xr.open_dataset(threshold_nc)
+        
+        # get the crs and write it to the threshold data
+        thresholds_da = thresholds['__xarray_dataarray_variable__']
+        crs = thresholds['spatial_ref'].attrs['crs_wkt']
+        thresholds_da = thresholds['__xarray_dataarray_variable__'].rio.write_crs(crs, inplace = True)
+
+        # add a 1-d "band" dimension
+        thresholds_da = thresholds_da.expand_dims('band')
+        
+        # loop over the timesteps and yield the threshold
+        days = thresholds_da.time.values
+        for i, date in enumerate(days):
+            time = datetime.fromtimestamp(date.astype('O') / 1e9)
+            threshold_data = thresholds_da.isel(time = i).drop_vars('time')
+            threshold_info.update({'time': time})
+            yield threshold_data, threshold_info
+
+        shutil.rmtree(tmpdir)
 
     def make_ddi(self,
                  time_range: Optional[TimeRange], 
@@ -287,7 +314,8 @@ class LFI(DRYESThrBasedIndex):
         'thr_window'   : 31,    # window size for the threshold calculation
         'min_duration' :  5,    # minimum duration of a spell
         'min_interval' : 10,    # minimum interval between spells
-        'min_nevents'  :  5     # minimum number of events in the historic period to calculate lambda (LFI only)
+        'min_nevents'  :  5,     # minimum number of events in the historic period to calculate lambda (LFI only)
+        'cdo_path'     :  '/usr/bin/cdo'
     }
 
     direction = -1
@@ -386,48 +414,12 @@ class HCWI(DRYESThrBasedIndex):
         'thr_window'   : 11,    # window size for the threshold calculation
         'min_interval' :  1,    # minimum interval between spells
         'min_duration' :  3,    # minimum duration of a spell
-        'Ttype'        : {'max' : 'max', 'min' : 'min'}  # type of temperature use both max and min temperature
+        'Ttype'        : {'max' : 'max', 'min' : 'min'},  # type of temperature use both max and min temperature
         # this entails that both the max and min temperature need to be above (below) the threshold to have a heat (cold) wave
+        'cdo_path'     :  '/usr/bin/cdo'
     }
 
     ddi_names = ['intensity', 'duration', 'interval']
-
-    # def _check_io_options(self, io_options: dict, update_existing = False) -> None:
-    #     # check that we have all the necessary options
-    #     self._check_io_data(io_options, update_existing)
-    #     self._check_io_parameters(io_options, update_existing)
-    #     self._index = self._parameters['intensity']
-
-    def calc_parameters(self,
-                        time: TimeStep,
-                        variable: Dataset,
-                        history: TimeRange,
-                        par_and_cases: dict[str:list[int]]) -> dict[str:dict[int:np.ndarray]]:
-        
-        # let's separate the cases based on the ones that require Tmax and those that require Tmin
-        opt_groups = [['Ttype'], ['thr_quantile', 'thr_window', 'min_interval', 'min_duration']]
-        Ttype_cases, other_cases = make_case_hierarchy(self.cases['opt'], opt_groups)
-
-        name_ids = {v['name']:v['id'] for v in self.cases['opt']}
-
-        output = {'threshold': {}}
-        par_info = {}
-        for i, Ttype_case in enumerate(Ttype_cases):
-            this_variable = variable.update(**Ttype_case['tags'])
-
-            other_cases_id_map = {name_ids[v['name']]:v['id'] for v in other_cases[i]}
-            this_par_cases = {}
-            for k in par_and_cases.keys():
-                all_cases = par_and_cases[k]
-                for case_id in all_cases:
-                    if case_id in other_cases_id_map.keys():
-                        this_par_cases[k] = this_par_cases.get(k, []) + [int(case_id)]
-            
-            this_output, this_par_info = super().calc_parameters(time, this_variable, history, this_par_cases)
-            output['threshold'].update(this_output['threshold'])
-            par_info.update(this_par_info)
-
-        return output, par_info
 
     def make_index(self, current: TimeRange, reference: TimeRange, timesteps_per_year: int):
 

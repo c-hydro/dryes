@@ -8,7 +8,9 @@ from functools import partial
 
 from ..tools.timestepping import TimeRange, get_window
 from ..tools.data import Dataset
+from .time_aggregation import as_timagg_function
 
+@as_timagg_function()
 def average_of_window(size: int, unit: str,
                       propagate_metadata: Optional[str] = None) -> Callable:
     """
@@ -70,6 +72,7 @@ def average_of_window(size: int, unit: str,
     return partial(_average_of_window, _size = size, _unit = unit, _propagate_metadata = propagate_metadata)
 
 # TODO: make sum safe for missing data
+@as_timagg_function()
 def sum_of_window(size: int, unit: str,
                   input_agg: Optional[dict] = None,
                   propagate_metadata: Optional[str] = None) -> Callable:
@@ -156,6 +159,7 @@ def sum_of_window(size: int, unit: str,
     
     return partial(_sum_of_window, _size = size, _unit = unit, _input_agg = input_agg, _propagate_metadata = propagate_metadata)
 
+@as_timagg_function()
 def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weights = 'overlap') -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.

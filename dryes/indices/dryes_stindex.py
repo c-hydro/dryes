@@ -194,11 +194,7 @@ class SPI(DRYESStandardisedIndex):
     index_name = 'SPI (Standardised Precipitaion Index)'
     positive_only = True
     default_options = {
-        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'gamma',
-        'pval_threshold' : None,
-        'min_reference'  : 5,
-        'zero_threshold' : 0.0001,
     }
 
     @property
@@ -209,10 +205,7 @@ class SPEI(DRYESStandardisedIndex):
     index_name = 'SPEI (Standardised Precipitaion Evapotranspiration Index)'
     positive_only = False
     default_options = {
-        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'pearson3',
-        'pval_threshold' : None,
-        'min_reference'  : 5,
     }
 
     def _check_io_options(self, io_options: dict) -> None:
@@ -241,9 +234,5 @@ class SSMI(DRYESStandardisedIndex):
     index_name = 'SSMI (Standardised Soil Moisture Index)'
     positive_only = True
     default_options = {
-        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'beta',
-        'pval_threshold' : None,
-        'min_reference'  : 5,
-        'zero_threshold' : 0.0001,
     }

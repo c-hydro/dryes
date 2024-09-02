@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Callable, Iterable, Optional
 import numpy as np
-from copy import deepcopy
+from copy import copy, deepcopy
 import logging
 import os
 
@@ -22,8 +22,30 @@ class MetaDRYESIndex(ABCMeta):
             cls.subclasses = {}
         elif 'index_name' in attrs:
             cls.subclasses[attrs['index_name']] = cls
+
+    def __new__(cls, name, bases, dct):
+        # Create the new class
+        new_cls = super().__new__(cls, name, bases, dct)
+        
+        # Merge default options from parent classes
+        default_options = {}
+        for base in bases:
+            if hasattr(base, 'default_options'):
+                default_options.update(base.default_options)
+        
+        # Update with the subclass's default options
+        if 'default_options' in dct:
+            default_options.update(dct['default_options'])
+        
+        new_cls.default_options = default_options
+        return new_cls
+
 class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     index_name = 'dryes_index'
+
+    default_options = {
+        'make_parameters': True
+        }
 
     def __init__(self,
                  io_options: dict,
@@ -172,15 +194,13 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
         if not hasattr(self, '_raw_data') or update_existing:
             self._raw_data = io_options['data_raw']
-            template = self._raw_data.get_template(**self.cases['opt'][0]['tags'])
-        else:
-            template = self._raw_data.template
+            self._raw_data._template = {}
 
         if not hasattr(self, '_data') or update_existing:
             self._data = io_options['data']
-            self._data.set_template(template)
+            self._data._template = self._raw_data._template
 
-        self.output_template = template
+        self.output_template = self._raw_data._template
 
     def _check_io_parameters(self, io_options: dict, update_existing = False) -> None:
         if not hasattr(self, '_parameters') or update_existing:
@@ -190,7 +210,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 if par not in io_options:
                     raise ValueError(f'No output path for parameter {par}.')
                 self._parameters[par] = io_options[par]
-                self._parameters[par].set_template(self.output_template)
+                self._parameters[par]._template = self.output_template
 
     def _check_io_index(self, io_options: dict, update_existing = False) -> None:
         if not hasattr(self, '_index') or update_existing:
@@ -198,6 +218,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             if 'index' not in io_options:
                 raise ValueError('No output path for index.')
             self._index = io_options['index']
+            self._index._template = self.output_template
+
     def _set_run_options(self, run_options: dict) -> None:
         if 'history_start' in run_options and 'history_end' in run_options:
             self.reference_fn = lambda time: TimeRange(run_options['history_start'], run_options['history_end'])
@@ -233,10 +255,73 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             return cls.index_name
 
     #TODO: improve this, once we remove the aggregations and post-ptocessing, this can be done like cases
+    def update_io(self, in_place = False, **kwargs) -> 'DRYESIndex':
+        new_self = copy(self)
+        new_self._raw_data = self._raw_data.update(**kwargs)
+        new_self._raw_data._template = {}
+        new_self.output_template = new_self._raw_data._template
+        new_self._data = self._data.update(**kwargs)
+        new_self._data._template = new_self.output_template
+        new_self._parameters = {}
+        for par in self.parameters:
+            new_self._parameters[par] = self._parameters[par].update(**kwargs)
+            new_self._parameters[par]._template = new_self.output_template
 
-        # calculate the parameters
-        for reference_ in reference_periods:
-            self.make_parameters(reference_, timesteps_per_year)
+        new_self._index = self._index.update(**kwargs)
+        new_self._index._template = new_self.output_template
+
+        if in_place:
+            self = new_self
+            return self
+        else:
+            return new_self
+
+    def compute(self, current:   TimeRange|Iterable[datetime],
+                      reference: Optional[TimeRange|Callable[[datetime], TimeRange]] = None,
+                      timesteps_per_year: Optional[int] = None) -> None:
+        
+        if not self._raw_data.has_tiles:
+            self.compute_tile(current, reference, timesteps_per_year)
+        else:
+            for tile in self._raw_data.tile_names:
+                new_self = self.update_io(tile = tile)
+                new_self.compute_tile(current, reference, timesteps_per_year)
+        
+    def compute_tile(self, current:   TimeRange,
+                           reference: Optional[TimeRange|Callable[[datetime], TimeRange]] = None,
+                           timesteps_per_year: Optional[int] = None) -> None:
+        
+        if not hasattr(self, 'reference_fn') or self.reference_fn is None:
+            if reference is None:
+                raise ValueError('No reference period specified.')
+            raw_reference = deepcopy(reference)
+            # make the reference period a function of time, for extra flexibility
+            if isinstance(reference, tuple) or isinstance(reference, list):
+                reference_fn = lambda time: raw_reference
+            elif isinstance(reference, Callable):
+                reference_fn = reference
+            
+            self.reference_fn = reference_fn
+        else:
+            reference_fn = self.reference_fn
+        
+        if not hasattr(self, 'timesteps_per_year') or self.timesteps_per_year is None:
+            if timesteps_per_year is None:
+                raise ValueError('No timesteps per year specified.')
+            self.timesteps_per_year = timesteps_per_year
+        else:
+            timesteps_per_year = self.timesteps_per_year
+
+        if self.options['make_parameters']:
+            # get the timesteps for which we need to calculate the index
+            timesteps:list[FixedNTimeStep] = current.get_timesteps_from_tsnumber(timesteps_per_year)
+            #create_timesteps(current.start, current.end, timesteps_per_year)
+            # get the reference periods that we need to calculate parameters for
+            reference_periods:list[TimeRange] = self.make_reference_periods(timesteps, reference_fn)
+
+            # calculate the parameters
+            for reference_ in reference_periods:
+                self.make_parameters(reference_, timesteps_per_year)
 
         # calculate the index
         self.make_index(current, reference_fn, timesteps_per_year)
@@ -283,7 +368,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         references_as_tr = [TimeRange(start, end) for start, end in references]
         return references_as_tr
 
-    def make_input_data(self, timesteps: list[FixedNTimeStep]):
+    def make_input_data(self, timesteps: list[FixedNTimeStep], agg_cases: Optional[list[dict]] = None) -> None:
         """
         This function will gather compute and aggregate the input data
         """
@@ -292,7 +377,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         variable_out: Dataset = self._data
         
         # if there are no aggregations to compute, just get the data in the paths
-        agg_cases = self.cases['agg']
+        agg_cases = agg_cases or self.cases['agg']
         if len(agg_cases) == 0:
             return
 
@@ -304,6 +389,23 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         history: TimeRange|Iterable[datetime],
                         timesteps_per_year: int) -> None:
 
+        # get the timesteps for which we need to calculate the parameters
+        # this depends on the time aggregation step, not the index calculation step
+        timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
+        # parameters need to be calculated individually for each agg case and for each opt case
+        agg_cases = self.cases['agg']
+        if len(agg_cases) == 0: agg_cases = [None]
+        aggs_to_do = []
+        for agg in agg_cases:
+            for par in self._parameters.values():
+                missing = par.find_times(timesteps, rev = True, **agg['tags'])
+                if len(missing) > 0:
+                    aggs_to_do.append(agg)
+                    break
+        
+        if len(aggs_to_do) == 0:
+            return
+
         if isinstance(history, tuple) or isinstance(history, list):
             history = TimeRange(history[0], history[1])
 
@@ -312,7 +414,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
         
         # make aggregated data for the parameters
-        self.make_input_data(data_timesteps)
+        self.make_input_data(data_timesteps, aggs_to_do)
 
         # get the parameters that need to be calculated
         parameters = self.parameters
@@ -324,11 +426,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         # this depends on the time aggregation step, not the index calculation step
         timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
 
-        # parameters need to be calculated individually for each agg case and for each opt case
-        agg_cases = self.cases['agg']
-
-        if len(agg_cases) == 0: agg_cases = [None]
-        for agg in agg_cases:
+        for agg in aggs_to_do:
             if agg is not None:
                 self.log.info(f' #Aggregation {agg["name"]}:')
                 agg_tags = agg['tags']

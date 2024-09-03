@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='dryes',
-    version='3.0.1',
+    version='3.1.0-alpha',
     packages=find_packages(),
     description='A package for operational calculation of environmental indices for drought monitoring',
     author='Luca Trotter',
@@ -27,6 +27,9 @@ setup(
         'scipy>=1.8.0',
         'xarray>=2023.9.0',
         'deprecated>=1.2.12',
+        'matplotlib>=3.8.4',
+        'geopandas',
+        'boto3'
     ],
     python_requires='>=3.10',
     test_suite='tests'

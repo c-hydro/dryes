@@ -7,11 +7,11 @@ from typing import List
 
 from .dryes_index import DRYESIndex
 
-from ..io import IOHandler
 from ..time_aggregation import aggregation_functions as agg
 
-#from ..utils.time import TimeRange, get_md_dates
-from ..tools.timestepping import TimeRange, get_md_dates
+from ..tools.timestepping import TimeRange
+from ..tools.timestepping.timestep import TimeStep
+from ..tools.data import Dataset
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
@@ -21,7 +21,7 @@ class DRYESAnomaly(DRYESIndex):
         'min_reference': 1,
         #'min_std'      : 0.01 #TODO: implement this as an option, for now it is hardcoded in the code
     }
-    
+
     @property
     def parameters(self):
         opt_cases = self.cases['opt']
@@ -29,8 +29,8 @@ class DRYESAnomaly(DRYESIndex):
         return ['mean', 'std'] if 'empiricalzscore' in all_types else ['mean']
 
     def calc_parameters(self,
-                        time: datetime,
-                        variable: IOHandler,
+                        time: TimeStep,
+                        variable: Dataset,
                         history: TimeRange,
                         par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
         """
@@ -46,11 +46,8 @@ class DRYESAnomaly(DRYESIndex):
         - a dictionary with info about parameter calculations.
         """
         
-        history_years = range(history.start.year, history.end.year + 1)
-        all_dates  = get_md_dates(history_years, time.month, time.day)
-        data_dates = [date for date in all_dates if date >= history.start and date <= history.end]
-
-        data_ = [variable.get_data(time) for time in data_dates if variable.check_data(time)]
+        data_timesteps = time.get_history_timesteps(history)
+        data_ = [variable.get_data(time) for time in data_timesteps if variable.check_data(time)]
         data = np.stack(data_, axis = 0)
 
         pardata = {}
@@ -80,7 +77,9 @@ class DRYESAnomaly(DRYESIndex):
                 this_min_reference = self.cases['opt'][case]['options']['min_reference']
                 this_par_data = np.where(valid_data >= this_min_reference, pardata[par], np.nan)
                 output[par][case] = this_par_data
-        
+
+        # get the metadata
+        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
         data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
         par_info = {'reference_dates': data_dates,
                     'reference_start': history.start.strftime('%Y-%m-%d'),
@@ -93,7 +92,7 @@ class DRYESAnomaly(DRYESIndex):
 
         return output, par_info
     
-    def calc_index(self, time,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+    def calc_index(self, time: TimeStep,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
         """
         Calculates the index for the given time and reference period (history).
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
@@ -111,8 +110,8 @@ class DRYESAnomaly(DRYESIndex):
         if 'history_end' not in case['tags']:
             case['tags']['history_end'] = history.end
         # parameters for 29th February are actually those for 28th February
-        par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
-        parameters = {par: p.get_data(par_time, **case['tags']) for par, p in self._parameters.items()}
+        #par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
+        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items()}
 
         # calculate the index
         mean = parameters['mean']
@@ -135,5 +134,10 @@ class DRYESAnomaly(DRYESIndex):
 
         if hasattr(list(parameters.values())[0], 'attrs'):
             index_info.update(list(parameters.values())[0].attrs)
+
+        # add the parents to the metadata
+        parents = parameters
+        parents.update({'data': data})
+        index_info['parents'] = parents
 
         return anomaly_data, index_info

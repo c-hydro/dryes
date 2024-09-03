@@ -6,22 +6,24 @@ import warnings
 
 from functools import partial
 
-from ..io import IOHandler
 from ..tools.timestepping import TimeRange, get_window
+from ..tools.data import Dataset
+from .time_aggregation import as_timagg_function
 
+@as_timagg_function()
 def average_of_window(size: int, unit: str,
                       propagate_metadata: Optional[str] = None) -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
     """
-    def _average_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str,
+    def _average_of_window(variable: Dataset, time: dt.datetime, _size: int, _unit: str,
                            _propagate_metadata: Optional[str] = None) -> np.ndarray:
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
         """
         window = get_window(time, _size, _unit)
 
-        if window.start < variable.start:
+        if window.start < variable.get_start():
             return None, {}
 
         #variable.make(window)
@@ -70,6 +72,7 @@ def average_of_window(size: int, unit: str,
     return partial(_average_of_window, _size = size, _unit = unit, _propagate_metadata = propagate_metadata)
 
 # TODO: make sum safe for missing data
+@as_timagg_function()
 def sum_of_window(size: int, unit: str,
                   input_agg: Optional[dict] = None,
                   propagate_metadata: Optional[str] = None) -> Callable:
@@ -91,14 +94,14 @@ def sum_of_window(size: int, unit: str,
         if 'start' not in input_agg: input_agg['start'] = False
         if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
 
-    def _sum_of_window(variable: IOHandler, time: dt.datetime, _size: int, _unit: str,
+    def _sum_of_window(variable: Dataset, time: dt.datetime, _size: int, _unit: str,
                        _input_agg: Optional[dict] = None, _propagate_metadata: Optional[str] = None) -> np.ndarray:
         
         """
         Aggregates the data in a DRYESDataset at the timestep requested, using a sum over a certain period.
         """
         window = get_window(time, _size, _unit)
-        if window.start < variable.start:
+        if window.start < variable.get_start():
             return None, {}
         
         #variable.make(window)
@@ -156,6 +159,7 @@ def sum_of_window(size: int, unit: str,
     
     return partial(_sum_of_window, _size = size, _unit = unit, _input_agg = input_agg, _propagate_metadata = propagate_metadata)
 
+@as_timagg_function()
 def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weights = 'overlap') -> Callable:
     """
     Returns a function that aggregates the data in a DRYESDataset at the timestep requested, using an average over a certain period.
@@ -179,7 +183,7 @@ def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weight
     if weights not in ['overlap', 'inv_distance']:
         raise ValueError('weights must be either "overlap" or "inv_distance"')
 
-    def _weighted_average_of_window(variable: IOHandler, time: dt.datetime,
+    def _weighted_average_of_window(variable: Dataset, time: dt.datetime,
                                     _size: int, _unit: str, _input_agg: dict, _weights = 'overlap') -> np.ndarray:
         """
         Aggregates the FAPAR data to the current timestep using inverse time distance of the previous 
@@ -198,7 +202,7 @@ def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weight
 
         available_data = variable.get_times(TimeRange(data_start, data_end))
         if len(available_data) == 0:
-            return variable.template.values, {}
+            return None, {}
 
         overlap = []
         distance = []

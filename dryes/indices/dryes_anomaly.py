@@ -21,7 +21,7 @@ class DRYESAnomaly(DRYESIndex):
         'min_reference': 1,
         #'min_std'      : 0.01 #TODO: implement this as an option, for now it is hardcoded in the code
     }
-    
+
     @property
     def parameters(self):
         opt_cases = self.cases['opt']

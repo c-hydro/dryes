@@ -315,8 +315,10 @@ class LFI(DRYESThrBasedIndex):
         'min_duration' :  5,    # minimum duration of a spell
         'min_interval' : 10,    # minimum interval between spells
         'min_nevents'  :  5,     # minimum number of events in the historic period to calculate lambda (LFI only)
-        'cdo_path'     :  '/usr/bin/cdo'
     }
+
+        # default options
+
 
     direction = -1
 
@@ -416,7 +418,6 @@ class HCWI(DRYESThrBasedIndex):
         'min_duration' :  3,    # minimum duration of a spell
         'Ttype'        : {'max' : 'max', 'min' : 'min'},  # type of temperature use both max and min temperature
         # this entails that both the max and min temperature need to be above (below) the threshold to have a heat (cold) wave
-        'cdo_path'     :  '/usr/bin/cdo'
     }
 
     ddi_names = ['intensity', 'duration', 'interval']
@@ -483,21 +484,17 @@ class HWI(HCWI):
     name = 'HWI (Heat Wave Index)'
     direction = 1
 
-    @property
-    def default_options(self):
-        defopts = super().default_options 
-        defopts.update({'thr_quantile' : 0.9}) # quantile for the threshold calculation
-        return defopts
+    default_options = {
+        'thr_quantile' : 0.9, # quantile for the threshold calculation
+    }
 
 class CWI(HCWI):
     name = 'CWI (Cold Wave Index)'
     direction = -1
-    
-    @property
-    def default_options(self):
-        defopts = super().default_options
-        defopts.update({'thr_quantile' : 0.1}) # quantile for the threshold calculation
-        return defopts
+
+    default_options = {
+        'thr_quantile' : 0.1, # quantile for the threshold calculation
+    }
 
 def pool_deviation(deviation: np.ndarray,
                    options: dict[str, float],

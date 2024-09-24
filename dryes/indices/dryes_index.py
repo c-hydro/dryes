@@ -533,6 +533,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         history = reference_fn(time)
                         case['tags'].update({'history_start': history.start, 'history_end': history.end})      
                         index_data, index_info = self.calc_index(time, history, case)
+                        if index_data is None:
+                            index_data = self._index.build_templatearray(self._raw_data.get_template_dict())
                         metadata = case['options']
                         metadata.update(index_info)
                         if 'time' in metadata: metadata.pop('time')

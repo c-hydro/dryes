@@ -191,7 +191,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         return stindex_data, index_info
     
 class SPI(DRYESStandardisedIndex):
-    index_name = 'SPI (Standardised Precipitaion Index)'
+    index_name = 'SPI'
     positive_only = True
     default_options = {
         'distribution'   : 'gamma',
@@ -202,7 +202,7 @@ class SPI(DRYESStandardisedIndex):
         return super().parameters + ['prob0']
 
 class SPEI(DRYESStandardisedIndex):
-    index_name = 'SPEI (Standardised Precipitaion Evapotranspiration Index)'
+    index_name = 'SPEI'
     positive_only = False
     default_options = {
         'distribution'   : 'pearson3',
@@ -231,7 +231,7 @@ class SPEI(DRYESStandardisedIndex):
         super()._check_io_options(io_options)
 
 class SSMI(DRYESStandardisedIndex):
-    index_name = 'SSMI (Standardised Soil Moisture Index)'
+    index_name = 'SSMI'
     positive_only = True
     default_options = {
         'distribution'   : 'beta',

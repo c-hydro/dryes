@@ -29,7 +29,8 @@ def average_of_window(size: int, unit: str,
         #variable.make(window)
         times_to_get = variable.get_times(window)
 
-        data_sum = np.zeros(variable.get_template().shape, dtype = np.float64)
+        template = variable.build_templatearray(variable.get_template_dict())
+        data_sum = np.zeros(template.shape, dtype = np.float64)
         valid_n = data_sum.copy()
 
         if _propagate_metadata is not None:
@@ -127,7 +128,9 @@ def sum_of_window(size: int, unit: str,
         all_times.sort()
         times_to_get = all_times
 
-        data = np.zeros(variable.get_template().shape, dtype = np.float64)
+        template = variable.build_templatearray(variable.get_template_dict())
+        data = np.zeros(template.shape, dtype = np.float64)
+
         if _propagate_metadata is not None:
             metadata_list = []
         for time in times_to_get:

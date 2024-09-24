@@ -108,6 +108,9 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             return options
         
         agg_options = options['agg_fn']
+        if agg_options is None or (isinstance(agg_options, str) and agg_options.lower() == 'none'):
+            self.time_aggregation = TimeAggregation()
+            return options
         if not isinstance(agg_options, dict):
             agg_options = {'agg': agg_options}
         
@@ -388,33 +391,11 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     def make_parameters(self,
                         history: TimeRange|Iterable[datetime],
                         timesteps_per_year: int) -> None:
-
-        # get the timesteps for which we need to calculate the parameters
-        # this depends on the time aggregation step, not the index calculation step
-        timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
-        # parameters need to be calculated individually for each agg case and for each opt case
-        agg_cases = self.cases['agg']
-        if len(agg_cases) == 0: agg_cases = [None]
-        aggs_to_do = []
-        for agg in agg_cases:
-            for par in self._parameters.values():
-                missing = par.find_times(timesteps, rev = True, **agg['tags'])
-                if len(missing) > 0:
-                    aggs_to_do.append(agg)
-                    break
         
-        if len(aggs_to_do) == 0:
-            return
-
         if isinstance(history, tuple) or isinstance(history, list):
             history = TimeRange(history[0], history[1])
 
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
-
-        data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
-        
-        # make aggregated data for the parameters
-        self.make_input_data(data_timesteps, aggs_to_do)
 
         # get the parameters that need to be calculated
         parameters = self.parameters
@@ -425,21 +406,38 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         # get the timesteps for which we need to calculate the parameters
         # this depends on the time aggregation step, not the index calculation step
         timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
+        # parameters need to be calculated individually for each agg case and for each opt case
+        agg_cases = self.cases['agg']
+        if len(agg_cases) == 0:
+            for par in self._parameters.values():
+                missing = par.find_times(timesteps, rev = True)
+                if len(missing) > 0:
+                    self.make_parameter_1agg(self._data, self._parameters, history, timesteps)
+                    break
+            
+        else:
+            aggs_to_do = []
+            for agg in agg_cases:
+                for par in self._parameters.values():
+                    missing = par.find_times(timesteps, rev = True, **agg['tags'])
+                    if len(missing) > 0:
+                        aggs_to_do.append(agg)
+                        break
+            if len(aggs_to_do) == 0:
+                return
 
-        for agg in aggs_to_do:
-            if agg is not None:
+            data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
+        
+            # make aggregated data for the parameters
+            self.make_input_data(data_timesteps, aggs_to_do)
+
+            for agg in aggs_to_do:
                 self.log.info(f' #Aggregation {agg["name"]}:')
                 agg_tags = agg['tags']
-                #par_paths = {par:substitute_values(path, agg['tags']) for par, path in output_paths.items()}
-                #in_path = self.input_data_path[agg["name"]]
-            else:
-                agg_tags = {}
-                #par_paths = output_paths
-                #in_path = self.input_data_path
 
-            variable   = self._data.update(**agg_tags)
-            parameters = {p: self._parameters[p].update(**agg_tags) for p in self.parameters}
-            self.make_parameter_1agg(variable, parameters, history, timesteps)
+                variable   = self._data.update(**agg_tags)
+                parameters = {p: self._parameters[p].update(**agg_tags) for p in self.parameters}
+                self.make_parameter_1agg(variable, parameters, history, timesteps)
 
     def make_parameter_1agg(self,
                             variable: Dataset,

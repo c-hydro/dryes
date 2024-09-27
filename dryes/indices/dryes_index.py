@@ -116,7 +116,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         
         time_agg = TimeAggregation()
         for agg_name, agg_fn in agg_options.items():
-            if isinstance(agg_fn, Callable|str):
+            if isinstance(agg_fn, Callable|str|dict):
                 time_agg.add_aggregation(agg_name, agg_fn)
             elif isinstance(agg_fn, tuple) or isinstance(agg_fn, list):
                 if len(agg_fn) == 1:

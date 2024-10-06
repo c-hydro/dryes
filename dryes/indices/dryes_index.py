@@ -159,8 +159,13 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         ## finally add the post-processing, if it exists
         post_cases = []
         if post_processing is not None:
+            import dryes.post_processing.pp_functions as pp
             i = 0
             for post_name, post_fn in post_processing.items():
+                if post_fn.get('type') == 'gaussian_smoothing':
+                    post_fn = pp.gaussian_smoothing(post_fn.get('sigma'))
+                else:
+                    raise ValueError(f'Post-processing function {post_name} not recognized.')
                 this_case = dict()
                 this_case['id']   = i
                 this_case['name'] = post_name

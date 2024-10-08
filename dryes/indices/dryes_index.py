@@ -538,7 +538,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         index_data, index_info = self.calc_index(time, history, case)
                         if index_data is None:
                             index_data = self._index.build_templatearray(self._raw_data.get_template_dict())
-                        metadata = case['options']
+                        metadata = case['options'].copy()
                         metadata.update(index_info)
                         if 'time' in metadata: metadata.pop('time')
                         self._index.write_data(index_data, time = time,  metadata = metadata, **case['tags'])
@@ -560,7 +560,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         post_fn = post_case['post_fn']
                         ppindex_data, ppindex_info = post_fn(index_data)
 
-                        metadata = case['options']
+                        metadata = case['options'].copy()
                         metadata.update(ppindex_info)
                         metadata.update(index_data.attrs)
                         if 'time' in metadata: metadata.pop('time')

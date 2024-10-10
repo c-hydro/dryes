@@ -80,6 +80,8 @@ class TimeAggregation:
                 if this_ts in timesteps_to_compute[agg_name]:
                     time_varin = variable_in.get_time_signature(this_ts)
                     agg_data, agg_info = agg_fn(variable_in, time_varin)
+                    if agg_data is None:
+                        agg_data = variable_out.build_templatearray(variable_in.get_template_dict())
                     if agg_name not in self.postaggfun.keys():
                         variable_out.write_data(agg_data, time = this_ts, metadata = agg_info, agg_fn = agg_name)
                     else:

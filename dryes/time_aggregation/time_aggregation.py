@@ -76,7 +76,8 @@ class TimeAggregation:
             return
 
         for this_ts in timesteps_to_iterate:
-            for agg_name, agg_fn in self.aggfun.items():
+            for agg_name in timesteps_to_compute.keys():
+                agg_fn = self.aggfun.get(agg_name)
                 if this_ts in timesteps_to_compute[agg_name]:
                     time_varin = variable_in.get_time_signature(this_ts)
                     agg_data, agg_info = agg_fn(variable_in, time_varin)

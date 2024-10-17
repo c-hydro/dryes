@@ -32,7 +32,7 @@ setup(
         'boto3',
         'img2pdf',
         'paramiko',
-        'stat'
+        'scipy'
     ],
     python_requires='>=3.10',
     test_suite='tests'

@@ -30,7 +30,9 @@ setup(
         'matplotlib>=3.8.4',
         'geopandas',
         'boto3',
-        'img2pdf'
+        'img2pdf',
+        'paramiko',
+        'scipy'
     ],
     python_requires='>=3.10',
     test_suite='tests'

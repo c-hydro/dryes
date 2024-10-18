@@ -324,7 +324,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 new_self = self.update_io(tile = tile)
                 new_self._compute_tile(current, reference, timesteps_per_year)
 
-        
     def _compute_tile(self, current: TimeRange|None,
                             reference: TimeRange,
                             timesteps_per_year: int) -> None:

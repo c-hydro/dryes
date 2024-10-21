@@ -307,7 +307,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             yield ts, deviation
 
 class LFI(DRYESThrBasedIndex):
-    name = 'LFI (Low Flow Index)'
+    name = 'LFI'
 
     default_options = {
         'thr_quantile' :  0.05, # quantile for the threshold calculation
@@ -411,7 +411,7 @@ class LFI(DRYESThrBasedIndex):
         return lfi_data, lfi_info
 
 class HCWI(DRYESThrBasedIndex):
-    name = 'HCWI (Heat or Cold Wave Indices)'
+    name = 'HCWI'
     default_options = {
         'thr_window'   : 11,    # window size for the threshold calculation
         'min_interval' :  1,    # minimum interval between spells
@@ -481,7 +481,7 @@ class HCWI(DRYESThrBasedIndex):
             yield ts_max, deviation
 
 class HWI(HCWI):
-    name = 'HWI (Heat Wave Index)'
+    name = 'HWI'
     direction = 1
 
     default_options = {
@@ -489,7 +489,7 @@ class HWI(HCWI):
     }
 
 class CWI(HCWI):
-    name = 'CWI (Cold Wave Index)'
+    name = 'CWI'
     direction = -1
 
     default_options = {

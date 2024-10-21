@@ -1,6 +1,4 @@
-from datetime import datetime, timedelta
 import numpy as np
-import xarray as xr
 import warnings
 
 from typing import List
@@ -102,7 +100,7 @@ class DRYESAnomaly(DRYESIndex):
         if self._data.check_data(time, **case['tags']):
             data = self._data.get_data(time, **case['tags'])
         else:
-            return self._data.template, {"NOTE": "missing data"}
+            return None, {"NOTE": "missing data"}
 
         # load the parameters
         if 'history_start' not in case['tags']:

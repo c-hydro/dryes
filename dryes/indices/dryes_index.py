@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional, Sequence
 import numpy as np
 from copy import copy, deepcopy
 import logging
@@ -108,12 +108,15 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             return options
         
         agg_options = options['agg_fn']
+        if agg_options is None or (isinstance(agg_options, str) and agg_options.lower() == 'none'):
+            self.time_aggregation = TimeAggregation()
+            return options
         if not isinstance(agg_options, dict):
             agg_options = {'agg': agg_options}
         
         time_agg = TimeAggregation()
         for agg_name, agg_fn in agg_options.items():
-            if isinstance(agg_fn, Callable|str):
+            if isinstance(agg_fn, Callable|str|dict):
                 time_agg.add_aggregation(agg_name, agg_fn)
             elif isinstance(agg_fn, tuple) or isinstance(agg_fn, list):
                 if len(agg_fn) == 1:
@@ -156,8 +159,13 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         ## finally add the post-processing, if it exists
         post_cases = []
         if post_processing is not None:
+            import dryes.post_processing.pp_functions as pp
             i = 0
             for post_name, post_fn in post_processing.items():
+                if post_fn.get('type') == 'gaussian_smoothing':
+                    post_fn = pp.gaussian_smoothing(post_fn.get('sigma'))
+                else:
+                    raise ValueError(f'Post-processing function {post_name} not recognized.')
                 this_case = dict()
                 this_case['id']   = i
                 this_case['name'] = post_name
@@ -222,9 +230,9 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
     def _set_run_options(self, run_options: dict) -> None:
         if 'history_start' in run_options and 'history_end' in run_options:
-            self.reference_fn = lambda time: TimeRange(run_options['history_start'], run_options['history_end'])
+            self.reference = TimeRange(run_options['history_start'], run_options['history_end'])
         else:
-            self.reference_fn = None
+            self.reference = None
         
         if 'timesteps_per_year' in run_options:
             self.timesteps_per_year = run_options['timesteps_per_year']
@@ -276,55 +284,58 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         else:
             return new_self
 
-    def compute(self, current:   TimeRange|Iterable[datetime],
-                      reference: Optional[TimeRange|Callable[[datetime], TimeRange]] = None,
-                      timesteps_per_year: Optional[int] = None) -> None:
+    def compute_parameters(self,
+                           reference: Sequence[datetime]|TimeRange|None = None,
+                           timesteps_per_year: int|None = None) -> None:
         
+        self.compute(current = None, reference = reference, timesteps_per_year = timesteps_per_year)
+
+    def compute(self, current:   Sequence[datetime]|TimeRange|None = None,
+                      reference: Sequence[datetime]|TimeRange|None = None,
+                      timesteps_per_year: int|None = None) -> None:
+
+        # set current and reference periods
+        current   = self.as_time_range(current, 'current')
+        if current is None:
+            if not self.options['make_parameters']:
+                raise ValueError('No current period specified.')
+            else:
+                #TODO add a warning that we are only calculating parameters
+                pass
+
+        if reference is not None:
+            reference = self.as_time_range(reference, 'reference')
+        elif hasattr(self, 'reference'):
+            reference = self.reference
+        else:
+            raise ValueError('No reference period specified.')
+        
+        # set timesteps per year
+        if timesteps_per_year is None:
+            if hasattr(self, 'timesteps_per_year'):
+                timesteps_per_year = self.timesteps_per_year
+            else:
+                raise ValueError('No timesteps per year specified.')
+
         if not self._raw_data.has_tiles:
-            self.compute_tile(current, reference, timesteps_per_year)
+            self._compute_tile(current, reference, timesteps_per_year)
         else:
             for tile in self._raw_data.tile_names:
                 new_self = self.update_io(tile = tile)
-                new_self.compute_tile(current, reference, timesteps_per_year)
-        
-    def compute_tile(self, current:   TimeRange,
-                           reference: Optional[TimeRange|Callable[[datetime], TimeRange]] = None,
-                           timesteps_per_year: Optional[int] = None) -> None:
-        
-        if not hasattr(self, 'reference_fn') or self.reference_fn is None:
-            if reference is None:
-                raise ValueError('No reference period specified.')
-            raw_reference = deepcopy(reference)
-            # make the reference period a function of time, for extra flexibility
-            if isinstance(reference, tuple) or isinstance(reference, list):
-                reference_fn = lambda time: raw_reference
-            elif isinstance(reference, Callable):
-                reference_fn = reference
-            
-            self.reference_fn = reference_fn
-        else:
-            reference_fn = self.reference_fn
-        
-        if not hasattr(self, 'timesteps_per_year') or self.timesteps_per_year is None:
-            if timesteps_per_year is None:
-                raise ValueError('No timesteps per year specified.')
-            self.timesteps_per_year = timesteps_per_year
-        else:
-            timesteps_per_year = self.timesteps_per_year
+                new_self._compute_tile(current, reference, timesteps_per_year)
 
+        
+    def _compute_tile(self, current: TimeRange|None,
+                            reference: TimeRange,
+                            timesteps_per_year: int) -> None:
+
+        # calculate the parameters
         if self.options['make_parameters']:
-            # get the timesteps for which we need to calculate the index
-            timesteps:list[FixedNTimeStep] = current.get_timesteps_from_tsnumber(timesteps_per_year)
-            #create_timesteps(current.start, current.end, timesteps_per_year)
-            # get the reference periods that we need to calculate parameters for
-            reference_periods:list[TimeRange] = self.make_reference_periods(timesteps, reference_fn)
-
-            # calculate the parameters
-            for reference_ in reference_periods:
-                self.make_parameters(reference_, timesteps_per_year)
+            self.make_parameters(reference, timesteps_per_year)
 
         # calculate the index
-        self.make_index(current, reference_fn, timesteps_per_year)
+        if current is not None:
+            self.make_index(current, reference, timesteps_per_year)
     
     def make_data_timesteps(self,
                             time_range: TimeRange,
@@ -350,23 +361,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 start = time_range.start
             return TimeRange(start, time_range.end).get_timesteps_from_tsnumber(timesteps_per_year)
             #return create_timesteps(start, time_range.end, timesteps_per_year)
-    
-    def make_reference_periods(self, current_timesteps: Iterable[datetime],
-                               reference_fn: Callable[[datetime], TimeRange]) -> list[TimeRange]:
-        """
-        This function will return the reference periods for which the parameters need to be computed.
-        """
-
-        references = set()
-        for time in current_timesteps:
-            this_reference = reference_fn(time)
-            references.add((this_reference.start, this_reference.end))
-        
-        references = list(references)
-        references.sort()
-
-        references_as_tr = [TimeRange(start, end) for start, end in references]
-        return references_as_tr
 
     def make_input_data(self, timesteps: list[FixedNTimeStep], agg_cases: Optional[list[dict]] = None) -> None:
         """
@@ -386,35 +380,10 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         self.time_aggregation.aggregate_data(timesteps_to_compute_dict, variable_in, variable_out)
     
     def make_parameters(self,
-                        history: TimeRange|Iterable[datetime],
+                        history: TimeRange,
                         timesteps_per_year: int) -> None:
 
-        # get the timesteps for which we need to calculate the parameters
-        # this depends on the time aggregation step, not the index calculation step
-        timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
-        # parameters need to be calculated individually for each agg case and for each opt case
-        agg_cases = self.cases['agg']
-        if len(agg_cases) == 0: agg_cases = [None]
-        aggs_to_do = []
-        for agg in agg_cases:
-            for par in self._parameters.values():
-                missing = par.find_times(timesteps, rev = True, **agg['tags'])
-                if len(missing) > 0:
-                    aggs_to_do.append(agg)
-                    break
-        
-        if len(aggs_to_do) == 0:
-            return
-
-        if isinstance(history, tuple) or isinstance(history, list):
-            history = TimeRange(history[0], history[1])
-
         self.log.info(f'Calculating parameters for {history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}...')
-
-        data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
-        
-        # make aggregated data for the parameters
-        self.make_input_data(data_timesteps, aggs_to_do)
 
         # get the parameters that need to be calculated
         parameters = self.parameters
@@ -425,21 +394,38 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         # get the timesteps for which we need to calculate the parameters
         # this depends on the time aggregation step, not the index calculation step
         timesteps:list[FixedNTimeStep] = TimeRange('1900-01-01', '1900-12-31').get_timesteps_from_tsnumber(timesteps_per_year)
+        # parameters need to be calculated individually for each agg case and for each opt case
+        agg_cases = self.cases['agg']
+        if len(agg_cases) == 0:
+            for par in self._parameters.values():
+                missing = par.find_times(timesteps, rev = True)
+                if len(missing) > 0:
+                    self.make_parameter_1agg(self._data, self._parameters, history, timesteps)
+                    break
+            
+        else:
+            aggs_to_do = []
+            for agg in agg_cases:
+                for par in self._parameters.values():
+                    missing = par.find_times(timesteps, rev = True, **agg['tags'])
+                    if len(missing) > 0:
+                        aggs_to_do.append(agg)
+                        break
+            if len(aggs_to_do) == 0:
+                return
 
-        for agg in aggs_to_do:
-            if agg is not None:
+            data_timesteps:list[FixedNTimeStep] = self.make_data_timesteps(history, timesteps_per_year)
+        
+            # make aggregated data for the parameters
+            self.make_input_data(data_timesteps, aggs_to_do)
+
+            for agg in aggs_to_do:
                 self.log.info(f' #Aggregation {agg["name"]}:')
                 agg_tags = agg['tags']
-                #par_paths = {par:substitute_values(path, agg['tags']) for par, path in output_paths.items()}
-                #in_path = self.input_data_path[agg["name"]]
-            else:
-                agg_tags = {}
-                #par_paths = output_paths
-                #in_path = self.input_data_path
 
-            variable   = self._data.update(**agg_tags)
-            parameters = {p: self._parameters[p].update(**agg_tags) for p in self.parameters}
-            self.make_parameter_1agg(variable, parameters, history, timesteps)
+                variable   = self._data.update(**agg_tags)
+                parameters = {p: self._parameters[p].update(**agg_tags) for p in self.parameters}
+                self.make_parameter_1agg(variable, parameters, history, timesteps)
 
     def make_parameter_1agg(self,
                             variable: Dataset,
@@ -485,29 +471,15 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         if 'time' in metadata: metadata.pop('time')
                         par.write_data(data, time = time, time_format = '%d/%m', metadata = metadata, **tags)
 
-    def make_index(self, current:   TimeRange|Iterable[datetime],
-                         reference: TimeRange|Iterable[datetime]|Callable,
+    def make_index(self, current:   TimeRange,
+                         reference: TimeRange,
                          timesteps_per_year: int) -> None:
 
-        if isinstance(current, tuple) or isinstance(current, list):
-            current = TimeRange(current[0], current[1])
         self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
 
         timesteps:list[FixedNTimeStep] = self.make_data_timesteps(current, timesteps_per_year)
         # make aggregated data for the parameters
         self.make_input_data(timesteps)
-
-        raw_reference = deepcopy(reference)
-        # make the reference period a function of time, for extra flexibility
-        if isinstance(reference, TimeRange):
-            reference_fn = lambda time: raw_reference
-        elif isinstance(reference, tuple) or isinstance(reference, list):
-            reference_fn = lambda time: TimeRange(raw_reference[0], raw_reference[1])
-        elif isinstance(reference, Callable):
-            if isinstance(reference(current.start), TimeRange):
-                reference_fn = lambda time: raw_reference(time.start)
-            elif isinstance(reference(current.start), tuple) or isinstance(reference(current.start), list):
-                reference_fn = lambda time: TimeRange(raw_reference(time.start)[0], raw_reference(time.start)[1])
 
         # check if anything has been calculated already
         agg_cases = self.cases['agg'] if len(self.cases['agg']) > 0 else [{}]
@@ -530,10 +502,11 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                     self.log.info(f' #Case {case["name"]}: {len(timesteps) - len(ts_todo)}/{len(timesteps)} timesteps already computed.')
                     for time in ts_todo:
                         self.log.info(f'   {time}')
-                        history = reference_fn(time)
-                        case['tags'].update({'history_start': history.start, 'history_end': history.end})      
-                        index_data, index_info = self.calc_index(time, history, case)
-                        metadata = case['options']
+                        case['tags'].update({'history_start': reference.start, 'history_end': reference.end})      
+                        index_data, index_info = self.calc_index(time, reference, case)
+                        if index_data is None:
+                            index_data = self._index.build_templatearray(self._raw_data.get_template_dict())
+                        metadata = case['options'].copy()
                         metadata.update(index_info)
                         if 'time' in metadata: metadata.pop('time')
                         self._index.write_data(index_data, time = time,  metadata = metadata, **case['tags'])
@@ -549,13 +522,12 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                     self.log.info(f'  Post-processing {post_case["name"]}: {len(timesteps) - len(ts_todo)}/{len(timesteps)} timesteps already computed.')
                     for time in ts_todo:
                         self.log.info(f'   {time}')
-                        history = reference_fn(time)
-                        case['tags'].update({'history_start': history.start, 'history_end': history.end})
+                        case['tags'].update({'history_start': reference.start, 'history_end': reference.end})
                         index_data = self._index.get_data(time, **pre_case['tags'])
                         post_fn = post_case['post_fn']
                         ppindex_data, ppindex_info = post_fn(index_data)
 
-                        metadata = case['options']
+                        metadata = case['options'].copy()
                         metadata.update(ppindex_info)
                         metadata.update(index_data.attrs)
                         if 'time' in metadata: metadata.pop('time')
@@ -586,3 +558,19 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
         raise NotImplementedError
+    
+    @staticmethod
+    def as_time_range(value: TimeRange|Sequence[datetime]|None, name = "") -> TimeRange:
+        if hasattr(value, 'start') and hasattr(value, 'end'):
+            return TimeRange(value.start, value.end)
+        elif isinstance(value, Sequence):
+            if len(value) == 2:
+                return TimeRange(value[0], value[1])
+        elif value is None:
+            return None
+
+        if len(name) > 0:
+            str = f'{name} must be a TimeRange or a sequence of two datetimes.'
+        else:
+            str = 'Expecting a TimeRange or a sequence of two datetimes.'
+        raise ValueError(str)

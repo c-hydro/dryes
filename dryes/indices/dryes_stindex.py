@@ -155,7 +155,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         if self._data.check_data(time, **case['tags']):
             data = self._data.get_data(time, **case['tags'])
         else:
-            return self._data.template, {"NOTE": "missing data"}
+            return None, {"NOTE": "missing data"}
 
         # load the parameters
         if 'history_start' not in case['tags']:
@@ -191,7 +191,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         return stindex_data, index_info
     
 class SPI(DRYESStandardisedIndex):
-    index_name = 'SPI (Standardised Precipitaion Index)'
+    index_name = 'SPI'
     positive_only = True
     default_options = {
         'distribution'   : 'gamma',
@@ -202,7 +202,7 @@ class SPI(DRYESStandardisedIndex):
         return super().parameters + ['prob0']
 
 class SPEI(DRYESStandardisedIndex):
-    index_name = 'SPEI (Standardised Precipitaion Evapotranspiration Index)'
+    index_name = 'SPEI'
     positive_only = False
     default_options = {
         'distribution'   : 'pearson3',
@@ -217,21 +217,20 @@ class SPEI(DRYESStandardisedIndex):
             raise ValueError('Either P or P_raw must be specified.')
         
         self._raw_inputs = {'P': io_options['P_raw'], 'PET': io_options['PET_raw']}
-        template = self._raw_inputs['P'].get_template()
-        for raw_input in self._raw_inputs.values():
-            raw_input.set_template(template)
+        self._raw_inputs['P']._template = {}
+        self._raw_inputs['PET']._template = self._raw_inputs['P']._template
 
         if 'data_raw' not in io_options:
             raise ValueError('data_raw must be specified.')
         
         self._raw_data = io_options['data_raw']
-        self._raw_data.set_template(template)
+        self._raw_data._template = self._raw_inputs['PET']._template
         self._raw_data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
 
         super()._check_io_options(io_options)
 
 class SSMI(DRYESStandardisedIndex):
-    index_name = 'SSMI (Standardised Soil Moisture Index)'
+    index_name = 'SSMI'
     positive_only = True
     default_options = {
         'distribution'   : 'beta',

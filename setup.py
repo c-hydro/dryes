@@ -29,7 +29,10 @@ setup(
         'deprecated>=1.2.12',
         'matplotlib>=3.8.4',
         'geopandas',
-        'boto3'
+        'boto3',
+        'img2pdf',
+        'paramiko',
+        'scipy'
     ],
     python_requires='>=3.10',
     test_suite='tests'

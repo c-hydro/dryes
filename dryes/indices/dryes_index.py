@@ -179,6 +179,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
     def _check_io_options(self, io_options: dict, update_existing = False) -> None:
         # check that we have all the necessary options
+        self.io_options = io_options
         self._check_io_data(io_options, update_existing)
         self._check_io_parameters(io_options, update_existing)
         self._check_io_index(io_options, update_existing)

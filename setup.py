@@ -32,7 +32,8 @@ setup(
         'boto3',
         'img2pdf',
         'paramiko',
-        'scipy'
+        'scipy',
+        'netCDF4'
     ],
     python_requires='>=3.10',
     test_suite='tests'

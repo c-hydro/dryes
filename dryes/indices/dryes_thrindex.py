@@ -68,7 +68,8 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         # check cases that have already been calculated
         cases_to_do = []
-        for case in self.cases['opt']:
+        cases = self.cases['opt'].copy()
+        for case in cases:
             this_ts_todo = self._parameters['threshold'].find_times(timesteps, rev = True, **case['tags'])
             if len(this_ts_todo) > 0:
                 cases_to_do.append(case)
@@ -106,7 +107,10 @@ class DRYESThrBasedIndex(DRYESIndex):
         datasets = [variable.get_data(day, as_is=True, **case['tags']).squeeze().expand_dims('time').assign_coords(time=[day.start]) for day in days]
         combined = xr.concat(datasets, dim='time')
         data_nc = f'{tmpdir}/data.nc'
-        combined.to_netcdf(data_nc)
+
+        # Specify encoding to ensure correct data types
+        import netCDF4
+        combined.to_netcdf(data_nc, format = 'NETCDF4', engine = 'netcdf4')
 
         # calculate running max and min of data using CDO
         window_size = case['options']['thr_window']
@@ -124,7 +128,9 @@ class DRYESThrBasedIndex(DRYESIndex):
         threshold_quantile = int(case['options']['thr_quantile']*100)
         threshold_nc = f'{tmpdir}/threshold.nc'
 
-        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
+        # this causes an error in some versions of CDO and is not necessary since rm=c,pm=r8 is the default
+        #cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
+        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size} {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
         subprocess.run(cdo_cmd, shell = True)
 
         # read the threshold data
@@ -132,8 +138,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         
         # get the crs and write it to the threshold data
         thresholds_da = thresholds['__xarray_dataarray_variable__']
-        crs = thresholds['spatial_ref'].attrs['crs_wkt']
-        thresholds_da = thresholds['__xarray_dataarray_variable__'].rio.write_crs(crs, inplace = True)
+        crs = combined.rio.crs
+        thresholds_da = thresholds['__xarray_dataarray_variable__'].rio.write_crs(crs)
 
         # add a 1-d "band" dimension
         thresholds_da = thresholds_da.expand_dims('band')
@@ -142,7 +148,11 @@ class DRYESThrBasedIndex(DRYESIndex):
         days = thresholds_da.time.values
         for i, date in enumerate(days):
             time = datetime.fromtimestamp(date.astype('O') / 1e9)
-            threshold_data = thresholds_da.isel(time = i).drop_vars('time')
+            if time.month == 2 and time.day == 29:
+                # do the average between the thresholds for 28th of Feb and 1st of Mar
+                threshold_data = (thresholds_da.isel(time = i-1) + thresholds_da.isel(time = i+1)) / 2
+            else:
+                threshold_data = thresholds_da.isel(time = i).drop_vars('time')
             threshold_info.update({'time': time})
             yield threshold_data, threshold_info
 
@@ -177,13 +187,14 @@ class DRYESThrBasedIndex(DRYESIndex):
         all_deviations = self.get_deviations(input, thresholds, days)
 
         # set the starting conditions for each case we need to calculate
-        start_ddi  = np.full((3,*input.get_template().shape), np.nan)
+        template = input.build_templatearray(input.get_template_dict())
+        start_ddi  = np.full((3,*template.shape), np.nan)
         ddi_dict = {k:{v['id']:start_ddi.copy() for v in v} for k,v in cases.items()}
 
         # set the cumulative deficit/surplus, we only need the average deficit to
         # calculate the lambda for the LFI, so we keep track of the cumulative drought
         # and the number of droughts
-        cum_deviation_raw = np.zeros((2, *input.get_template().shape))
+        cum_deviation_raw = np.zeros((2, *template.shape))
         cum_deviation_dict = {k:{v['id']:cum_deviation_raw.copy() for v in v} for k,v in cases.items()}
 
         i = 0
@@ -240,7 +251,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         options = case['options']
 
         if ddi_start is None:
-            ddi_start = np.full((3, *input.get_template().shape), np.nan)
+            template = input.build_templatearray(input.get_template_dict())
+            ddi_start = np.full((3, *template.shape), np.nan)
         
         # pool the deficit
         ddi = ddi_start
@@ -307,7 +319,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             yield ts, deviation
 
 class LFI(DRYESThrBasedIndex):
-    name = 'LFI'
+    index_name = 'LFI'
 
     default_options = {
         'thr_quantile' :  0.05, # quantile for the threshold calculation
@@ -341,7 +353,8 @@ class LFI(DRYESThrBasedIndex):
         # the deficits and the lambdas
         opt_groups = [['thr_quantile', 'thr_window'],
                       ['min_duration', 'min_interval', 'min_nevents']]
-        thr_cases, lam_cases = make_case_hierarchy(self.cases['opt'], opt_groups)
+
+        thr_cases, lam_cases = make_case_hierarchy(self.cases['opt'].copy(), opt_groups)
 
         # update the history in all parameters
         parlambda = self._parameters['lambda'].update(history_start = history.start,
@@ -411,7 +424,7 @@ class LFI(DRYESThrBasedIndex):
         return lfi_data, lfi_info
 
 class HCWI(DRYESThrBasedIndex):
-    name = 'HCWI'
+    index_name = 'HCWI'
     default_options = {
         'thr_window'   : 11,    # window size for the threshold calculation
         'min_interval' :  1,    # minimum interval between spells
@@ -481,7 +494,7 @@ class HCWI(DRYESThrBasedIndex):
             yield ts_max, deviation
 
 class HWI(HCWI):
-    name = 'HWI'
+    index_name = 'HWI'
     direction = 1
 
     default_options = {
@@ -489,7 +502,7 @@ class HWI(HCWI):
     }
 
 class CWI(HCWI):
-    name = 'CWI'
+    index_name = 'CWI'
     direction = -1
 
     default_options = {

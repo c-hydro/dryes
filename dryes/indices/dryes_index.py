@@ -253,7 +253,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         index_name = cls.get_index_name(index_name)
         Subclass: 'DRYESIndex'|None = cls.subclasses.get(index_name)
         if Subclass is None:
-            raise ValueError(f"Invalid data source: {index_name}")
+            raise ValueError(f"Invalid index: {index_name}")
         return Subclass
     
     @classmethod

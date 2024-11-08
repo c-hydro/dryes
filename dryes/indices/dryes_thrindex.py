@@ -112,8 +112,15 @@ class DRYESThrBasedIndex(DRYESIndex):
         import netCDF4
         combined.to_netcdf(data_nc, format = 'NETCDF4', engine = 'netcdf4')
 
-        # calculate running max and min of data using CDO
+        # set the number of bins in CDO as an environment variable
         window_size = case['options']['thr_window']
+        history_start = history.start.year
+        history_end = history.end.year
+        import os
+        CDO_PCTL_NBINS= window_size * (history_end - history_start + 1) * 2 + 2
+        os.environ['CDO_NUMBINS'] = str(CDO_PCTL_NBINS)
+
+        # calculate running max and min of data using CDO
         datamin_nc = f'{tmpdir}/datamin.nc'
         datamax_nc = f'{tmpdir}/datamax.nc'
 

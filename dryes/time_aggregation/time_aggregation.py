@@ -79,7 +79,7 @@ class TimeAggregation:
             for agg_name in timesteps_to_compute.keys():
                 agg_fn = self.aggfun.get(agg_name)
                 if this_ts in timesteps_to_compute[agg_name]:
-                    time_varin = variable_in.get_time_signature(this_ts)
+                    time_varin = this_ts.end if hasattr(this_ts, 'end') else this_ts
                     agg_data, agg_info = agg_fn(variable_in, time_varin)
                     if agg_data is None:
                         agg_data = variable_out.build_templatearray(variable_in.get_template_dict())

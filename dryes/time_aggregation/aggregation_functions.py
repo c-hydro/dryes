@@ -25,6 +25,10 @@ def average_of_window(size: int, unit: str,
 
         if window.start < variable.get_first_ts().start:
             return None, {}
+        
+        time_signature = variable.time_signature
+        if time_signature == 'end+1':
+            window = TimeRange(window.start + dt.timedelta(days = 1), window.end + dt.timedelta(days = 1))
 
         #variable.make(window)
         times_to_get = variable.get_times(window)
@@ -82,7 +86,6 @@ def sum_of_window(size: int, unit: str,
     input_agg expects a dictionary specifying the aggregation of the input data, with the following keys:
     - 'size':  int,  the size of the aggregation window.
     - 'unit':  str,  the unit of the aggregation window.
-    - 'start': bool, whether the timestep is the start or the end of the aggregation window.
     - 'truncate_at_end_year': bool, whether to truncate the aggregation window at the end of the year or roll over.
     input_agg allows to pass if the input is already a sum, and discards some timesteps that are already included
 
@@ -92,7 +95,6 @@ def sum_of_window(size: int, unit: str,
     if input_agg is not None:
         if 'size' not in input_agg or 'unit' not in input_agg:
             raise ValueError('input_agg must have keys "size" and "unit"')
-        if 'start' not in input_agg: input_agg['start'] = False
         if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
 
     def _sum_of_window(variable: Dataset, time: dt.datetime, _size: int, _unit: str,
@@ -106,25 +108,42 @@ def sum_of_window(size: int, unit: str,
             return None, {}
         
         #variable.make(window)
+        time_signature = variable.time_signature
+        if time_signature == 'end+1':
+            window = TimeRange(window.start + dt.timedelta(days = 1), window.end + dt.timedelta(days = 1))
+
         all_times = variable.get_times(window)
         if _input_agg is not None:
-            all_times.sort(reverse=True)
+            if 'end' in time_signature:
+                all_times.sort(reverse=True)
+            else:
+                all_times.sort()
             all_times_loop = all_times.copy()
-            for time in all_times_loop:
-                if time not in all_times:
+            for ttime in all_times_loop:
+                if ttime not in all_times:
                     continue
-                if _input_agg['start']:
-                    this_time_window = get_window(time, _input_agg['size'], _input_agg['unit'], start = True)
-                    if _input_agg['truncate_at_end_year'] and this_time_window.end.year != time.year:
-                        this_time_window = TimeRange(this_time_window.start, dt.datetime(time.year, 12, 31))
+                if time_signature == 'start':
+                    this_time_window = get_window(ttime, _input_agg['size'], _input_agg['unit'], start = True)
+                    if _input_agg['truncate_at_end_year'] and this_time_window.end.year != ttime.year:
+                        this_time_window = TimeRange(this_time_window.start, dt.datetime(ttime.year, 12, 31))
+                    
+                    included_times = [t for t in all_times if this_time_window.start < t <= this_time_window.end]
                 else:
-                    this_time_window = get_window(time, _input_agg['size'], _input_agg['unit'], start = False)
-                    if _input_agg['truncate_at_end_year'] and this_time_window.start.year != time.year:
-                        this_time_window = TimeRange(dt.datetime(time.year, 1, 1), this_time_window.end)
-                included_times = [t for t in all_times if this_time_window.start <= t < this_time_window.end]
+                    if time_signature == 'end+1':
+                        ttime = ttime - dt.timedelta(days = 1)
+
+                    this_time_window = get_window(ttime, _input_agg['size'], _input_agg['unit'], start = False)
+                    if _input_agg['truncate_at_end_year'] and this_time_window.start.year != ttime.year:
+                        this_time_window = TimeRange(dt.datetime(ttime.year, 1, 1), this_time_window.end)
+
+                    if time_signature == 'end+1':
+                        included_times = [t for t in all_times if this_time_window.start <= t - dt.timedelta(days = 1) < this_time_window.end]
+                    elif time_signature == 'end':
+                        included_times = [t for t in all_times if this_time_window.start <= t < this_time_window.end]
+
                 for t in included_times:
                     all_times.remove(t)
-
+                    
         all_times.sort()
         times_to_get = all_times
 
@@ -133,8 +152,8 @@ def sum_of_window(size: int, unit: str,
 
         if _propagate_metadata is not None:
             metadata_list = []
-        for time in times_to_get:
-            new_data = variable.get_data(time)
+        for ttime in times_to_get:
+            new_data = variable.get_data(ttime)
             data_stack = np.stack([data, new_data], axis = 0)
             data = np.sum(data_stack, axis = 0)
             if _propagate_metadata is not None:
@@ -170,17 +189,15 @@ def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weight
     input_agg expects a dictionary specifying the aggregation of the input data, with the following keys:
         - 'size':  int,  the size of the aggregation window.
         - 'unit':  str,  the unit of the aggregation window.
-        - 'start': bool, whether the timestep is the start or the end of the aggregation window.
         - 'truncate_at_end_year': bool, whether to truncate the aggregation window at the end of the year or roll over.
-        [for VIIRS data: input_agg = 'viirs' means {'size': 8, 'unit': 'days', 'start': True, 'truncate_at_end_year': True}]
+        [for VIIRS data: input_agg = 'viirs' means {'size': 8, 'unit': 'days', 'truncate_at_end_year': True}]
     """
 
     if isinstance(input_agg, str) and input_agg == 'viirs':
-        input_agg = {'size': 8, 'unit': 'days', 'start': True, 'truncate_at_end_year': True}
+        input_agg = {'size': 8, 'unit': 'days', 'truncate_at_end_year': True}
     elif isinstance(input_agg, dict):
         if 'size' not in input_agg or 'unit' not in input_agg:
             raise ValueError('input_agg must have keys "size" and "unit"')
-        if 'start' not in input_agg: input_agg['start'] = False
         if 'truncate_at_end_year' not in input_agg: input_agg['truncate_at_end_year'] = False
 
     if weights not in ['overlap', 'inv_distance']:
@@ -191,17 +208,21 @@ def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weight
         """
         Aggregates the FAPAR data to the current timestep using inverse time distance of the previous 
         """
-        end    = time                                    # this is where the current period ends
         window = get_window(time, _size, _unit)
-        start  = window.start                            # this is where the averaging period starts
-
+        start = window.start
+        end = window.end
+        
         # get the window of the relevant data (this is the range of times that we should search the data for the cover the window)
-        if _input_agg['start']:
+        input_time_signature = variable.time_signature
+        if input_time_signature == 'start':
             data_start = window.start - dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
             data_end = window.end
-        else:
+        elif input_time_signature == 'end':
             data_start = window.start
             data_end = window.end + dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+        elif input_time_signature == 'end+1':
+            data_start = window.start + dt.timedelta(days = 1)
+            data_end = window.end + dt.timedelta(**{input_agg['unit']: input_agg['size']})
 
         available_data = variable.get_times(TimeRange(data_start, data_end))
         if len(available_data) == 0:
@@ -210,16 +231,19 @@ def weighted_average_of_window(size: int, unit: str, input_agg: str|dict, weight
         overlap = []
         distance = []
         for data_time in available_data:
-            if _input_agg['start']:
+            if input_time_signature == 'start':
                 data_start = data_time
                 data_end = data_time + dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
-                if _input_agg['truncate_at_end_year'] and data_end.year != data_time.year:
-                    data_end = dt.datetime(data_time.year, 12, 31)
+                if _input_agg['truncate_at_end_year'] and data_end.year != data_start.year:
+                    data_end = dt.datetime(data_start.year, 12, 31)
             else:
-                data_end = data_time
-                data_start = data_time - dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
-                if _input_agg['truncate_at_end_year'] and data_start.year != data_time.year:
-                    data_start = dt.datetime(data_time.year, 1, 1)
+                if input_time_signature == 'end+1':
+                    data_end = data_time - dt.timedelta(days = 1)
+                elif input_time_signature == 'end':
+                    data_end = data_time
+                data_start = data_end - dt.timedelta(**{input_agg['unit']: input_agg['size'] - 1})
+                if _input_agg['truncate_at_end_year'] and data_start.year != data_end.year:
+                    data_start = dt.datetime(data_end.year, 1, 1)
 
             distance.append(abs((end - data_end).days) + 1)
             overlap.append((min(end, data_end) - max(start, data_start)).days + 1)

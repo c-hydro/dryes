@@ -138,7 +138,6 @@ def sum_of_window(size: int, unit: str,
 
                     if time_signature == 'end+1':
                         included_times = [t for t in all_times if this_time_window.start <= t - dt.timedelta(days = 1) < this_time_window.end]
-                        breakpoint()
                     elif time_signature == 'end':
                         included_times = [t for t in all_times if this_time_window.start <= t < this_time_window.end]
 

@@ -1,4 +1,4 @@
-from typing import Optional, Iterable
+from typing import Optional, Sequence
 import numpy as np
 import xarray as xr
 
@@ -7,53 +7,52 @@ from .register_algorithm import as_DRYES_algorithm
 @as_DRYES_algorithm
 def cdi_jrc(input_data:    Optional[dict[str,xr.DataArray]] = None,
             previous_data: Optional[dict[str,xr.DataArray]] = None,
-            **kwargs) -> dict[str,xr.DataArray] | tuple[Iterable[str], Iterable[str], Iterable[str]]:
+            static_data:   Optional[dict[str,xr.DataArray]] = None,
+            nan_value = 255, cascade_nans = True
+            ) -> dict[str,xr.DataArray] | tuple[Sequence[str], Sequence[str], Sequence[str], Sequence[str]]:
     
     input_keys = {'spi1' : 'SPI 1-month',
                   'spi3' : 'SPI 3-months',
                   'fapar': 'FAPAR Anomaly',
                   'sma'  : 'Soil Moisture Anomaly',}
-    
+
     previous_keys = {'cdi_p' : 'Previous CDI',
                      'count_fapar_recovery': 'Count for FAPAR Recovery',
                      'count_sma_recovery'  : 'Count for SMA Recovery',}
-    
+
+    static_keys = {'domain' : 'Domain'}
+
     output_keys = ['cdi', 'count_sma_recovery', 'count_fapar_recovery', 'cases']
 
     # calling the function without data returns the keys
-    if input_data is None and previous_data is None:
-        return input_keys, previous_keys, output_keys
+    if input_data is None and previous_data is None and static_data is None:
+        return input_keys, previous_keys, static_keys, output_keys
 
-    input_nodata = {k: v.attrs.get('_FillValue') for k, v in input_data.items()}
+    # get data, set masks and set nans
+    spi1, spi3, sma, fapar = prepare_cdi_inputs(input_data, nan_value, cascade_nans)
 
-    # turn data into numpy arrays
-    input_data    = {k: v.values for k, v in input_data.items()}
-    previous_data = {k: v.values for k, v in previous_data.items()}
+    # get the previous CDI and use it as template for the output
+    cdi_p_da = previous_data['cdi_p']
+    xr_template = cdi_p_da.copy()
 
-    # get data, set masks and set nans (255) in a cascading way (where spi1 is nan, spi3 is set to nan, etc.)
-    spi1 = input_data['spi1']
-    spi1 = np.where(np.isclose(spi1, input_nodata['spi1'], equal_nan=True),  255, spi1)
+    # get the values of the previous CDI and set the nodata values to 0 = no drought
+    cdi_p = cdi_p_da.values
+    cdi_nodata = cdi_p_da.attrs.get('_FillValue')
+    cdi_p = np.where(np.isclose(cdi_p, cdi_nodata, equal_nan=True), 0, cdi_p)
 
-    spi3 = input_data['spi3']
-    spi3 = np.where(np.isclose(spi1, 255), 255, spi3)
-    spi3 = np.where(np.isclose(spi3, input_nodata['spi3'], equal_nan=True), 255, spi3)
-
-    sma   = input_data['sma']
-    sma   = np.where(np.isclose(spi3, 255), 255, sma)
-    sma   = np.where(np.isclose(sma, input_nodata['sma'], equal_nan=True), 255, sma)
-
-    fapar = input_data['fapar']
-    fapar = np.where(np.isclose(sma, 255),  255, fapar)
-    fapar = np.where(np.isclose(fapar, input_nodata['fapar'], equal_nan=True), 255, fapar)
-
-    cdi_p = previous_data['cdi_p']
+    # get the values of the counts and set the nodata values to 0
     count_fapar_recovery = previous_data['count_fapar_recovery']
+    count_fapar_recovery_nodata = count_fapar_recovery.attrs.get('_FillValue')
+    count_fapar_recovery = np.where(np.isclose(count_fapar_recovery.values, count_fapar_recovery_nodata, equal_nan=True), 0, count_fapar_recovery)
+
     count_sma_recovery = previous_data['count_sma_recovery']
+    count_sma_recovery_nodata = count_sma_recovery.attrs.get('_FillValue')
+    count_sma_recovery = np.where(np.isclose(count_sma_recovery.values, count_sma_recovery_nodata, equal_nan=True), 0, count_sma_recovery)
 
     # Variables
     max_dek = 4 # maximum number of dekads
     th2 = -0.5 # sma threshold
-    missingdata_value = 0 #missing data value
+    missingdata_value = 8 #missing data value
     cdi = np.zeros_like(cdi_p).astype('int16') # starting CDI array
     cases = cdi + 1000 # starting cases CDI array
 
@@ -358,9 +357,23 @@ def cdi_jrc(input_data:    Optional[dict[str,xr.DataArray]] = None,
     count_sma_recovery[mask_case_gh] = 0
     count_fapar_recovery[mask_case_gh] = 0
 
-    # cdi p masked with previous CDIs
-    cdi_p_masked = cdi_p
-    cdi_checks = None
+    # make the outputs as xarray DataArrays
+    cdi = xr_template.copy(data = cdi)
+    cases = xr_template.copy(data = cases)
+    count_sma_recovery   = xr_template.copy(data = count_sma_recovery)
+    count_fapar_recovery = xr_template.copy(data = count_fapar_recovery)
+
+    ## mask the data based on the domain
+    static_data = {k: v.values for k, v in static_data.items()}
+    domain = static_data['domain']
+    domain = np.where(domain == 1, 1, 0)
+
+    if domain is not None:
+        cdi = cdi.where(domain == 1, missingdata_value)
+        cdi.attrs['_FillValue'] = missingdata_value
+
+        cases = cases.where(domain == 1, 999)
+        cases.attrs['_FillValue'] = 999
 
     output = {
         'cdi': cdi,
@@ -375,8 +388,11 @@ def cdi_jrc(input_data:    Optional[dict[str,xr.DataArray]] = None,
 def cdi_jrc_norecovery(
             input_data:    Optional[dict[str,xr.DataArray]] = None,
             previous_data: Optional[dict[str,xr.DataArray]] = None,
-            **kwargs) -> dict[str,xr.DataArray] | tuple[Iterable[str], Iterable[str], Iterable[str]]:
-    
+            static_data:   Optional[dict[str,xr.DataArray]] = None,
+            nan_value = 255,
+            cascade_nans = True
+            ) -> dict[str,xr.DataArray] | tuple[Sequence[str], Sequence[str], Sequence[str], Sequence[str]]:
+
     input_keys = {'spi1' : 'SPI 1-month',
                   'spi3' : 'SPI 3-months',
                   'fapar': 'FAPAR Anomaly',
@@ -386,37 +402,27 @@ def cdi_jrc_norecovery(
     
     output_keys = ['cdi', 'cases']
 
+    static_keys = {'domain' : 'Domain'}
+
     # calling the function without data returns the keys
-    if input_data is None and previous_data is None:
-        return input_keys, previous_keys, output_keys
+    if input_data is None and previous_data is None and static_data is None:
+        return input_keys, previous_keys, static_keys, output_keys
 
-    input_nodata = {k: v.attrs.get('_FillValue') for k, v in input_data.items()}
+    # get data, set masks and set nans
+    spi1, spi3, sma, fapar = prepare_cdi_inputs(input_data, nan_value, cascade_nans)
 
-    # turn data into numpy arrays
-    input_data    = {k: v.values for k, v in input_data.items()}
-    previous_data = {k: v.values for k, v in previous_data.items()}
+    # get the previous CDI and use it as template for the output
+    cdi_p_da = previous_data['cdi_p']
+    xr_template = cdi_p_da.copy()
 
-    # get data, set masks and set nans (255) in a cascading way (where spi1 is nan, spi3 is set to nan, etc.)
-    spi1 = input_data['spi1']
-    spi1 = np.where(np.isclose(spi1, input_nodata['spi1'], equal_nan=True),  255, spi1)
-
-    spi3 = input_data['spi3']
-    spi3 = np.where(np.isclose(spi1, 255), 255, spi3)
-    spi3 = np.where(np.isclose(spi3, input_nodata['spi3'], equal_nan=True), 255, spi3)
-
-    sma   = input_data['sma']
-    sma   = np.where(np.isclose(spi3, 255), 255, sma)
-    sma   = np.where(np.isclose(sma, input_nodata['sma'], equal_nan=True), 255, sma)
-
-    fapar = input_data['fapar']
-    fapar = np.where(np.isclose(sma, 255),  255, fapar)
-    fapar = np.where(np.isclose(fapar, input_nodata['fapar'], equal_nan=True), 255, fapar)
-
-    cdi_p = previous_data['cdi_p']
+    # get the values of the previous CDI and set the nodata values to 0 = no drought
+    cdi_p = cdi_p_da.values
+    cdi_nodata = cdi_p_da.attrs.get('_FillValue')
+    cdi_p = np.where(np.isclose(cdi_p, cdi_nodata, equal_nan=True), 0, cdi_p)
 
     # Variables
     th2 = -0.5 # sma threshold
-    missingdata_value = 0 #missing data value
+    missingdata_value = 8 #missing data value
     cdi = np.zeros_like(cdi_p).astype('int16') # starting CDI array
     cases = cdi + 1000 # starting cases CDI array
 
@@ -626,9 +632,47 @@ def cdi_jrc_norecovery(
     cdi[mask_case_gh]= 3
     cases[mask_case_gh] = 1383
 
+    # make the outputs as xarray DataArrays
+    cdi = xr_template.copy(data = cdi)
+    cases = xr_template.copy(data = cases)
+
+    ## mask the data based on the domain
+    static_data = {k: v.values for k, v in static_data.items()}
+    domain = static_data['domain']
+    domain = np.where(domain == 1, 1, 0)
+
+    if domain is not None:
+        cdi = cdi.where(domain == 1, missingdata_value)
+        cdi.attrs['_FillValue'] = missingdata_value
+
+        cases = cases.where(domain == 1, 999)
+        cases.attrs['_FillValue'] = 999
+
     output = {
         'cdi': cdi,
         'cases': cases,
     }
 
     return  output
+
+def prepare_cdi_inputs(input_data, nan_value = 255, cascade_nans = True):
+
+    input_nodata = {k: v.attrs.get('_FillValue') for k, v in input_data.items()}
+    input_values = {k: v.values for k, v in input_data.items()}
+
+    spi1 = input_values['spi1']
+    spi1 = np.where(np.isclose(spi1, input_nodata['spi1'], equal_nan=True),  nan_value, spi1)
+
+    spi3 = input_values['spi3']
+    if cascade_nans: spi3 = np.where(np.isclose(spi1, nan_value), nan_value, spi3)
+    spi3 = np.where(np.isclose(spi3, input_nodata['spi3'], equal_nan=True), nan_value, spi3)
+
+    sma = input_values['sma']
+    if cascade_nans: sma = np.where(np.isclose(spi3, nan_value), nan_value, sma)
+    sma = np.where(np.isclose(sma, input_nodata['sma'], equal_nan=True), nan_value, sma)
+
+    fapar = input_values['fapar']
+    if cascade_nans: fapar = np.where(np.isclose(sma, nan_value),  nan_value, fapar)
+    fapar = np.where(np.isclose(fapar, input_nodata['fapar'], equal_nan=True), nan_value, fapar)
+
+    return spi1, spi3, sma, fapar

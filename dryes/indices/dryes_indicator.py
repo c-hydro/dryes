@@ -22,7 +22,7 @@ class DRYESCombinedIndicator(DRYESIndex):
         previous_keys = list(k for k in previous_data)
         static_keys = list(k for k in static_data)
         output_keys = list(k for k in output_data)
-        return input_keys + previous_keys + static_keys + output_keys[1:]
+        return static_keys + input_keys + previous_keys + output_keys[1:]
 
     def _check_index_options(self, options: dict) -> None:
         super()._check_index_options(options)

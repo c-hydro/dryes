@@ -128,9 +128,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         threshold_quantile = int(case['options']['thr_quantile']*100)
         threshold_nc = f'{tmpdir}/threshold.nc'
 
-        # this causes an error in some versions of CDO and is not necessary since rm=c,pm=r8 is the default
-        #cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
-        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size} {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
+        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
         subprocess.run(cdo_cmd, shell = True)
 
         # read the threshold data

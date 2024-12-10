@@ -625,8 +625,11 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
         # increase the interval from the last deficit/surplus
         # we do this first, becuase otherwise we overshoot the min_interval
         # also, this needs to happen regardless of whether we are in a drought/HC wave or not
-        interval += 1
-        interval_dev += deviation
+        if interval <= min_interval:
+            interval += 1
+            interval_dev += deviation
+        else:
+            interval_dev = 0
         # if we are in a drought or HC wave (duration > 0)
         if duration > 0:
             # check if the drought/HC wave should end here, depending on the interval and the eventual future deficit/surplus

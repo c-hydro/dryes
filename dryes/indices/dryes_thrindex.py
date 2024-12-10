@@ -262,7 +262,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         all_deviations = self.get_deviations(input, {0:threshold}, missing_days, look_ahead)
         if ddi_start is None:
             template = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
-            ddi_start = np.full((3, *template.shape), np.nan)
+            ddi_start = np.full((4, *template.shape), np.nan)
         
         # pool the deficit
         ddi = ddi_start
@@ -350,7 +350,7 @@ class LFI(DRYESThrBasedIndex):
 
     direction = -1
 
-    ddi_names = ['deficit', 'duration', 'interval']
+    ddi_names = ['deficit', 'duration', 'interval_length', 'interval_deficit']
 
     def __init__(self, *args, **kwargs):
         self.parameters = ['threshold', 'lambda'] + self.ddi_names
@@ -449,7 +449,7 @@ class HCWI(DRYESThrBasedIndex):
         # this entails that both the max and min temperature need to be above (below) the threshold to have a heat (cold) wave
     }
 
-    ddi_names = ['intensity', 'duration', 'interval']
+    ddi_names = ['intensity', 'duration', 'interval_length', 'interval_intensity']
 
     def make_index(self, current: TimeRange, reference: TimeRange, timesteps_per_year: int):
 
@@ -587,7 +587,7 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
                                raw_spell: Optional[bool] = None,
                                min_duration: int = 1,
                                min_interval: int = 1,
-                               current_conditions: np.ndarray = np.zeros(3),
+                               current_conditions: np.ndarray = np.zeros(4),
                                count_with_pools: bool = False
                                ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -595,7 +595,7 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
     """
     # pool the deficit for a single pixel
     current_conditions[np.isnan(current_conditions)] = 0
-    current_deviation, duration, interval = current_conditions
+    current_deviation, duration, interval, interval_dev = current_conditions
 
     cum_deviation  = 0
     ndroughts      = 0
@@ -611,19 +611,22 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
         is_spell = raw_spell[0]
 
     if is_spell:
-        current_deviation += deviation    # add the deficit to the current deficit/surplus
-        # increase the duration of the drought/HC wave
+        # increase the duration of the drought/HC wave abd the deviation
         if count_with_pools and interval <= min_interval:
             duration += (1 + interval)
+            current_deviation += (deviation + interval_dev)
         else:
             duration += 1
+            current_deviation += deviation
         interval = 0          # reset the interval
+        interval_dev = 0
     # if we don't have a deficit/surplus at this timestep
     else:
         # increase the interval from the last deficit/surplus
         # we do this first, becuase otherwise we overshoot the min_interval
         # also, this needs to happen regardless of whether we are in a drought/HC wave or not
         interval += 1
+        interval_dev += deviation
         # if we are in a drought or HC wave (duration > 0)
         if duration > 0:
             # check if the drought/HC wave should end here, depending on the interval and the eventual future deficit/surplus
@@ -649,14 +652,14 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
                     # save the drought
                     ndroughts += 1
                     cum_deviation += this_cum_deviation
-            else:
-                # if the drought/HC wave continues, we need to keep the current deviation going if we are counting with pools
-                if count_with_pools:
-                    current_deviation += deviation
+            # else:
+            #     # if the drought/HC wave continues, we need to keep the current deviation going if we are counting with pools
+            #     if count_with_pools:
+            #         current_deviation += deviation
     
     #if current_deviation > 0: breakpoint()
     cum_spell = np.array([cum_deviation, ndroughts])
-    final_conditions = np.array([current_deviation, duration, interval])
+    final_conditions = np.array([current_deviation, duration, interval, interval_dev])
     return final_conditions, cum_spell
 
 def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset], **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:

@@ -279,14 +279,14 @@ class DRYESThrBasedIndex(DRYESIndex):
         tags.update({'history_start': history.start, 'history_end': history.end})
 
         ddi_vars = [self._parameters[par].update(**tags) for par in self.parameters if par in self.ddi_names]
-        ddi_ts, ddi_start = get_recent_ddi(time, ddi_vars)
+        ddi_ts, ddi_start = get_recent_ddi(time, ddi_vars, stop = history.start)
         # if there is no ddi, we need to calculate it from scratch,
         # otherwise we can just use the most recent one and update from there
         ddi = None
         if ddi_ts is not None and case['options']['look_ahead']:
             look_ahead = case['options']['min_interval']
             time_ = ddi_ts - np.ceil(look_ahead/time.length)
-            ddi_ts, ddi_start = get_recent_ddi(time_, ddi_vars)
+            ddi_ts, ddi_start = get_recent_ddi(time_, ddi_vars, stop = history.start)
 
         if ddi_ts is None:
             ddi_date = history.start - timedelta(days = 1)
@@ -464,7 +464,6 @@ class HCWI(DRYESThrBasedIndex):
         super().make_index(current, reference, timesteps_per_year)
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-
         ddi = self.get_ddi(time, history, case)
 
         intensity  = ddi[0]
@@ -665,7 +664,10 @@ def pool_deviation_singlepixel(raw_deviation: Sequence[float],
     final_conditions = np.array([current_deviation, duration, interval, interval_dev])
     return final_conditions, cum_spell
 
-def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset], **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
+def get_recent_ddi(time: TimeStep,
+                   ddi:Iterable[Dataset],
+                   stop: datetime = datetime(1900,1,1),
+                   **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
     """
     returns the most recent ddi for the given time
     """
@@ -675,7 +677,7 @@ def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset], **kwargs) -> tuple[Opt
 
     while not all([var.find_times([time], **kwargs) for var in ddi]):
         time -= 1
-        if (time + 1).end < datetime(1900,1,1):
+        if (time + 1).end < stop:
             return None, None
 
     ddi = np.stack([var.get_data(time,**kwargs) for var in ddi], axis = 0)

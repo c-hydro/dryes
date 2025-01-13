@@ -10,11 +10,11 @@ from typing import Optional, Generator, Iterable
 
 from .dryes_index import DRYESIndex
 
-from ..tools.timestepping import TimeRange, Day
-from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from ..tools.timestepping.timestep import TimeStep
+from d3tools.timestepping import TimeRange, Day
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
 
-from ..tools.data import Dataset
 from ..utils.parse import make_case_hierarchy, options_to_cases
 
 class DRYESThrBasedIndex(DRYESIndex):

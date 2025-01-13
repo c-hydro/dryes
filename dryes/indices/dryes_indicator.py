@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Sequence
 from copy import deepcopy
 
-from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from ..tools.timestepping.timerange import TimeRange
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.timestepping.timerange import TimeRange
 
 from .dryes_index import DRYESIndex
 from ..index_combination import COMBINATION_ALGORITHMS

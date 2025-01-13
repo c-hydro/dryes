@@ -8,12 +8,12 @@ import os
 from abc import ABC, ABCMeta
 
 from ..time_aggregation.time_aggregation import TimeAggregation
-
 from ..utils.parse import options_to_cases
-from ..tools.timestepping import TimeRange
-from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from ..tools.timestepping.timestep import TimeStep
-from ..tools.data import Dataset
+
+from d3tools.timestepping import TimeRange
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
 
 class MetaDRYESIndex(ABCMeta):
     def __init__(cls, name, bases, attrs):

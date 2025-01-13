@@ -6,8 +6,8 @@ import warnings
 
 from functools import partial
 
-from ..tools.timestepping import TimeRange, get_window
-from ..tools.data import Dataset
+from d3tools.timestepping import TimeRange, get_window
+from d3tools.data import Dataset
 from .time_aggregation import as_timagg_function
 
 @as_timagg_function()

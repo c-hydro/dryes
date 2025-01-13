@@ -2,8 +2,8 @@ import xarray as xr
 from typing import Optional, Callable
 from datetime import datetime
 
-from ..tools.data import Dataset
-from ..tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
+from d3tools.timestepping.timestep import TimeStep
 
 AggFunction = Callable[[Dataset, datetime,], xr.Dataset]
 PostAggFunction = Callable[[list[xr.DataArray], Dataset], list[xr.DataArray]]

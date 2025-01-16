@@ -293,7 +293,12 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
     def compute(self, current:   Sequence[datetime]|TimeRange|None = None,
                       reference: Sequence[datetime]|TimeRange|None = None,
-                      timesteps_per_year: int|None = None) -> None:
+                      timesteps_per_year: int|None = None,
+                      make_parameters: bool|None = None) -> None:
+
+        # set the make_parameters flag
+        if make_parameters is not None:
+            self.options['make_parameters'] = make_parameters
 
         # set current and reference periods
         current   = self.as_time_range(current, 'current')

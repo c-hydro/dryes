@@ -1,0 +1,50 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/cdi-ingredients_sample", 
+        "DATA_out" : "output/cdi"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local", "time_signature" : "start"},
+        "ingredients" : {
+            "path" : "{DATA_in}/{ing}/%Y",
+            "filename" : "{ing}_ITA-SI_%Y%m%d.tif"
+        },
+        "domain" : {
+            "path" : "{DATA_in}",
+            "filename" : "ITA-SI.tif"
+        },
+        "cdi" : {
+            "path" : "{DATA_out}/cdi/%Y",
+            "filename" : "CDI_ITA-SI_%Y%m%d.tif"
+        },
+        "counts" : {
+            "path" : "{DATA_out}/counts-rec/{var}/%Y",
+            "filename" : "CDI_counts-rec-{var}_ITA-SI_%Y%m%d.tif"
+        },
+        "cases" : {
+            "path" : "{DATA_out}/cases/%Y",
+            "filename" : "CDI_cases_ITA-SI_%Y%m%d.tif"
+        }
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "indicator",
+            "algorithm" : "cdi_jrc"
+            },
+        "io_options":{
+            "spi1"     : "{DATASETS.ingredients, ing = 'CHIRPS-SPI1'}",
+            "spi3"     : "{DATASETS.ingredients, ing = 'CHIRPS-SPI3'}",
+            "sma"      : "{DATASETS.ingredients, ing = 'HSAF-SMA'}",
+            "fapar"    : "{DATASETS.ingredients, ing = 'VIIRS-FAPARAnomaly'}",
+            "cdi_p"    : "{DATASETS.cdi}",
+            "count_fapar_recovery" : "{DATASETS.counts, var = 'fapar'}",
+            "count_sma_recovery"   : "{DATASETS.counts, var = 'sma'}",
+            "cases"  : "{DATASETS.cases}",
+            "index"  : "{DATASETS.cdi}",
+            "domain" : "{DATASETS.domain}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 36
+        }
+    }
+}

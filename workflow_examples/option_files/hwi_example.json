@@ -1,0 +1,44 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/era5-temp_sample", 
+        "DATA_out" : "output/hwi",
+        "history_start" : "1991-01-01",
+        "history_end"   : "2020-12-31"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local"},
+        "temperature" : {
+            "path" : "{DATA_in}/T{Ttype}/%Y",
+            "filename" : "ERA5-T{Ttype}_ITA-LA_%Y%m%d.tif"
+        },
+        "thresholds" : {
+            "path" : "{DATA_out}/thresholds/T{Ttype}",
+            "filename" : "ERA5-T{Ttype}90_ITA-LA_%m%d.tif"
+        },
+        "hw" : {
+            "path" : "{DATA_out}/hw-{count_with_pools}/{var}/%Y",
+            "filename" : "ERA5-HW-{count_with_pools}_{var}_ITA-LA_%Y%m%d.tif"
+        }
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "HWI",
+            "look_ahead" : true,
+            "count_with_pools" : {"withpools" : true, "nopools" : false}
+        },
+        "io_options":{
+            "data_raw"    : "{DATASETS.temperature}",
+            "threshold"   : "{DATASETS.thresholds, percentile = '90'}",
+            "intensity"   : "{DATASETS.hw, var = 'raw_intensity'}",
+            "duration"    : "{DATASETS.hw, var = 'duration'}",
+            "interval_length"    : "{DATASETS.hw, var = 'interval-length'}",
+            "interval_intensity" : "{DATASETS.hw, var = 'interval-intensity'}",
+            "index"       : "{DATASETS.hw, var = 'intensity'}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 365,
+            "history_start": "{history_start:%Y-%m-%d}",
+            "history_end"  : "{history_end:%Y-%m-%d}"
+        }
+    }
+}

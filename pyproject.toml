@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dryes"
+version = "3.2.0"
+description = "A package to compute operational indicators for drought risk assessment, developed by CIMA Research Foundation"
+authors = [
+    { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" },
+    { name = "Michel Isabellon"},
+    { name = "Checco Avanzi"}
+]
+maintainers = [
+    { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org"}
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: ECPL License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "d3tools@git+https://github.com/c-hydro/d3tools@v2.0.0",
+    "numpy>=1.21.5",
+    "python_dateutil>=2.8.1",
+    "xarray>=2024.3.0",
+    "astropy>=6.1.2",
+    "scipy>=1.8.0",
+    "lmoments3>=1.0.6",
+    "netCDF4>=1.5.8",
+]
+
+[project.urls]
+Repository = "https://github.com/c-hydro/dryes"
+
+[project.optional-dependencies]
+
+# dependencies for creating thumbnails
+thumbnails = [
+    "d3tools[thumbnails]@git+https://github.com/c-hydro/d3tools@v2.0.0"
+]
+
+# dependencies for reading and writing remote data
+remote-data = [
+    "d3tools[thumbnails]@git+https://github.com/c-hydro/d3tools@v2.0.0"
+]

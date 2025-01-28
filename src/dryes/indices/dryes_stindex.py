@@ -9,9 +9,9 @@ from .dryes_index import DRYESIndex
 
 from ..time_aggregation import aggregation_functions as agg
 
-from ..tools.timestepping import TimeRange
-from ..tools.timestepping.timestep import TimeStep
-from ..tools.data import Dataset
+from d3tools.timestepping import TimeRange
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
 from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
 
 

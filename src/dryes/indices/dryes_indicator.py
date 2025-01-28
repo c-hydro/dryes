@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Sequence
 from copy import deepcopy
 
-from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from ..tools.timestepping.timerange import TimeRange
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.timestepping.timerange import TimeRange
 
 from .dryes_index import DRYESIndex
 from ..index_combination import COMBINATION_ALGORITHMS
@@ -30,16 +30,14 @@ class DRYESCombinedIndicator(DRYESIndex):
         self.args = self.options.pop('args', {})
 
     def compute(self, current:   Sequence[datetime]|TimeRange|None = None,
-                      timesteps_per_year: int|None = None) -> None:
+                      timesteps_per_year: int|None = None,
+                      **kwargs) -> None:
 
         # set current and reference periods
         current   = self.as_time_range(current, 'current')
         if current is None:
-            if not self.options['make_parameters']:
-                raise ValueError('No current period specified.')
-            else:
-                #TODO add a warning that we are only calculating parameters
-                pass
+            raise ValueError('No current period specified.')
+
         
         # set timesteps per year
         if timesteps_per_year is None:

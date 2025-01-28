@@ -1,0 +1,48 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/viirs-fapar_sample", 
+        "DATA_out" : "output/fapar_anomaly",
+        "history_start" : "2013-01-01",
+        "history_end"   : "2019-12-31"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local", "time_signature" : "start"},
+        "fapar_8d" : {
+            "path" : "{DATA_in}/%Y",
+            "filename" : "VIIRS-FAPAR_ITA-ER_%Y%m%d.tif"
+        },
+        "fapar_agg" : {
+            "path" : "{DATA_out}/fapar/{agg_fn}/%Y",
+            "filename" : "VIIRS-FAPAR_{agg_fn}_ITA-ER_%Y%m%d.tif"
+        },
+        "parameters" : {
+            "path" : "{DATA_out}/parameters/{agg_fn}/{par_name}",
+            "filename" : "{par_name}_VIIRS-FAPAR_{agg_fn}_ITA-ER_%m%d.tif"
+        },
+        "fapar_anomaly" : {
+            "path" : "{DATA_out}/fapar_anomaly/{agg_fn}/%Y",
+            "filename" : "VIIRS-FAPAR-Anomaly_{agg_fn}_ITA-ER_%Y%m%d.tif"
+        }
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "anomaly",
+            "type"   : "empiricalzscore",
+            "agg_fn" : {"1m": {"fun": "weighted_average_of_window", "size": 1, "unit": "month", "input_agg" : "viirs" },
+                        "3m": {"fun": "weighted_average_of_window", "size": 3, "unit": "month", "input_agg" : "viirs" }},
+            "min_reference": 3
+            },
+        "io_options":{
+            "data_raw" : "{DATASETS.fapar_8d}",
+            "data"     : "{DATASETS.fapar_agg}",
+            "mean" : "{DATASETS.parameters , par_name = 'mean'}",
+            "std"  : "{DATASETS.parameters , par_name = 'std'}",
+            "index" : "{DATASETS.fapar_anomaly}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 36,
+            "history_start": "{history_start:%Y-%m-%d}",
+            "history_end"  : "{history_end:%Y-%m-%d}"
+        }
+    }
+}

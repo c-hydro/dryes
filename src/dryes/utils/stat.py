@@ -9,6 +9,7 @@ from typing import Iterable
 # pearson3
 # gev
 # beta
+# genlog
 
 # Gets parameters of a gamma distribution fitted to the data x
 def compute_distr_parameters(x: Iterable[float], distribution: str,
@@ -45,6 +46,10 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
         fit = [a, b]
 
         return fit
+    
+    elif distribution == 'genlog':
+        parnames = ['loc', 'scale', 'k']
+        this_distr = distr.glo
 
     # filter the nans out of the data
     x = x[~np.isnan(x)]
@@ -76,6 +81,9 @@ def check_pval(x: Iterable[float], distribution: str,
         distribution = 'norm' # this is the name used by scipy
     elif distribution == 'gev':
         distribution = 'genextreme' # this is the name used by scipy
+    elif distribution == 'genlog':
+        # ADD A WARNING AT SOME POINT, this distribution is not available in scipy
+        return True
 
     fit = list(fit)
     _, p_value = stat.kstest(x, distribution, args=fit)
@@ -103,8 +111,13 @@ def get_prob(data: np.ndarray, distribution: str,
         # remove the name of the distribution from the parameters name and only select the ones for this distribution
         pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}
 
-        # compute SPI
-        probVal = randvar.cdf(data, **pars)
+        # AT SOME POINT DO ALL THE FITTING WITH lmoments3, it is more consistent, given we calculate the parameters with it.
+        if distribution == 'genlog':
+            fitted = distr.glo(**pars)
+            probVal = fitted.cdf(data)
+        else:
+            # compute SPI
+            probVal = randvar.cdf(data, **pars)
 
         # correct for the probability of zero, if needed
         if 'prob0' in parameters.keys():

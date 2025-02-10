@@ -508,8 +508,8 @@ class HCWI(DRYESThrBasedIndex):
             for case in deviation_Tmax.keys():
                 dev_Tmax, spell_Tmax = deviation_Tmax[case]
                 dev_Tmin, spell_Tmin = deviation_Tmin[case]
-                dev_Tmax = dev_Tmax.where(dev_Tmax >= 0, 0)
-                dev_Tmin = dev_Tmin.where(dev_Tmin >= 0, 0)
+                dev_Tmin[dev_Tmin <= 0] = 0
+                dev_Tmax[dev_Tmax <= 0] = 0
                 deviation[case] = [(dev_Tmax + dev_Tmin) / 2, np.logical_and(spell_Tmax, spell_Tmin)]
             
             yield ts_max, deviation

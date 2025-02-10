@@ -261,9 +261,11 @@ class DRYESThrBasedIndex(DRYESIndex):
         missing_days = TimeRange(start, end).days
         all_deviations = self.get_deviations(input, {0:threshold}, missing_days, look_ahead)
         if ddi_start is None:
-            template = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
-            ddi_start = np.full((4, *template.shape), np.nan)
-        
+            template  = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
+            # start with a 4xlonxlat array with (0,0,min_interval+1,0) for each pixel
+            ddi_start = np.zeros((4, *template.shape))
+            ddi_start[2, :, :] = options['min_interval']+1
+
         # pool the deficit
         ddi = ddi_start
         for time, deviation_dict in all_deviations:

@@ -261,9 +261,11 @@ class DRYESThrBasedIndex(DRYESIndex):
         missing_days = TimeRange(start, end).days
         all_deviations = self.get_deviations(input, {0:threshold}, missing_days, look_ahead)
         if ddi_start is None:
-            template = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
-            ddi_start = np.full((4, *template.shape), np.nan)
-        
+            template  = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
+            # start with a 4xlonxlat array with (0,0,min_interval+1,0) for each pixel
+            ddi_start = np.zeros((4, *template.shape))
+            ddi_start[2, :, :] = options['min_interval']+1
+
         # pool the deficit
         ddi = ddi_start
         for time, deviation_dict in all_deviations:
@@ -330,7 +332,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             deviation = {}
             for case, thr in thresholds.items():
                 this_deviation = (data - thr) * self.direction
-                deviation[case] = [this_deviation, this_deviation > 0]
+                deviation[case] = [this_deviation, this_deviation >= 0]
 
             yield ts, deviation
 
@@ -506,6 +508,8 @@ class HCWI(DRYESThrBasedIndex):
             for case in deviation_Tmax.keys():
                 dev_Tmax, spell_Tmax = deviation_Tmax[case]
                 dev_Tmin, spell_Tmin = deviation_Tmin[case]
+                dev_Tmin[dev_Tmin <= 0] = 0
+                dev_Tmax[dev_Tmax <= 0] = 0
                 deviation[case] = [(dev_Tmax + dev_Tmin) / 2, np.logical_and(spell_Tmax, spell_Tmin)]
             
             yield ts_max, deviation
@@ -536,12 +540,12 @@ def pool_deviation(deviation: np.ndarray,
     The inputs are:
     - the deviation for the current timestep (2-dim array)
     - the options for the pooling (min_duration, min_interval)
-    - the current conditions (3-dim array, shape = (3, *deviation.shape))
-        the first dimension is for the drought deviation, duration, and interval
+    - the current conditions (3-dim array, shape = (4, *deviation.shape))
+        the first dimension is for the drought deviation, duration, and interval_duration and interval_deviation
 
     The outputs are:
-    - the conditions after the computation (3-dim array, shape = (3, *deviation.shape))
-        the first dimension is for the current cumulative deviation, duration, and interval
+    - the conditions after the computation (3-dim array, shape = (4, *deviation.shape))
+        the first dimension is for the current cumulative deviation, duration, and interval_duration and interval_deviation
     - the cumulative deficit/surplus after the computation  (3-dim array, shape = (2, *deviation.shape))
         the first dimension is for the cumulative deficit/surplus and the number of events
     """

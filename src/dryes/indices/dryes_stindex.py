@@ -36,6 +36,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         'pearson3': ['pearson3.skew', 'pearson3.loc', 'pearson3.scale'],
         'gev':      ['gev.c', 'gev.loc', 'gev.scale'],
         'beta':     ['beta.a', 'beta.b'],
+        'genlog':   ['genlog.loc', 'genlog.scale', 'genlog.k'],
     }
 
     # @property

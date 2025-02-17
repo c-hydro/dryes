@@ -16,9 +16,11 @@ class DRYESStandardisedIndex(DRYESIndex):
     default_options = {
         'distribution'   : 'normal',
         'pval_threshold' : None,
-        'pval_check'     : False,
         'min_reference'  : 5,
         'zero_threshold' : 0.0001,
+        
+        # derived options
+        'pval_check'     : False
     }
 
     option_cases = {

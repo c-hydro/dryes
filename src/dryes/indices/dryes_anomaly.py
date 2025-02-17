@@ -1,7 +1,7 @@
 import numpy as np
 import warnings
 
-from typing import List
+from typing import Optional
 
 from .dryes_index import DRYESIndex
 
@@ -13,129 +13,101 @@ from d3tools.data import Dataset
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
+
     default_options = {
-        'agg_fn'       : {'Agg1': agg.average_of_window(1, 'months')},
         'type'         : 'empiricalzscore',
         'min_reference': 1,
-        #'min_std'      : 0.01 #TODO: implement this as an option, for now it is hardcoded in the code
+        'min_std'      : 0.01,
+
+        # derived options
+        'get_std'      : True
+    }
+
+    option_cases = {
+        'parameters_1' : ['get_std'],
+        'parameters_2' : ['min_reference'],
+        'index_1'      : ['type'],
+        'index_2'      : ['min_std']
     }
 
     @property
     def parameters(self):
-        opt_cases = self.cases['opt']
-        all_types = [case['options']['type'] for case in opt_cases]
+        all_types = set(c.options['type'] for c in self.cases[-1].values())
         return ['mean', 'std'] if 'empiricalzscore' in all_types else ['mean']
 
+    def __init__(self,
+                 io_options: dict,
+                 index_options: dict = {},
+                 run_options: Optional[dict] = None) -> None:
+        
+        get_std = False
+        type_options = index_options.get('type')
+        if type_options is not None:
+            if type_options == 'empiricalzscore':
+                get_std = True
+            elif isinstance(type_options, dict) and 'empiricalzscore' in type_options.values():
+                get_std = True
+            index_options['get_std'] = get_std
+        
+        super().__init__(io_options, index_options, run_options)
+
     def calc_parameters(self,
-                        time: TimeStep,
-                        variable: Dataset,
-                        history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
+                        data: np.ndarray|dict[str, np.ndarray], options: dict, 
+                        step = 1, **kwargs) -> dict[str, np.ndarray]:
         """
-        Calculates the parameters for the Anomaly.
-        par_and_cases is a dictionary with the following structure:
-        {par: [case1, case2, ...]}
-        indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
-
-        2 outputs are returned:
-        - a dictionary with the following structure:
-            {par: {case1: parcase1, case2: parcase1, ...}}
-            where parcase1 is the parameter par for case1 as a numpy.ndarray.
-        - a dictionary with info about parameter calculations.
+        Calculates the parameters for the index.
         """
         
-        data_timesteps = time.get_history_timesteps(history)
-        data_ = [variable.get_data(time) for time in data_timesteps if variable.check_data(time)]
-        data = np.stack(data_, axis = 0)
+        parameters = {}
 
-        pardata = {}
-        # calculate the parameters
-        parameters = par_and_cases.keys()
-        # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
+        # first step in parameter calculation is the calculation of the mean and eventually std
+        if step == 1:
             # mean
-            if 'mean' in parameters:
-                mean_data = np.nanmean(data, axis = 0)
-                pardata['mean'] = mean_data
-                #output['mean'] = {0:mean_data} # -> we save this as case 0 because it is the same for all cases
+            mean_data = np.nanmean(data, axis = 0)
+            parameters['mean'] = mean_data
             # std
-            if 'std' in parameters:
+            if options['get_std']:
                 std_data = np.nanstd(data, axis = 0)
-                pardata['std'] = std_data
-                #output['std'] = {0:std_data} # -> we save this as case 0 because it is the same for all cases
-        
-        output = {}
-        # count how many years of data we have for each pixel
-        valid_data = np.sum(np.isfinite(data), axis = 0)
-        for par in parameters:
-            this_par_cases = par_and_cases[par]
-            output[par] = {}
-            for case in this_par_cases:
-                this_min_reference = self.cases['opt'][case]['options']['min_reference']
-                this_par_data = np.where(valid_data >= this_min_reference, pardata[par], np.nan)
-                output[par][case] = this_par_data
+                parameters['std'] = std_data
 
-        # get the metadata
-        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
-        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
-        par_info = {'reference_dates': data_dates,
-                    'reference_start': history.start.strftime('%Y-%m-%d'),
-                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+            # write a parameter for the number of data points used for the fitting
+            parameters['n'] = np.sum(~np.isnan(data), axis=0)
 
-        if hasattr(data_[0], 'attrs'):
-            data_info = data_[0].attrs
-            if 'agg_type' in data_info:
-                par_info['agg_type'] = data_info['agg_type']
+        # second step is the filtering based on the the number of nans
+        # here the input (data) are the fitted parameters (including the pvalues)
+        elif step == 2:
+            parameters: dict = data
 
-        return output, par_info
+            mask = np.where(parameters.pop('n') > options['min_reference'], True, False)
+            
+            for parname, parvalue in parameters.items():
+                parameters[parname] = np.where(mask, parvalue, np.nan)
+
+        return parameters
     
-    def calc_index(self, time: TimeStep,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+    def calc_index(self,
+                   data: np.ndarray, parameters: dict[str, np.ndarray],
+                   options: dict, step = 1, **kwargs) -> np.ndarray:
         """
         Calculates the index for the given time and reference period (history).
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
 
-        # load the data for the index - allow for missing data
-        if self._data.check_data(time, **case['tags']):
-            data = self._data.get_data(time, **case['tags'])
-        else:
-            return None, {"NOTE": "missing data"}
+        if step == 1:
+            mean = parameters['mean']
+            if options['type'] == 'empiricalzscore':
+                std  = parameters['std']
+                anomaly_data = (data - mean) / std
+            elif options['type'] == 'percentdelta':
+                anomaly_data = (data - mean) / mean * 100
+            elif options['type'] == 'absolutedelta':
+                anomaly_data = data - mean
 
-        # load the parameters
-        if 'history_start' not in case['tags']:
-            case['tags']['history_start'] = history.start
-        if 'history_end' not in case['tags']:
-            case['tags']['history_end'] = history.end
-        # parameters for 29th February are actually those for 28th February
-        #par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
-        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items()}
+        elif step == 2:
+            anomaly_data = data
 
-        # calculate the index
-        mean = parameters['mean']
-        if case['options']['type'] == 'empiricalzscore':
-            std  = parameters['std']
-            anomaly_data = (data - mean) / std
-            #TODO: implement this as an option, for now it is hardcoded in the code
-            anomaly_data = np.where(std < 0.01, np.nan, anomaly_data)
-        elif case['options']['type'] == 'percentdelta':
-            anomaly_data = (data - mean) / mean * 100
-        elif case['options']['type'] == 'absolutedelta':
-            anomaly_data = data - mean
-        else:
-            raise ValueError(f"Unknown type {case['options']['type']} for anomaly index.")
-        
-        if hasattr(data, 'attrs'):
-            index_info = data.attrs
-        else:
-            index_info = {}
+            if options['type'] == 'empiricalzscore':
+                mask = np.where(parameters['std'] < options['min_std'], True, False)
+                anomaly_data = np.where(mask, np.nan, anomaly_data)
 
-        if hasattr(list(parameters.values())[0], 'attrs'):
-            index_info.update(list(parameters.values())[0].attrs)
-
-        # add the parents to the metadata
-        parents = parameters
-        parents.update({'data': data})
-        index_info['parents'] = parents
-
-        return anomaly_data, index_info
+        return anomaly_data

@@ -5,12 +5,6 @@ from typing import Optional
 
 from .dryes_index import DRYESIndex
 
-from ..time_aggregation import aggregation_functions as agg
-
-from d3tools.timestepping import TimeRange
-from d3tools.timestepping.timestep import TimeStep
-from d3tools.data import Dataset
-
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
 
@@ -62,13 +56,16 @@ class DRYESAnomaly(DRYESIndex):
 
         # first step in parameter calculation is the calculation of the mean and eventually std
         if step == 1:
-            # mean
-            mean_data = np.nanmean(data, axis = 0)
-            parameters['mean'] = mean_data
-            # std
-            if options['get_std']:
-                std_data = np.nanstd(data, axis = 0)
-                parameters['std'] = std_data
+            # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                # mean
+                mean_data = np.nanmean(data, axis = 0)
+                parameters['mean'] = mean_data
+                # std
+                if options['get_std']:
+                    std_data = np.nanstd(data, axis = 0)
+                    parameters['std'] = std_data
 
             # write a parameter for the number of data points used for the fitting
             parameters['n'] = np.sum(~np.isnan(data), axis=0)
@@ -97,7 +94,9 @@ class DRYESAnomaly(DRYESIndex):
             mean = parameters['mean']
             if options['type'] == 'empiricalzscore':
                 std  = parameters['std']
-                anomaly_data = (data - mean) / std
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    anomaly_data = (data - mean) / std
             elif options['type'] == 'percentdelta':
                 anomaly_data = (data - mean) / mean * 100
             elif options['type'] == 'absolutedelta':

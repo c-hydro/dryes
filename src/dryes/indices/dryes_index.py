@@ -263,14 +263,14 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                     parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
 
                     # loop through all index layers for this parameter case
-                    step_input = [(None, None)] * len(index_layers)
-                    step_input[0] = (data_np, parameters_np)
+                    step_input = [None] * len(index_layers)
+                    step_input[0] = data_np
                     for idx_case, case_layer in self.cases.iterate_subtree(par_case_id, len(index_layers)):
                         # calculate the step n (which depends on how many parameter layers there were)
                         step_n = case_layer - len(parameter_layers)
 
                         this_input = copy.deepcopy(step_input[step_n-1])
-                        this_index = self.calc_index(*this_input, idx_case.options, step = step_n)
+                        this_index = self.calc_index(this_input, parameters_np, idx_case.options, step = step_n)
 
                         if step_n == len(index_layers):
                             metadata = idx_case.options.copy()
@@ -278,7 +278,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                             tags = idx_case.tags
                             self._index.write_data(this_index, time = time, metadata = metadata, **tags)
                         else:
-                            step_input[step_n][0] = this_index
+                            step_input[step_n] = this_index
     
     # THESE ARE THE METHODS THAT NEED TO BE IMPLEMENTED BY THE SUBCLASSES
     def calc_parameters(self,

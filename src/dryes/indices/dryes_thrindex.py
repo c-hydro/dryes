@@ -10,11 +10,11 @@ from typing import Optional, Generator, Iterable
 
 from .dryes_index import DRYESIndex
 
-from ..tools.timestepping import TimeRange, Day
-from ..tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from ..tools.timestepping.timestep import TimeStep
+from d3tools.timestepping import TimeRange, Day
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
 
-from ..tools.data import Dataset
 from ..utils.parse import make_case_hierarchy, options_to_cases
 
 class DRYESThrBasedIndex(DRYESIndex):
@@ -34,7 +34,9 @@ class DRYESThrBasedIndex(DRYESIndex):
         'thr_quantile' :  0.1,   # quantile for the threshold calculation
         'thr_window'   :  1,     # window size for the threshold calculation
         'min_interval' :  1,     # minimum interval between spells
-        'cdo_path'     :  '/usr/bin/cdo' # path to the cdo executable
+        'cdo_path'     :  '/usr/bin/cdo', # path to the cdo executable
+        'look_ahead'   :  False, # if True, it looks min_interval days ahead to see if the spell continues
+        'count_with_pools' : False # if True, the pool days are added to the duration and intensity of the spell
     }
 
     @property
@@ -112,8 +114,15 @@ class DRYESThrBasedIndex(DRYESIndex):
         import netCDF4
         combined.to_netcdf(data_nc, format = 'NETCDF4', engine = 'netcdf4')
 
-        # calculate running max and min of data using CDO
+        # set the number of bins in CDO as an environment variable
         window_size = case['options']['thr_window']
+        history_start = history.start.year
+        history_end = history.end.year
+        import os
+        CDO_PCTL_NBINS= window_size * (history_end - history_start + 1) * 2 + 2
+        os.environ['CDO_NUMBINS'] = str(CDO_PCTL_NBINS)
+
+        # calculate running max and min of data using CDO
         datamin_nc = f'{tmpdir}/datamin.nc'
         datamax_nc = f'{tmpdir}/datamax.nc'
 
@@ -128,9 +137,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         threshold_quantile = int(case['options']['thr_quantile']*100)
         threshold_nc = f'{tmpdir}/threshold.nc'
 
-        # this causes an error in some versions of CDO and is not necessary since rm=c,pm=r8 is the default
-        #cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
-        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size} {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
+        cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
         subprocess.run(cdo_cmd, shell = True)
 
         # read the threshold data
@@ -199,7 +206,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         i = 0
         for timestep, deviation_dict in all_deviations:
-            for thrcase, deviation in deviation_dict.items():
+            for thrcase, devspell in deviation_dict.items():
                 for case in cases[thrcase]:
                     cid = case['id']
                     # get the current conditions
@@ -207,7 +214,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                     # and the options
                     options = cases[thrcase][cid]['options']
                     # pool the deficit
-                    ddi, cum_deviation = pool_deviation(deviation, options, current_conditions = ddi)
+                    ddi, cum_deviation = pool_deviation(devspell[0], options, current_conditions = ddi, spell_bool=devspell[1])
                     # update the ddi and cumulative drought
                     ddi_dict[thrcase][cid] = ddi
                     cum_deviation_dict[thrcase][cid] += cum_deviation
@@ -240,25 +247,31 @@ class DRYESThrBasedIndex(DRYESIndex):
         # get the threshold
         threshold = self._parameters['threshold'].update(**tags)
 
+        # get the options
+        options = case['options']
+
         # get the deviations from the last available DDI to the current time
         input = self._data
         start = (ddi_time + 1).start
         end = time.end
+        if options['look_ahead']:
+            look_ahead = options['min_interval']
+        else:
+            look_ahead = 0
         missing_days = TimeRange(start, end).days
-        all_deviations = self.get_deviations(input, {0:threshold}, missing_days)
-
-        # get the options
-        options = case['options']
-
+        all_deviations = self.get_deviations(input, {0:threshold}, missing_days, look_ahead)
         if ddi_start is None:
-            template = input.build_templatearray(input.get_template_dict())
-            ddi_start = np.full((3, *template.shape), np.nan)
-        
+            template  = input.build_templatearray(input.get_template_dict(Ttype = 'max')) #TODO: this is hardcoded, but should be more flexible
+            # start with a 4xlonxlat array with (0,0,min_interval+1,0) for each pixel
+            ddi_start = np.zeros((4, *template.shape))
+            ddi_start[2, :, :] = options['min_interval']+1
+
         # pool the deficit
         ddi = ddi_start
         for time, deviation_dict in all_deviations:
-            deviation = deviation_dict[0]    
-            ddi, _ = pool_deviation(deviation, options, current_conditions = ddi)
+            deviation, spell = deviation_dict[0]
+            #print(time, deviation.shape)
+            ddi, _ = pool_deviation(deviation, options, current_conditions = ddi, spell_bool=spell)
 
         return ddi
 
@@ -268,17 +281,23 @@ class DRYESThrBasedIndex(DRYESIndex):
         tags.update({'history_start': history.start, 'history_end': history.end})
 
         ddi_vars = [self._parameters[par].update(**tags) for par in self.parameters if par in self.ddi_names]
-        ddi_ts, ddi_start = get_recent_ddi(time, ddi_vars)
+        ddi_ts, ddi_start = get_recent_ddi(time, ddi_vars, stop = history.start)
         # if there is no ddi, we need to calculate it from scratch,
         # otherwise we can just use the most recent one and update from there
         ddi = None
+        if ddi_ts is not None and case['options']['look_ahead']:
+            look_ahead = case['options']['min_interval']
+            time_ = ddi_ts - np.ceil(look_ahead/time.length)
+            ddi_ts, ddi_start = get_recent_ddi(time_, ddi_vars, stop = history.start)
+
         if ddi_ts is None:
             ddi_date = history.start - timedelta(days = 1)
             ddi_ts = type(time).from_date(ddi_date)
+
         elif ddi_ts == time:
             ddi = ddi_start
-
         if ddi is None:
+            #print(time, ddi_ts)
             # calculate the current deviation
             ddi = self.update_ddi(ddi_start, ddi_ts, time, case, history)
 
@@ -296,25 +315,24 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     def get_deviations(self, variable: Dataset,
                        threshold: dict[int:Dataset],
-                       timesteps: list[TimeStep]
+                       timesteps: list[TimeStep],
+                       look_ahead: int = 0
                        ) -> Generator[tuple[TimeStep, dict[int:np.ndarray]], None, None]:
         """
         This function will calculate the deviations for the given timesteps.
         thresholds allows to specify different thresholds for different cases.
         thresholds = {case1: threshold1}
-        direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
         the output is a generator that yields the time and the deviations for each case
         the deviations are a dictionary with the same keys as the thresholds
         """
-
-        for ts in timesteps:
-            data = variable.get_data(ts)
-            thresholds = {case: th.get_data(ts) for case, th in threshold.items()}
+        for i, ts in enumerate(timesteps):
+            look_ahead_range = [ts + j for j in range(look_ahead + 1)]
+            data = np.stack([variable.get_data(time) for time in look_ahead_range], axis = 0)
+            thresholds = {case: np.stack([th.get_data(time) for time in look_ahead_range], axis = 0) for case, th in threshold.items()}
             deviation = {}
             for case, thr in thresholds.items():
-                this_deviation = (data.values - thr.values) * self.direction
-                this_deviation[this_deviation < 0] = 0
-                deviation[case] = this_deviation#np.squeeze(this_deficit)
+                this_deviation = (data - thr) * self.direction
+                deviation[case] = [this_deviation, this_deviation >= 0]
 
             yield ts, deviation
 
@@ -334,7 +352,7 @@ class LFI(DRYESThrBasedIndex):
 
     direction = -1
 
-    ddi_names = ['deficit', 'duration', 'interval']
+    ddi_names = ['deficit', 'duration', 'interval_length', 'interval_deficit']
 
     def __init__(self, *args, **kwargs):
         self.parameters = ['threshold', 'lambda'] + self.ddi_names
@@ -429,17 +447,17 @@ class HCWI(DRYESThrBasedIndex):
         'thr_window'   : 11,    # window size for the threshold calculation
         'min_interval' :  1,    # minimum interval between spells
         'min_duration' :  3,    # minimum duration of a spell
-        'Ttype'        : {'max' : 'max', 'min' : 'min'},  # type of temperature use both max and min temperature
+        'Ttype'        : {'max' : 'max', 'min' : 'min'}  # type of temperature use both max and min temperature
         # this entails that both the max and min temperature need to be above (below) the threshold to have a heat (cold) wave
     }
 
-    ddi_names = ['intensity', 'duration', 'interval']
+    ddi_names = ['intensity', 'duration', 'interval_length', 'interval_intensity']
 
     def make_index(self, current: TimeRange, reference: TimeRange, timesteps_per_year: int):
 
         # remove the min and max (Ttype) temperature from the options and run the superclass method.
 
-        options_without_minmax = self.default_options.copy()
+        options_without_minmax = self.options.copy()
         options_without_minmax.pop('Ttype')
 
         cases_without_minmax = options_to_cases(options_without_minmax)
@@ -448,7 +466,6 @@ class HCWI(DRYESThrBasedIndex):
         super().make_index(current, reference, timesteps_per_year)
 
     def calc_index(self, time,  history: TimeRange, case: dict) -> xr.DataArray:
-
         ddi = self.get_ddi(time, history, case)
 
         intensity  = ddi[0]
@@ -465,32 +482,36 @@ class HCWI(DRYESThrBasedIndex):
     def get_deviations(self,
                        variable:  Dataset,
                        threshold: dict[int:Dataset],
-                       timesteps: list[TimeStep]) -> Generator[tuple[TimeStep, dict[int:np.ndarray]],
-                                                               None, None]:
+                       timesteps: list[TimeStep],
+                       look_ahead: int = 0
+                       ) -> Generator[tuple[TimeStep, dict[int:list[np.ndarray]]],None, None]:
         """
         This function will calculate the deviations for the given timesteps.
         thresholds allows to specify different thresholds for different cases.
         thresholds = {case1: threshold1}
         direction is -1 for deficits (LFI, Cold waves), 1 for surplusses (Heat waves)
-        the output is a generator that yields the time and the deviations for each case
-        the deviations are a dictionary with the same keys as the thresholds
+        the output is a generator that yields the time and the deviation for each case
+        the deviations are a dictionary with the same keys as the thresholds and a list with the deviation and the spell
         """
-
         Ttypes = ['max', 'min']
 
         variables =  [variable.update(Ttype = Ttype) for Ttype in Ttypes]
         thresholds = [{case: th.update(Ttype = Ttype) for case, th in threshold.items()} for Ttype in Ttypes]
 
-        deviations_Tmax = super().get_deviations(variables[0], thresholds[0], timesteps)
-        deviations_Tmin = super().get_deviations(variables[1], thresholds[1], timesteps)
+        deviations_Tmax = super().get_deviations(variables[0], thresholds[0], timesteps, look_ahead)
+        deviations_Tmin = super().get_deviations(variables[1], thresholds[1], timesteps, look_ahead)
 
         for (ts_max, deviation_Tmax), (ts_min, deviation_Tmin) in zip(deviations_Tmax, deviations_Tmin):
             if ts_max != ts_min:
                 raise ValueError(f'The time steps for Tmax {ts_max} and Tmin {ts_min} do not match')
             deviation = {}
             for case in deviation_Tmax.keys():
-                deviation[case] = np.where((deviation_Tmax[case] == 0) | (deviation_Tmin[case] == 0), 0, (deviation_Tmax[case] + deviation_Tmin[case]) / 2)
-
+                dev_Tmax, spell_Tmax = deviation_Tmax[case]
+                dev_Tmin, spell_Tmin = deviation_Tmin[case]
+                dev_Tmin[dev_Tmin <= 0] = 0
+                dev_Tmax[dev_Tmax <= 0] = 0
+                deviation[case] = [(dev_Tmax + dev_Tmin) / 2, np.logical_and(spell_Tmax, spell_Tmin)]
+            
             yield ts_max, deviation
 
 class HWI(HCWI):
@@ -512,18 +533,19 @@ class CWI(HCWI):
 def pool_deviation(deviation: np.ndarray,
                    options: dict[str, float],
                    current_conditions: np.ndarray,
+                   spell_bool: Optional[np.ndarray] = None
                     ) -> tuple[np.ndarray, np.ndarray]:
     """
     This function will pool the deviation for a single timestep.
     The inputs are:
     - the deviation for the current timestep (2-dim array)
     - the options for the pooling (min_duration, min_interval)
-    - the current conditions (3-dim array, shape = (3, *deviation.shape))
-        the first dimension is for the drought deviation, duration, and interval
+    - the current conditions (3-dim array, shape = (4, *deviation.shape))
+        the first dimension is for the drought deviation, duration, and interval_duration and interval_deviation
 
     The outputs are:
-    - the conditions after the computation (3-dim array, shape = (3, *deviation.shape))
-        the first dimension is for the current cumulative deviation, duration, and interval
+    - the conditions after the computation (3-dim array, shape = (4, *deviation.shape))
+        the first dimension is for the current cumulative deviation, duration, and interval_duration and interval_deviation
     - the cumulative deficit/surplus after the computation  (3-dim array, shape = (2, *deviation.shape))
         the first dimension is for the cumulative deficit/surplus and the number of events
     """
@@ -534,23 +556,28 @@ def pool_deviation(deviation: np.ndarray,
     
     min_duration = options['min_duration']
     min_interval = options['min_interval']
-
+    count_with_pools = options['count_with_pools']
+    
     # initialize the output
-    historical_cum_deviation = np.full((2, *deviation.shape), np.nan)
+    historical_cum_deviation = np.full((2, *deviation[0].shape), np.nan)
 
     # get the indices where we have data and where we have a deviation or a current condition
-    any_data = ~np.isnan(deviation)
+    any_data = ~np.isnan(deviation[0])
     #any_deviation = deviation>0
     #any_current = (current_conditions[0,:,:] > 0) | (current_conditions[1,:,:] > 0) | (current_conditions[2,:,:] > min_interval)
     #indices = np.where(np.all([any_data, np.any([any_deviation, any_current], axis=0)], axis = 0))
     indices = np.where(any_data)
     for b,x,y in zip(*indices):
-        this_deviation = deviation[0,x,y]
+        this_deviation = deviation[:,0,x,y]
         this_current_conditions = current_conditions[:,b,x,y]
+        this_is_spell = spell_bool[:,0,x,y] if spell_bool is not None else None
         # pool the deficit for this pixel
-        this_ddi, this_cum_deviation = pool_deviation_singlepixel(this_deviation,
-                                                                  min_duration, min_interval,
-                                                                  this_current_conditions)
+        this_ddi, this_cum_deviation = pool_deviation_singlepixel(this_deviation.copy(),
+                                                                  raw_spell = this_is_spell,
+                                                                  min_duration = min_duration,
+                                                                  min_interval = min_interval,
+                                                                  current_conditions = this_current_conditions,
+                                                                  count_with_pools = count_with_pools)
 
         # update the output
         current_conditions[:,b,x,y] = this_ddi
@@ -558,36 +585,67 @@ def pool_deviation(deviation: np.ndarray,
 
     return current_conditions, historical_cum_deviation
 
-def pool_deviation_singlepixel(deviation: float,
+from typing import Sequence
+def pool_deviation_singlepixel(raw_deviation: Sequence[float],
+                               raw_spell: Optional[bool] = None,
                                min_duration: int = 1,
                                min_interval: int = 1,
-                               current_conditions: np.ndarray = np.zeros(3)
+                               current_conditions: np.ndarray = np.zeros(4),
+                               count_with_pools: bool = False
                                ) -> tuple[np.ndarray, np.ndarray]:
     """
     Same as pool_deviation, but for a single pixel.
     """
     # pool the deficit for a single pixel
     current_conditions[np.isnan(current_conditions)] = 0
-    current_deviation, duration, interval = current_conditions
+    current_deviation, duration, interval, interval_dev = current_conditions
 
     cum_deviation  = 0
     ndroughts      = 0
 
-    if deviation > 0:
-        current_deviation += deviation    # add the deficit to the current deficit/surplus
-        duration += 1         # increase the duration
+    future_dev = raw_deviation[1:] if len(raw_deviation) > 1 else False
+    deviation  = raw_deviation[0]
+
+    if raw_spell is None:
+        is_spell = deviation > 0
+        future_spell = future_dev > 0 if future_dev is not False else False
+    else:
+        future_spell = raw_spell[1:] if len(raw_spell) > 1 else False
+        is_spell = raw_spell[0]
+
+    if is_spell:
+        # increase the duration of the drought/HC wave abd the deviation
+        if count_with_pools and interval <= min_interval:
+            duration += (1 + interval)
+            current_deviation += (deviation + interval_dev)
+        else:
+            duration += 1
+            current_deviation += deviation
         interval = 0          # reset the interval
+        interval_dev = 0
     # if we don't have a deficit/surplus at this timestep
     else:
         # increase the interval from the last deficit/surplus
         # we do this first, becuase otherwise we overshoot the min_interval
         # also, this needs to happen regardless of whether we are in a drought/HC wave or not
-        interval += 1
-        # if we are in a drought or HC wave (accumulated deficit/surplus > 0)
-        if current_deviation >= 0:
-            # check if the drought/HC wave should end here
-            # this is the case if it has been long enough from the last deficit/surplus
-            if interval > min_interval:
+        if interval <= min_interval:
+            interval += 1
+            interval_dev += deviation
+        else:
+            interval_dev = 0
+        # if we are in a drought or HC wave (duration > 0)
+        if duration > 0:
+            # check if the drought/HC wave should end here, depending on the interval and the eventual future deficit/surplus
+            interval_diff = int(min_interval - interval)
+            end_spell = False
+            if interval_diff < 0:
+                end_spell = True
+            else:
+                future_spell_in_interval = future_spell[:interval_diff + 1] if future_spell is not False else [False]
+                if np.all(future_spell_in_interval == False):
+                    end_spell = True
+            
+            if end_spell:
                 # end the drought
                 this_cum_deviation  = current_deviation
                 this_duration = duration
@@ -600,22 +658,30 @@ def pool_deviation_singlepixel(deviation: float,
                     # save the drought
                     ndroughts += 1
                     cum_deviation += this_cum_deviation
+            # else:
+            #     # if the drought/HC wave continues, we need to keep the current deviation going if we are counting with pools
+            #     if count_with_pools:
+            #         current_deviation += deviation
     
+    #if current_deviation > 0: breakpoint()
     cum_spell = np.array([cum_deviation, ndroughts])
-    final_conditions = np.array([current_deviation, duration, interval])
+    final_conditions = np.array([current_deviation, duration, interval, interval_dev])
     return final_conditions, cum_spell
 
-def get_recent_ddi(time: TimeStep, ddi:Iterable[Dataset], **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
+def get_recent_ddi(time: TimeStep,
+                   ddi:Iterable[Dataset],
+                   stop: datetime = datetime(1900,1,1),
+                   **kwargs) -> tuple[Optional[TimeStep], Optional[np.ndarray]]:
     """
     returns the most recent ddi for the given time
     """
 
-    if not all([var.get_start(**kwargs) for var in ddi]):
-        return None, None
+    # if not all([var.get_start(**kwargs) for var in ddi]):
+    #     return None, None
 
     while not all([var.find_times([time], **kwargs) for var in ddi]):
         time -= 1
-        if (time + 1).end < ddi[0].get_start(**kwargs):
+        if (time + 1).end < stop:
             return None, None
 
     ddi = np.stack([var.get_data(time,**kwargs) for var in ddi], axis = 0)

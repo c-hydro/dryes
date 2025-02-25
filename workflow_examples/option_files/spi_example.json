@@ -1,0 +1,52 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/chirps-prec_sample", 
+        "DATA_out" : "output/spi",
+        "history_start" : "1990-01-01",
+        "history_end"   : "2020-12-31"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local"},
+        "prec_10d" : {
+            "path" : "{DATA_in}/%Y",
+            "filename" : "CHIRPS-PREC10d_ITA-LI_%Y%m%d.tif"
+        },
+        "prec_agg" : {
+            "path" : "{DATA_out}/prec/{agg_fn}m/%Y",
+            "filename" : "CHIRPS-PREC{agg_fn}m_ITA-LI_%Y%m%d.tif"
+        },
+        "parameters" : {
+            "path" : "{DATA_out}/parameters/{agg_fn}m/{par_name}",
+            "filename" : "{par_name}_CHIRPS-PREC{agg_fn}m_ITA-LI_%m%d.tif"
+        },
+        "spi" : {
+            "path" : "{DATA_out}/spi/{agg_fn}m/%Y",
+            "filename" : "CHIRPS-SPI{agg_fn}_ITA-LI_%Y%m%d.tif"
+        }
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "SPI",
+            "agg_fn" : {"1" : {"fun": "sum_of_window", "size": 1,  "unit": "month"},
+                        "3" : {"fun": "sum_of_window", "size": 3,  "unit": "month"},
+                        "6" : {"fun": "sum_of_window", "size": 6,  "unit": "month"},
+                        "12": {"fun": "sum_of_window", "size": 12, "unit": "month"}},
+            "min_reference"  : 10,
+            "zero_threshold" : 0.01
+            },
+        "io_options":{
+            "data_raw" : "{DATASETS.prec_10d}",
+            "data"     : "{DATASETS.prec_agg}",
+            "gamma.a"    : "{DATASETS.parameters , par_name = 'gamma.a'}",
+            "gamma.loc"  : "{DATASETS.parameters , par_name = 'gamma.loc'}",
+            "gamma.scale": "{DATASETS.parameters , par_name = 'gamma.scale'}",
+            "prob0"      : "{DATASETS.parameters , par_name = 'prob0'}",
+            "index" : "{DATASETS.spi}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 12,
+            "history_start": "{history_start:%Y-%m-%d}",
+            "history_end"  : "{history_end:%Y-%m-%d}"
+        }
+    }
+}

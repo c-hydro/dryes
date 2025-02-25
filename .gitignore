@@ -35,3 +35,7 @@ venv.bak/
 # IDEs and editors
 .vscode
 .idea
+
+# sample data and output
+sample_data/*
+output/*

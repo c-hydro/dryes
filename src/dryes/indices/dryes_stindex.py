@@ -1,19 +1,10 @@
-from datetime import datetime, timedelta
 import numpy as np
-import xarray as xr
 import warnings
 
-from typing import List
+from typing import Optional
 
 from .dryes_index import DRYESIndex
-
-from ..time_aggregation import aggregation_functions as agg
-
-from d3tools.timestepping import TimeRange
-from d3tools.timestepping.timestep import TimeStep
-from d3tools.data import Dataset
-from ..utils.stat import compute_distr_parameters, check_pval, get_prob, map_prob_to_normal
-
+from ..utils.stat import compute_distr_parameters, get_pval, get_prob, map_prob_to_normal
 
 class DRYESStandardisedIndex(DRYESIndex):
     """
@@ -23,11 +14,19 @@ class DRYESStandardisedIndex(DRYESIndex):
     index_name = 'standardised index'
 
     default_options = {
-        'agg_fn'         : {'Agg1': agg.average_of_window(1, 'months')},
         'distribution'   : 'normal',
         'pval_threshold' : None,
         'min_reference'  : 5,
         'zero_threshold' : 0.0001,
+        
+        # derived options
+        'pval_check'     : False
+    }
+
+    option_cases = {
+        'parameters_1' : ['distribution', 'zero_threshold', 'pval_check'],
+        'parameters_2' : ['pval_threshold', 'min_reference'],
+        'index'        : ['zero_threshold'],
     }
     
     distr_par = {
@@ -39,18 +38,9 @@ class DRYESStandardisedIndex(DRYESIndex):
         'genlog':   ['genlog.loc', 'genlog.scale', 'genlog.k'],
     }
 
-    # @property
-    # def positive_only(self):
-    #     # this is by default False, unless, we request a gamma distribution
-    #     if 'gamma' in self.distributions:
-    #         return True
-    #     else:
-    #         return False
-
     @property
     def distributions(self):
-        opt_cases = self.cases['opt']
-        all_distr = set(case['options']['distribution'] for case in opt_cases)
+        all_distr = set(c.options['distribution'] for c in self.cases[-1].values())
         for distribution in all_distr:
             if distribution not in self.distr_par:
                 raise ValueError(f"Unknown distribution {distribution}.")
@@ -64,136 +54,103 @@ class DRYESStandardisedIndex(DRYESIndex):
             parameters += [par for par in self.distr_par[distribution]]
         return parameters
 
+    def __init__(self,
+                 io_options: dict,
+                 index_options: dict = {},
+                 run_options: Optional[dict] = None) -> None:
+        
+        if index_options.get('pval_threshold') is not None:
+            index_options['pval_check'] = True
+        else:
+            index_options['pval_check'] = False
+        
+        super().__init__(io_options, index_options, run_options)
+
     def calc_parameters(self,
-                        time: TimeStep,
-                        variable: Dataset,
-                        history: TimeRange,
-                        par_and_cases: dict[str:List[int]]) -> tuple[dict[str:dict[int:np.ndarray]], dict]:
+                        data: np.ndarray|dict[str, np.ndarray], options: dict, 
+                        step = 1, **kwargs) -> dict[str, np.ndarray]:
         """
-        Calculates the parameters for the Anomaly.
-        par_and_cases is a dictionary with the following structure:
-        {par: [case1, case2, ...]}
-        indicaing which cases from self.cases['opt'] need to be calculated for each parameter.
-
-        2 outputs are returned:
-        - a dictionary with the following structure:
-            {par: {case1: parcase1, case2: parcase1, ...}}
-            where parcase1 is the parameter par for case1 as a numpy.ndarray.
-        - a dictionary with info about parameter calculations.
+        Calculates the parameters for the index.
         """
 
-        data_timesteps = time.get_history_timesteps(history)
-        data_ = [variable.get_data(time) for time in data_timesteps if variable.check_data(time)]
-        data = np.stack(data_, axis = 0)
+        parameters = {}
 
-        output = {}
-        # calculate the parameters
-        parameters = par_and_cases.keys()
-        cases_and_pars = {case: [par for par in parameters if case in par_and_cases[par]] for case in range(len(self.cases['opt']))}
+        # first step in parameter calculation is the fitting of the distribution
+        if step == 1:
+            # if we use the gamma distribution, we need the data to be positive
+            if options['distribution'] == 'gamma':
+                iszero = data <= options['zero_threshold']
+                # reassign NaNs
+                iszero = np.where(np.isnan(data), np.nan, iszero)
+                # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    prob0 = np.nanmean(iszero, axis = 0)
+                parameters['prob0'] = prob0
+                data = np.where(iszero, np.nan, data)
 
-        # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            for case in self.cases['opt']:
-                i = case['id']
-                if 'prob0' in cases_and_pars[i]:
-                    iszero = data <= case['options']['zero_threshold']
-                    # reassign NaNs
-                    iszero = np.where(np.isnan(data), np.nan, iszero)
-                    prob0_data = np.nanmean(iszero, axis = 0)
-                    if 'prob0' not in output:
-                        output['prob0'] = {i: prob0_data}
-                    else:
-                        output['prob0'][i] = prob0_data
+            # then we fit the distribution to the data
+            distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data,
+                                        distribution=options['distribution'])
+            
+            # assign names to the parameters
+            parnames = self.distr_par[options['distribution']]
+            for ip, par in enumerate(parnames):
+                parameters[par] = distr_parvalues[ip]
 
-                # if there is any other parameter, these are the distribution parameters
-                if any(par != 'prob0' for par in cases_and_pars[i] ):
-                    distr = case['options']['distribution']
-                    this_data = data.copy()
-                    if distr == 'gamma':
-                        this_data = np.where(this_data <= case['options']['zero_threshold'], np.nan, this_data)
-                        
-                    distr_parnames  = self.distr_par[distr]
-                    distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=this_data,
-                                                          distribution=distr,
-                                                          min_obs = case['options']['min_reference'],)
-                    
-                    this_p_thr = case['options']['pval_threshold']
-                    to_iterate = np.where(~np.isnan(distr_parvalues[0])) # only iterate over the non-nan values of the parameters
-                    for b,x,y in zip(*to_iterate):
-                        if not check_pval(data[:,b,x,y], distr, distr_parvalues[:,b,x,y], p_val_th = this_p_thr):
-                            distr_parvalues[:,b,x,y] = np.nan
+            # write a parameter for the number of data points used for the fitting
+            parameters['n'] = np.sum(~np.isnan(data), axis=0)
 
-                    for ip, par in enumerate(distr_parnames):
-                        this_par_data = distr_parvalues[ip]
-                        if par not in output:
-                            output[par] = {i: this_par_data}
-                        else:
-                            output[par][i] = this_par_data
+            # check if we need to calculate the p-values
+            if options['pval_check']:
+                to_iterate = np.where(~np.isnan(distr_parvalues[0])) # only iterate over the non-nan values of the parameters
+                pvals = np.zeros(distr_parvalues[0].shape)
+                for x,y in zip(*to_iterate):
+                    pvals[x,y] = get_pval(data[:,x,y], options['distribution'], distr_parvalues[:,x,y])
 
-        # get the metadata
-        data_dates = [variable.get_time_signature(time) for time in data_timesteps]
-        data_dates = ', '.join([date.strftime('%Y-%m-%d') for date in data_dates])
-        par_info = {'reference_dates': data_dates,
-                    'reference_start': history.start.strftime('%Y-%m-%d'),
-                    'reference_end':   history.end.strftime('%Y-%m-%d')}
+                parameters['pval'] = pvals
+        
+        # second step is the filtering based on the p-values and the number of nans
+        # here the input (data) are the fitted parameters (including the pvalues)
+        elif step == 2:
+            parameters: dict = data
 
-        if hasattr(data_[0], 'attrs'):
-            data_info = data_[0].attrs
-            if 'agg_type' in data_info:
-                par_info['agg_type'] = data_info['agg_type']
+            mask = np.where(parameters.pop('n') > options['min_reference'], True, False)
+            if options['pval_threshold'] is not None:
+                mask = np.logical_and(mask, parameters.pop('pval') > options['pval_threshold'])
 
-        return output, par_info
+            for parname, parvalue in parameters.items():
+                parameters[parname] = np.where(mask, parvalue, np.nan)
+
+        return parameters
     
-    # this is run for a single case, making things a lot easier
-    def calc_index(self, time:TimeStep,  history: TimeRange, case: dict) -> tuple[np.ndarray, dict]:
+    def calc_index(self,
+                   data: np.ndarray, parameters: dict[str, np.ndarray],
+                   options: dict, step = 1, **kwargs) -> np.ndarray:
         """
         Calculates the index for the given time and reference period (history).
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
 
-        # load the data for the index - allow for missing data
-        if self._data.check_data(time, **case['tags']):
-            data = self._data.get_data(time, **case['tags'])
-        else:
-            return None, {"NOTE": "missing data"}
+        # get the distribution from the options
+        distribution = options['distribution']
 
-        # load the parameters
-        if 'history_start' not in case['tags']:
-            case['tags']['history_start'] = history.start
-        if 'history_end' not in case['tags']:
-            case['tags']['history_end'] = history.end
-
-        distribution = case['options']['distribution']
-        pars_to_get  = self.distr_par[distribution].copy()
-        if 'prob0' in self._parameters:
-            pars_to_get += ['prob0']
-        #par_time = time if time.month != 2 or time.day != 29 else time - timedelta(days = 1)
-        parameters = {par: p.get_data(time, **case['tags']) for par, p in self._parameters.items() if par in pars_to_get}
+        if distribution == 'gamma':
+            iszero = data <= options['zero_threshold']
+            iszero = np.where(np.isnan(data), np.nan, iszero)
+            data   = np.where(iszero, np.nan, data)
 
         # calculate the index
-        probVal = get_prob(data, distribution, parameters)
+        # we are using a warning catcher here because we will get warnings if there are NaN values in the data
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            probVal = get_prob(data, distribution, parameters)
+            index   = map_prob_to_normal(probVal)
 
-        stindex_data = map_prob_to_normal(probVal)
-
-        if hasattr(data, 'attrs'):
-            index_info = data.attrs
-        else:
-            index_info = {}
-
-        if hasattr(list(parameters.values())[0], 'attrs'):
-            index_info.update(list(parameters.values())[0].attrs)
-
-        # add the parents to the metadata
-        parents = parameters
-        parameters.update({'data': data})
-        index_info['parents'] = parents
-
-        return stindex_data, index_info
+        return index
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI'
-    positive_only = True
     default_options = {
         'distribution'   : 'gamma',
     }
@@ -204,7 +161,6 @@ class SPI(DRYESStandardisedIndex):
 
 class SPEI(DRYESStandardisedIndex):
     index_name = 'SPEI'
-    positive_only = False
     default_options = {
         'distribution'   : 'pearson3',
     }
@@ -212,27 +168,30 @@ class SPEI(DRYESStandardisedIndex):
     def _check_io_options(self, io_options: dict) -> None:
         # for the SPEI, we need an additional step, we also need to check that we have both P_raw and PET_raw!
 
-        if 'PET_raw' not in io_options and 'PET' not in io_options:
-            raise ValueError('Either PET or PET_raw must be specified.')
-        elif 'P_raw' not in io_options and 'P' not in io_options:
-            raise ValueError('Either P or P_raw must be specified.')
+        self._raw_inputs = {'P'  : io_options.get('data_P', None), 
+                            'PET': io_options.get('data_PET', None)}
+        if any(v is None for v in self._raw_inputs.values()):
+            raise ValueError('Both P and PET must be specified.')
         
-        self._raw_inputs = {'P': io_options['P_raw'], 'PET': io_options['PET_raw']}
-        self._raw_inputs['P']._template = {}
+        # ensure we have the same templates for everything
         self._raw_inputs['PET']._template = self._raw_inputs['P']._template
-
-        if 'data_raw' not in io_options:
-            raise ValueError('data_raw must be specified.')
+        self.output_template = self._raw_inputs['P']._template
         
-        self._raw_data = io_options['data_raw']
-        self._raw_data._template = self._raw_inputs['PET']._template
-        self._raw_data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
+        self._data = io_options.get('data', None)
+        if self._data is None: 
+            from d3tools.data.memory_dataset import MemoryDataset
+            key_pattern = self._raw_inputs['P'].key_pattern.replace('P', 'PminusPET')
+            self._data = MemoryDataset(key_pattern)
 
-        super()._check_io_options(io_options)
+        self.output_template = self._data._template
+
+        self._raw_inputs['PET']._template = self.output_template
+        self._raw_inputs['P']._template = self.output_template
+
+        self._data.set_parents({'P': self._raw_inputs['P'], 'PET': self._raw_inputs['PET']}, lambda P, PET: P - PET)
 
 class SSMI(DRYESStandardisedIndex):
     index_name = 'SSMI'
-    positive_only = True
     default_options = {
         'distribution'   : 'beta',
     }

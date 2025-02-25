@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats as stat
 from lmoments3 import distr
-from typing import Iterable
+from typing import Sequence
 
 ## supported distributions
 # gamma
@@ -12,8 +12,7 @@ from typing import Iterable
 # genlog
 
 # Gets parameters of a gamma distribution fitted to the data x
-def compute_distr_parameters(x: Iterable[float], distribution: str,
-                             min_obs: int = 5) -> list[float]:
+def compute_distr_parameters(x: Sequence[float], distribution: str) -> list[float]:
     x = np.array(x)
 
     if distribution == 'gamma':
@@ -54,8 +53,6 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
     # filter the nans out of the data
     x = x[~np.isnan(x)]
 
-    if len(x) < min_obs:
-        return [np.nan]*len(parnames)
     try:
         fit_dict = this_distr.lmom_fit(x)
     except:
@@ -65,15 +62,13 @@ def compute_distr_parameters(x: Iterable[float], distribution: str,
     
     return fit
 
-# Checks if the p-value of the Kolmogorov-Smirnov test is above the threshold
-def check_pval(x: Iterable[float], distribution: str,
-               fit = np.ndarray,
-               p_val_th: float = None) -> bool:
+# Get the p-value of the Kolmogorov-Smirnov test of the data x to a distribution
+def get_pval(x: Sequence[float],
+             distribution: str,
+             fit = np.ndarray) -> float:
 
     if any(np.isnan(fit)):
-        return False
-    if p_val_th is None:
-        return True
+        return 0.0
 
     x = np.array(x)
 
@@ -82,15 +77,12 @@ def check_pval(x: Iterable[float], distribution: str,
     elif distribution == 'gev':
         distribution = 'genextreme' # this is the name used by scipy
     elif distribution == 'genlog':
-        # ADD A WARNING AT SOME POINT, this distribution is not available in scipy
-        return True
+        # TODO: ADD A WARNING AT SOME POINT, this distribution is not available in scipy
+        return 1.0
 
     fit = list(fit)
     _, p_value = stat.kstest(x, distribution, args=fit)
-    if p_value < p_val_th:
-        return False
-    else:
-        return True
+    return p_value
 
 # Gets the probability of the data x to be in a gamma distribution
 def get_prob(data: np.ndarray, distribution: str, 

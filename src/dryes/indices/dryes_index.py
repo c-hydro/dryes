@@ -208,7 +208,11 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             for time in timesteps:
                 # get the data for the relevant timesteps to calculate the parameters
                 data_times = time.get_history_timesteps(history)
-                all_data_xr = [data.get_data(t) for t in data_times]
+                all_data_xr = []
+                for t in data_times:
+                    if not data.check_data(t):
+                        continue #TODO: ADD A WARNING OR SOMETHING
+                    all_data_xr.append(data.get_data(t))
                 all_data_np = np.stack(all_data_xr, axis = 0).squeeze()
 
                 # loop through all parameter layers for this data case
@@ -252,6 +256,9 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
             # loop through all the timesteps
             for time in timesteps:
+                if not data.check_data(time):
+                    continue ##TODO: ADD A WARNING OR SOMETHING
+                
                 # get the data for the relevant timesteps to calculate the parameters
                 data_xr = data.get_data(time)
                 data_np = data_xr.values.squeeze()

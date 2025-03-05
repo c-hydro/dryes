@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Sequence
 import numpy as np
 import copy
@@ -185,6 +185,37 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                            frequency: int|str|None = None) -> None:
         
         self.compute(current = None, reference = reference, frequency = frequency, make_parameters = True)
+
+    def get_last_ts(self, inputs = False, **kwargs) -> TimeStep:
+        index_cases = self.cases[-1]
+        last_ts_index = None
+        for case in index_cases.values():
+            now = None if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
+            index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
+            if index is not None:
+                last_ts_index = index if last_ts_index is None else min(index, last_ts_index)
+            else:
+                last_ts_index = None
+                break
+        
+        if not inputs:
+            return last_ts_index
+        
+        other = {}
+        data_cases = self.cases['data']
+        for name, ds in {k:v for k,v in self.io_options.items() if k not in self.parameters and k != "index"}.items():
+            last_ts_data = None
+            for case in data_cases.values():
+                now = None if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
+                data = ds.get_last_ts(now = now, **case.tags, **kwargs)
+                if data is not None:
+                    last_ts_data = data if last_ts_data is None else min(data, last_ts_data)
+                else:
+                    last_ts_data = None
+                    break
+            other[name] = last_ts_data
+
+        return last_ts_index, other
 
     # THESE ARE METHODS THAT HANDLE THE CASES, THE DATA, THE PARAMETERS AND THE OUTPUT
     def _make_parameters(self, history: TimeRange, frequency: str|None) -> None:

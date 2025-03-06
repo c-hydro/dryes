@@ -183,7 +183,7 @@ class SPEI(DRYESStandardisedIndex):
             key_pattern = self._raw_inputs['P'].key_pattern.replace('P', 'PminusPET')
             self._data = MemoryDataset(key_pattern)
 
-        self.output_template = self._data._template
+        self._data._template = self.output_template
 
         self._raw_inputs['PET']._template = self.output_template
         self._raw_inputs['P']._template = self.output_template

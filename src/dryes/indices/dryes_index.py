@@ -221,8 +221,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     def _make_parameters(self, history: TimeRange, frequency: str|None) -> None:
 
         for data_case_id, data_case in self.cases['data'].items():
-            data = self._data.update(**data_case.options)
-            data_ts_unit = data.estimate_timestep().unit
+
+            data_ts_unit = self._data.estimate_timestep(**data_case.options).unit
             if frequency is not None:
                 if not unit_is_multiple(frequency, data_ts_unit):
                     raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
@@ -241,9 +241,10 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 data_times = time.get_history_timesteps(history)
                 all_data_xr = []
                 for t in data_times:
-                    if not data.check_data(t):
+                    if not self._data.check_data(t, **data_case.options):
                         continue #TODO: ADD A WARNING OR SOMETHING
-                    all_data_xr.append(data.get_data(t))
+                    all_data_xr.append(self._data.get_data(t, **data_case.options))
+                
                 all_data_np = np.stack(all_data_xr, axis = 0).squeeze()
 
                 # loop through all parameter layers for this data case
@@ -267,8 +268,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     def _make_index(self, current: TimeRange, reference: TimeRange, frequency: str) -> None:
 
         for data_case_id, data_case in self.cases['data'].items():
-            data = self._data.update(**data_case.options)
-            data_ts_unit = data.estimate_timestep().unit
+
+            data_ts_unit = self._data.estimate_timestep(**data_case.options).unit
             if frequency is not None:
                 if not unit_is_multiple(frequency, data_ts_unit):
                     raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
@@ -287,11 +288,11 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
             # loop through all the timesteps
             for time in timesteps:
-                if not data.check_data(time):
+                if not self._data.check_data(time, **data_case.options):
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 
                 # get the data for the relevant timesteps to calculate the parameters
-                data_xr = data.get_data(time)
+                data_xr = self._data.get_data(time, **data_case.options)
                 data_np = data_xr.values.squeeze()
                 
                 # loop through all parameter layers for this data case

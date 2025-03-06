@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Sequence
 import numpy as np
 import copy
@@ -186,12 +186,43 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         
         self.compute(current = None, reference = reference, frequency = frequency, make_parameters = True)
 
+    def get_last_ts(self, inputs = False, **kwargs) -> TimeStep:
+        index_cases = self.cases[-1]
+        last_ts_index = None
+        for case in index_cases.values():
+            now = None if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
+            index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
+            if index is not None:
+                last_ts_index = index if last_ts_index is None else min(index, last_ts_index)
+            else:
+                last_ts_index = None
+                break
+        
+        if not inputs:
+            return last_ts_index
+        
+        other = {}
+        data_cases = self.cases['data']
+        for name, ds in {k:v for k,v in self.io_options.items() if k not in self.parameters and k != "index"}.items():
+            last_ts_data = None
+            for case in data_cases.values():
+                now = None if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
+                data = ds.get_last_ts(now = now, **case.tags, **kwargs)
+                if data is not None:
+                    last_ts_data = data if last_ts_data is None else min(data, last_ts_data)
+                else:
+                    last_ts_data = None
+                    break
+            other[name] = last_ts_data
+
+        return last_ts_index, other
+
     # THESE ARE METHODS THAT HANDLE THE CASES, THE DATA, THE PARAMETERS AND THE OUTPUT
     def _make_parameters(self, history: TimeRange, frequency: str|None) -> None:
 
         for data_case_id, data_case in self.cases['data'].items():
-            data = self._data.update(**data_case.options)
-            data_ts_unit = data.estimate_timestep().unit
+
+            data_ts_unit = self._data.estimate_timestep(**data_case.options).unit
             if frequency is not None:
                 if not unit_is_multiple(frequency, data_ts_unit):
                     raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
@@ -210,9 +241,10 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 data_times = time.get_history_timesteps(history)
                 all_data_xr = []
                 for t in data_times:
-                    if not data.check_data(t):
+                    if not self._data.check_data(t, **data_case.options):
                         continue #TODO: ADD A WARNING OR SOMETHING
-                    all_data_xr.append(data.get_data(t))
+                    all_data_xr.append(self._data.get_data(t, **data_case.options))
+                
                 all_data_np = np.stack(all_data_xr, axis = 0).squeeze()
 
                 # loop through all parameter layers for this data case
@@ -236,8 +268,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     def _make_index(self, current: TimeRange, reference: TimeRange, frequency: str) -> None:
 
         for data_case_id, data_case in self.cases['data'].items():
-            data = self._data.update(**data_case.options)
-            data_ts_unit = data.estimate_timestep().unit
+
+            data_ts_unit = self._data.estimate_timestep(**data_case.options).unit
             if frequency is not None:
                 if not unit_is_multiple(frequency, data_ts_unit):
                     raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
@@ -256,11 +288,11 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
             # loop through all the timesteps
             for time in timesteps:
-                if not data.check_data(time):
+                if not self._data.check_data(time, **data_case.options):
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 
                 # get the data for the relevant timesteps to calculate the parameters
-                data_xr = data.get_data(time)
+                data_xr = self._data.get_data(time, **data_case.options)
                 data_np = data_xr.values.squeeze()
                 
                 # loop through all parameter layers for this data case

@@ -165,7 +165,7 @@ class SPEI(DRYESStandardisedIndex):
         'distribution'   : 'pearson3',
     }
 
-    def _check_io_options(self, io_options: dict) -> None:
+    def _check_io_data(self, io_options: dict) -> None:
         # for the SPEI, we need an additional step, we also need to check that we have both P_raw and PET_raw!
 
         self._raw_inputs = {'P'  : io_options.get('data_P', None), 

@@ -45,13 +45,13 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                  index_options: dict = {},
                  run_options: Optional[dict] = None) -> None:
 
-        # check the data input options first (to see if there is tiles in the input)
-        self.io_options = io_options
-        self._check_io_data(io_options)
-
         # set the options (using defaults when not specified)
         self.options = copy.deepcopy(self.default_options)
         self.options.update(index_options)
+
+        # check the data input options first (to see if there is tiles in the input)
+        self.io_options = io_options
+        self._check_io_data(io_options)
 
         # set the case tree
         self.cases = self._get_cases()

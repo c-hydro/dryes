@@ -242,17 +242,18 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             for time in timesteps:
                 # get the data for the relevant timesteps to calculate the parameters
                 data_times = time.get_history_timesteps(history)
-                all_data_xr = []
+                all_data_np = []
                 for t in data_times:
-                    if not self._data.check_data(t, **data_case.options):
-                        continue #TODO: ADD A WARNING OR SOMETHING
-                    all_data_xr.append(self._data.get_data(t, **data_case.options))
+                    this_data_np = self.get_data(t, data_case)
+                    if this_data_np is None:
+                        continue ##TODO: ADD A WARNING OR SOMETHING
+                    all_data_np.append(this_data_np)
                 
-                all_data_np = np.stack(all_data_xr, axis = 0).squeeze()
+                all_data_stacked = np.stack(all_data_np, axis = 0).squeeze()
 
                 # loop through all parameter layers for this data case
                 step_input = [None] * len(parameter_layers)
-                step_input[0] = all_data_np
+                step_input[0] = all_data_stacked
                 for par_case, case_layer in self.cases.iterate_subtree(data_case_id, len(parameter_layers)):
                     # in this case the number of the case layer returned matches the step of the parameter calculation
                     # (because data = 0 and the first parameter = 1) - this will not be true for the index calculation
@@ -291,18 +292,17 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
             # loop through all the timesteps
             for time in timesteps:
-                if not self._data.check_data(time, **data_case.options):
-                    continue ##TODO: ADD A WARNING OR SOMETHING
-                
+               
                 # get the data for the relevant timesteps to calculate the parameters
-                data_xr = self._data.get_data(time, **data_case.options)
-                data_np = data_xr.values.squeeze()
+                data_np = self.get_data(time, data_case)
+                if data_np is None:
+                    continue ##TODO: ADD A WARNING OR SOMETHING
                 
                 # loop through all parameter layers for this data case
                 for par_case_id, par_case in this_data_par_cases.items():
                     # get the parameters for this case
-                    parameters_xr = {parname: self._parameters[parname].get_data(time, **par_case.tags) for parname in self.parameters}
-                    parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
+                    parameters_np = self.get_parameters(time, par_case)
+
 
                     # loop through all index layers for this parameter case
                     step_input = [None] * len(index_layers)
@@ -327,6 +327,20 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         else:
                             step_input[step_n] = this_index
     
+    # make things more flexible, but creating methods to get the data and parameters
+    def get_data(self, time: datetime, case) -> np.ndarray:
+        if not self._data.check_data(time, **case.options):
+            return None
+
+        data_xr = self._data.get_data(time, **case.options)
+        data_np = data_xr.values.squeeze()
+        return data_np
+    
+    def get_parameters(self, time: datetime, case) -> dict[str, np.ndarray]:
+        parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters}
+        parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
+        return parameters_np
+
     # THESE ARE THE METHODS THAT NEED TO BE IMPLEMENTED BY THE SUBCLASSES
     def calc_parameters(self,
                         data: list[np.ndarray]|dict[str, np.ndarray], 

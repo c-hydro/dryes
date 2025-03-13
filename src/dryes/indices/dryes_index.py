@@ -54,7 +54,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         self._check_io_data(io_options)
 
         # set the case tree
-        self.cases = self._get_cases()
+        self._set_cases()
 
         # check the other io options
         self._check_io_parameters(io_options)
@@ -63,6 +63,9 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         if run_options is not None:
             self._set_run_options(run_options)
     
+    def _set_cases(self) -> None:
+        self.cases = self._get_cases()
+
     def _get_cases(self) -> dict:
 
         options = self.options

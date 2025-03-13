@@ -190,7 +190,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         index_cases = self.cases[-1]
         last_ts_index = None
         for case in index_cases.values():
-            now = None if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
+            now = kwargs.pop('now', None) if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
             index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
             if index is not None:
                 last_ts_index = index if last_ts_index is None else min(index, last_ts_index)
@@ -206,7 +206,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         for name, ds in {k:v for k,v in self.io_options.items() if k not in self.parameters and k != "index"}.items():
             last_ts_data = None
             for case in data_cases.values():
-                now = None if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
+                now = kwargs.pop('now', None) if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
                 data = ds.get_last_ts(now = now, **case.tags, **kwargs)
                 if data is not None:
                     last_ts_data = data if last_ts_data is None else min(data, last_ts_data)

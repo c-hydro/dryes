@@ -318,7 +318,12 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                             metadata = idx_case.options.copy()
                             metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                             tags = idx_case.tags
-                            self._index.write_data(this_index, time = time, metadata = metadata, **tags)
+
+                            if isinstance(this_index, list):
+                                for index, other_tags in this_index:
+                                    self._index.write_data(index, time = time, metadata = metadata, **tags, **other_tags)
+                            else:
+                                self._index.write_data(this_index, time = time, metadata = metadata, **tags)
                         else:
                             step_input[step_n] = this_index
     

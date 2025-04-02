@@ -23,21 +23,84 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     index_name = 'Threshold based index'
 
+    # The way this index works is a little different from the other indices.
+    # Here, we do two separate steps:
+    # 1. Calculate the "daily" index, which is the difference between the data and the threshold.
+    # 2. Pool the daily index to get the final index.
+
+    # The daily index is calculated in the same way as the other indices, the pooling is unique to this class.
+    # The daily index determines, for each day
+    #  (1) if it is a hit day or not
+    #  (2) the intensity of the day -> unless different in the subclass a day is a hit day if the intensity is > 0
+
+    # The pooling is unique to this class and determines if a sequence of hit/non-hit days constitutes a spell, an event or not.
+    # The output of the pooling is a set of variables that describe the current condition:
+    #  - intensity : the intensity of the event, which is the sum of the intensities of the days in the event
+    #  - duration  : the duration of the event, which is the number of days in the event
+    #  - interval  : the interval since the last spell, which is the number of days since the last hit day (0 if a hit day)
+    #  - nhits     : the number of hit days in the spell (0 if not a spell)
+    #  - case      : a debugging variable (see below)
+    # intensity and duration are the actual variables of interest -> refer only to events, not to spells!
+    # interval and nhits are used to determine the end/start of a spell and if a spell is an event or not
+    # case is a debugging variable that is used to determine the type of day:
+    #  - 00 : ERROR! THIS SHOULD NOT HAPPEN!
+    #  - 01 : not a hit day that is not part (or the end of) a spell
+    #  - 02 : pool day that is part of an event: min_duration already reached (only if count_with_pools is True)
+    #  - 03 : pool day that will be part of an event: min_duration will be reached in the future (only if count_with_pools is True and look_ahead is True)
+    #  - 04 : pool day that is not part of an event: min_duration is not reached and will not be reached in the future (if count_with_pools is False, this is any pool day)
+    #  - 05 : not hot day that could be a pool day (we don't know yet)
+    #  - 06 : not hot day that is the end of a spell (reset the counters)
+    #  - 12 : hot day that is part of an event: min_duration already reached
+    #  - 13 : hot day that will be part of an event: min_duration will be reached in the future (only if look_ahead is True)
+    #  - 14 : hot day that is not part of an event: min_duration is not reached and will not be reached in the future
+    #  - 15 : hot day that is not yet part of an event: min_duration is not reached, but we don't know yet if it will be reached in the future
+
+    ## In the comments, and the naming of the variables, we will use the following convention:
+    ## - 'hit' day  : a day that is above the threshold
+    ## - 'spell'    : a sequence of hit days separated by at most "min_interval" pool days
+    ## - 'pool' day : a day that is not a hit day, but is part of a spell, there can by a maximum of "min_interval" pool days between two hit days
+    ## - 'event'    : a spell that is longer than the "minimum_duration"
+
+    ## Special options:
+    # - look_ahead: True/False
+    #     if True, the algorithm will look a a number of days in the future to determine:
+    #     - if a non-hit day after a spell is a pool day or not (interval + future_interval <= min_interval)
+    #     - if a spell that is not an event will become an event in the future (reaching nhits >= min_duration)
+    #     The number of days to look ahead is
+    #       - (min_duration-1)*(min_interval+1) if min_duration >  1, this is the maximum number of days that a spell can be without being an event
+    #       - min_interval                      if min_duration == 1
+    #     If not enough data are available to look ahead, the algorithm will quietly look aheas as much as it can and mark the final result as "PRELIMINARY"
+    # - pool_if_uncertain: True/False
+    #     if True, the algorithm will consider a non-hit day after a spell as a pool day unless it is certain that it is not
+    #     if look_ahead is False, this is the same as saying that all spells continue for min_interval days after the last hit day
+    #     if look_ahead is True, this is only relevant if there is not enough data to look min_interval days ahead
+    # - count_with_pools: True/False
+    #     if True, the intensity of pool days will be included in the final intensity if the pool day is part of an event, and pool days will count towards the event duration.
+
     # default options
     default_options = {
         'thr_quantile' :  0.1,   # quantile for the threshold calculation
-        'thr_window'   :  1,     # window size for the threshold calculation
+        'thr_window'   :  1,     # window size for the threshold calculation (n of days)
         'min_interval' :  1,     # minimum interval between spells
-        #'min_duration' :  5,     # minimum duration of a spell
+        'min_duration' :  5,     # minimum number of hit days in a spell to be considered an event (exluding pool days!)
         
-        'look_ahead'       : False,   # if True, it looks min_interval days ahead to see if the spell continues
-        'count_with_pools' : False,   # if True, the pool days are added to the duration and intensity of the spell
+        'look_ahead'        : True,   # if True, tries to look ahead to see if a spell continues, look-ahead time is (min_duration-1)*(min_interval+1)
+        'count_with_pools'  : True,   # if True, the pool days are added to the duration and intensity of the spell
+        'pool_if_uncertain' : 1,      # 0: False, reset the counters;
+                                      # 1: True, but don't increase intensity and duration even if count_with_pools;
+                                      # 2: True, increase intensity and duration if count_with_pools.
 
-        'cdo_path'     :  '/usr/bin/cdo', # path to the cdo executable
+        'cdo_path'     :  '/usr/bin/cdo', # path to the cdo executable, to calculate the thresholds
 
         # options to set the tags of the output data
         'pooled_var_name': 'var',
-        'pooled_vars'    : {'intensity' : 'intensity', 'duration' : 'duration', 'interval' : 'interval'},
+        'pooled_vars'    : {'intensity'  : 'intensity',      # intensity of the event
+                            'duration'   : 'duration',       # duration of the event
+                            'interval'   : 'interval',       # interval since the last hit day
+                            'nhits'      : 'nhits',          # number of hit days in the spell
+                            'sintensity' : 'sintensity',     # intensity of the spell (incl. uncertain pool days if count_with_pools is True)
+                            'sduration'  : 'sduration',      # duration of the spell  (incl. uncertain pool days if count_with_pools is True)
+                            'case'       : 'case'}           # debugging case of the output
     }
 
     option_cases = {
@@ -47,7 +110,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     option_cases_pooling = {
         'parameters'   : [],
-        'index_pooled' : ['min_interval', 'look_ahead', 'count_with_pools'],
+        'index_pooled' : ['min_interval', 'min_duration', 'look_ahead', 'pool_if_uncertain', 'count_with_pools'],
     }
 
     parameters = ['threshold']
@@ -72,7 +135,10 @@ class DRYESThrBasedIndex(DRYESIndex):
             min_interval = self.options.get('min_interval')
             if isinstance(min_interval, dict):
                 min_interval = max(min_interval.values())
-            self.max_look_ahead = min_interval
+            min_duration = self.options.get('min_duration')
+            if isinstance(min_duration, dict):
+                min_duration = max(min_duration.values())
+            self.max_look_ahead = (min_duration - 1) * (min_interval + 1) if min_duration > 1 else min_interval
         else:
             self.max_look_ahead = 0
 
@@ -185,14 +251,12 @@ class DRYESThrBasedIndex(DRYESIndex):
         shutil.rmtree(tmpdir)
 
     def _make_index(self, current: ts.TimeRange, reference: ts.TimeRange, frequency: str) -> None:
-
+       
         # adjust the current considering we might need some look-ahead time
         extended_current = current.extend(ts.TimeWindow(self.max_look_ahead, 'd'))
 
-        ## figure out the last pooled and last daily index, to adjust current if needed
+        ## figure out the last daily index, to adjust current if needed
         last_daily  = super().get_last_ts(now = extended_current.end, lim = current.start)
-        last_pooled    = self.get_last_ts(now = last_daily.end if last_daily is not None else current.end,
-                                          lim = current.start)
 
         # make the daily index here:
         if last_daily is None: last_daily = ts.Day.from_date(current.start) - 1
@@ -201,10 +265,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             super()._make_index(daily_tr, reference, 'd')
 
         # and then pool it!
-        if last_pooled is None: last_pooled = ts.Day.from_date(current.start) - 1
-        if last_pooled.end < extended_current.end:
-            pooled_tr = ts.TimeRange(last_pooled.start + timedelta(days = 1), current.end)
-            self._make_index_pooled(pooled_tr, reference, frequency)
+        self._make_index_pooled(current, reference, frequency)
 
     def _make_index_pooled(self, current: ts.TimeRange, reference: ts.TimeRange, frequency: str) -> None:
         
@@ -213,7 +274,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             data_ts_unit = self._data.estimate_timestep(**index_daily_case.options).unit
             if frequency is not None:
                 if not ts.unit_is_multiple(frequency, data_ts_unit):
-                    raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
+                    raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requested ({frequency}).')
             else:
                 frequency = data_ts_unit
 
@@ -232,10 +293,12 @@ class DRYESThrBasedIndex(DRYESIndex):
 
                 # the eventual daily index of the look-ahead period
                 if self.max_look_ahead == 0:
-                    future_daily_index = None
+                    future_daily_index = (None, None)
+                    iscomplete = True
                 else:
                     lookahead_period = ts.TimeRange(time.end + timedelta(1), time.end + timedelta(days = self.max_look_ahead))
                     future_daily_index = self.get_index_daily(lookahead_period, index_daily_case)
+                    iscomplete = future_daily_index[0] is not None and future_daily_index[0].shape[0] >= self.max_look_ahead
                 
                 # loop through all parameter layers for this data case
                 for par_case_id, par_case in this_data_par_cases.items():
@@ -255,6 +318,8 @@ class DRYESThrBasedIndex(DRYESIndex):
 
                         metadata = idx_case.options.copy()
                         metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
+                        metadata.update({'PRELIMINARY': str(not iscomplete).lower()})
+
                         tags = idx_case.tags
 
                         for index, other_tags in this_index:
@@ -272,102 +337,194 @@ class DRYESThrBasedIndex(DRYESIndex):
                    options: dict, **kwargs) -> list[tuple[np.ndarray:dict]]:
         
         current_daily_index, future_daily_index = daily_index
-        intensity, duration, interval = current_index
-
+        
         daily_intensity = current_daily_index[0]
-        daily_spell     = current_daily_index[1]
+        daily_hit       = current_daily_index[1]
         n = daily_intensity.shape[0]
 
         if options['look_ahead']:
-            future_intensity = future_daily_index[0][:options['min_interval']]
-            future_spell     = future_daily_index[1][:options['min_interval']]
-            daily_intensity = np.concatenate((daily_intensity, future_intensity))
-            daily_spell     = np.concatenate((daily_spell, future_spell))
+            future_intensity = future_daily_index[0]
+            future_hit       = future_daily_index[1]
+            if future_intensity is not None:
+                look_ahead_length = (options['min_duration']-1) * (options['min_interval']+1)
+                future_intensity = future_daily_index[0][:look_ahead_length]
+                future_hit       = future_daily_index[1][:look_ahead_length]
+                daily_intensity = np.concatenate((daily_intensity, future_intensity))
+                daily_hit       = np.concatenate((daily_hit, future_hit))
 
-        if intensity is None:
-            intensity = np.zeros_like(current_daily_index[0][0])
-        if duration is None:
-            duration = np.zeros_like(current_daily_index[0][0], dtype = int)
-        if interval is None:
-            interval = np.zeros_like(current_daily_index[0][0], dtype = int) + int(options['min_interval']) + 1
+        if any([ci is None for ci in current_index]):
+            intensity  = np.zeros_like(current_daily_index[0][0])
+            duration   = np.zeros_like(current_daily_index[0][0])
+            interval   = np.zeros_like(current_daily_index[0][0]) + options['min_interval'] + 1
+            nhits      = np.zeros_like(current_daily_index[0][0])
+            sintensity = np.zeros_like(current_daily_index[0][0])
+            sduration  = np.zeros_like(current_daily_index[0][0])
+        else:
+            intensity, duration, interval, nhits, sintensity, sduration, _ = current_index # _ is the previous case, that we don't really care for
+
+        duration  = duration.astype(int)
+        interval  = interval.astype(int)
+        nhits     = nhits.astype(int)
+        sduration = sduration.astype(int)
+
+        this_case = np.zeros_like(current_daily_index[0][0])
+        this_case = this_case.astype(int)
 
         for i in range(n):
-            # where we have a spell, add the intensity and increase the duration by one, set interval since last spell to 0
-            is_spell = daily_spell[i] == 1
-            intensity[is_spell] += daily_intensity[i][is_spell]
-            duration[is_spell]  += 1
-            interval[is_spell]   = 0
+            # first check where we have a hit day or not
+            is_hit = daily_hit[i] == 1
 
-            # where we have the end of a spell, we need to check if this is a pool day or not
-            is_end_of_spell = np.logical_and(daily_spell[i] == 0, duration > 0)
-
-            # first let's check when the next spell starts, if we have to look ahead
-            xx,yy = np.where(is_end_of_spell)
-            if options['look_ahead']:
-                # future_interval = np.argmax(daily_spell[i+1:] > 0, axis=0)
-                # future_interval[future_interval == 0] = options['min_interval'] + 1
-                # future_interval = np.where(daily_spell[i+1:].any(axis=0), future_interval, options['min_interval'] + 1)
-                future_interval = np.zeros_like(daily_spell[i])
-                for x, y in zip(xx, yy):
-                    next_spell_idx = np.argmax(daily_spell[i+1:, x, y] > 0)
-                    if daily_spell[i+1:, x, y].any():
-                        future_interval[x, y] = next_spell_idx
-                    else:
-                        future_interval[x, y] = options['min_interval'] +1
-            else:
-                future_interval = np.zeros_like(daily_spell[i])
-
-            # pool days are where the interval (past + eventually, future) is less than the minimum interval
-            is_pool_day = np.logical_and(is_end_of_spell, interval + future_interval <= options['min_interval'])
-
-            # where we have a pool day, increase the interval
-            interval[is_pool_day] += 1
-            # and depending on the option, add the intensity to the previous spell
-            if options['count_with_pools']:
-                intensity[is_pool_day] += daily_intensity[i][is_pool_day]
-                duration[is_pool_day]  += 1
-
-            # review is_end_of_spell to remove the pool days
-            is_end_of_spell = np.logical_and(is_end_of_spell, ~is_pool_day)
-
-            # where we have the end of a spell, set intensity and duration to 0, and interval to 1
-            interval[is_end_of_spell] = 1
-            intensity[is_end_of_spell] = 0
-            duration[is_end_of_spell] = 0
+            # if this is a hit day, set the interval since the last hit day to 0 and increase the number of hit days in this spell by 1
+            # this is valid for all cases > 10
+            interval[is_hit]  = 0
+            nhits[is_hit]    += 1
 
             # everywhere else, increase the interval
-            interval[~np.logical_or.reduce([is_end_of_spell, is_pool_day, is_spell])] += 1
+            # this is valid for all cases < 10
+            interval[np.logical_not(is_hit)] += 1
 
-            output = [(intensity, {self.pooled_var_name: self.pooled_vars['intensity']}),
-                      (duration,  {self.pooled_var_name: self.pooled_vars['duration']}),
-                      (interval,  {self.pooled_var_name: self.pooled_vars['interval']})]
+            # where we have the end of a spell, we need to check if this is a pool day or not
+            is_end_of_spell = np.logical_and(np.logical_not(is_hit), nhits > 0)
+
+            # case 01: not hit day that is not part or the end of a spell -> do nothing!
+            c01 = np.logical_and(np.logical_not(is_hit), np.logical_not(is_end_of_spell))
+            this_case[c01] = 1
+
+            # if we look ahead, let's check when the next spell begins (to determine if end_of_spell days are pool days)
+            # if we look ahead, let's check when the next spell begins (to determine if end_of_spell days are pool days)
+            future_interval = np.zeros_like(daily_hit[i])
+            future_interval_iscertain = np.zeros_like(daily_hit[i])
+            if options['look_ahead'] and i < daily_hit.shape[0] - 1:
+                future_interval[is_end_of_spell] = np.argmax(daily_hit[i+1:,is_end_of_spell], axis = 0) # this is the index of next hit day in the future
+                future_interval_iscertain[is_end_of_spell] = daily_hit[i+1:,is_end_of_spell].any(axis = 0)
+                future_interval[np.logical_and(is_end_of_spell,np.logical_not(future_interval_iscertain))] = daily_hit.shape[0] - i - 1
+
+            # pool days are where the interval (past + eventually, future) is less than the minimum interval
+            is_pool_day    = np.logical_and(is_end_of_spell, interval + future_interval <= options['min_interval'])
+            maybe_pool_day = np.logical_and.reduce([is_pool_day, np.logical_not(future_interval_iscertain)])
+            if options['pool_if_uncertain'] != 2: is_pool_day[maybe_pool_day] = False
+            
+            # for all the points that are in a spell (either hit or pool days), we need to check if this spell is an event
+            # (to determine if we increase duration and interval or not)
+            # a spell is an event if the number of hit days *will* be longer than min_duration at any point in the future
+            future_nhits = np.zeros_like(nhits)
+            future_nhits_iscertain = np.zeros_like(nhits)
+            if options['look_ahead'] and i < daily_hit.shape[0]:
+                
+                # get the points that we need to look at
+                if options['count_with_pools']:
+                    xx,yy = np.where(np.logical_and(np.logical_or(is_hit, is_pool_day), nhits < options['min_duration']))
+                else:
+                    xx,yy = np.where(np.logical_and(is_hit, nhits < options['min_duration']))
+
+                for x, y in zip(xx, yy):
+                    this_future = daily_hit[i+1:, x, y]
+                    # find the end of the current spell (if it is there), that is a (min_interval+1) long set of zeros
+                    for j in range(len(this_future) - options['min_interval']):
+                        if np.all(this_future[j:j+(options['min_interval']+1)] == 0):
+                            if j > 0: future_nhits[x, y] = np.cumsum(this_future[:j])[-1]
+                            future_nhits_iscertain[x, y] = 1
+                            break
+                    else:
+                        future_nhits[x, y] = np.cumsum(this_future)[-1]
+
+            # case 12 : hot day with nhits >= min_duration (in the past)
+            c12 = np.logical_and(is_hit, nhits >= options['min_duration'])
+            
+            # case 13 : hot day with nhits + future_nhits >= min_duration (in the future)
+            c13 = np.logical_and(is_hit, nhits + future_nhits >= options['min_duration'])
+            this_case[c13] = 13
+            this_case[c12] = 12 # 12 is a subset of 13 and they have the same outcome, it is still helpful to keep track of it
+
+            # case 14: hot day with nhits + future_nhits < min_duration
+            c14 = np.logical_and(is_hit, nhits + future_nhits < options['min_duration'])
+            this_case[c14] = 14
+            
+            # case 15: hot day that we don't not yet if it is part of an event (this is actually a subset of 14)
+            c15 = np.logical_and(c14, np.logical_not(future_nhits_iscertain))
+            this_case[c15] = 15
+            
+            # case 02 : pool day with nhits >= min_duration (in the past)
+            c02 = np.logical_and(is_pool_day, nhits >= options['min_duration'])
+
+            # case 03 : pool day with nhits + future_nhits >= min_duration (in the future)
+            c03 = np.logical_and(is_pool_day, nhits + future_nhits >= options['min_duration'])
+            this_case[c03] = 3
+            this_case[c02] = 2 # 2 is a subset of 3 and they have the same outcome, it is still helpful to keep track of it
+
+            # case 04: pool day with nhits + future_nhits < min_duration (or all pool_days if we don't count with pools)
+            c04 = np.logical_and(is_pool_day, nhits + future_nhits < options['min_duration'])
+            this_case[c04] = 4
+
+            # case 05: potentially a pool day (we don't know yet)
+            # all cases here should have been taken care of
+            c05 = maybe_pool_day
+            this_case[c05] = 5
+
+            # increase the counters for the spell (sintensity, sduration) in cases 12, 13, 14 and 02, 03, 04, 05 (if count_with_pools)
+            to_increase = np.logical_or(c13, c14) # 12 is subset od 13
+            if options['count_with_pools']:
+                to_increase = np.logical_or.reduce([to_increase, c03, c04, c05]) # 02 is subset of 03
+            sintensity[to_increase] += daily_intensity[i][to_increase]
+            sduration[to_increase]  += 1
+
+            # set the final intensity and duration for the events: only in cases 12, 13 and 02, 03 (if count_with_pools)
+            to_set = c13 # 12 is subset of 13
+            if options['count_with_pools']:
+                to_set = np.logical_or(to_set, c03) # 02 is subset of 03
+            intensity[to_set] = sintensity[to_set]
+            duration[to_set]  = sduration[to_set]
+            
+            # case 06: not hot day that is the end of a spell (reset the counters)
+            c06 = np.logical_and.reduce([is_end_of_spell, np.logical_not(is_pool_day), np.logical_not(maybe_pool_day)])
+            sintensity[c06] = 0
+            sduration[c06]  = 0
+            nhits[c06] = 0
+            this_case[c06] = 6
+            if options['pool_if_uncertain'] == 0:
+                c06 = np.logical_or(c06, maybe_pool_day)
+            duration[c06]  = 0
+            intensity[c06] = 0
+
+            output = [(intensity,   {self.pooled_var_name: self.pooled_vars['intensity']}),
+                      (duration,    {self.pooled_var_name: self.pooled_vars['duration']}),
+                      (interval,    {self.pooled_var_name: self.pooled_vars['interval']}),
+                      (nhits,       {self.pooled_var_name: self.pooled_vars['nhits']}),
+                      (sintensity,  {self.pooled_var_name: self.pooled_vars['sintensity']}),
+                      (sduration,   {self.pooled_var_name: self.pooled_vars['sduration']}),
+                      (this_case,   {self.pooled_var_name: self.pooled_vars['case']})
+                    ]
             
             return output
 
     def get_index_daily(self, time: ts.TimeRange, case) -> np.ndarray:
-
+        
         if not isinstance(time, ts.Day):
             days_in_time = time.days
             all_dintensity_np = []
-            all_sbool_np      = []
+            all_ishit_np      = []
             for t in days_in_time:
-                this_dintensity_np, this_sbool_np = self.get_index_daily(t, case)
-                if this_dintensity_np is None or this_sbool_np is None:
+                this_dintensity_np, this_ishit_np = self.get_index_daily(t, case)
+                if this_dintensity_np is None or this_ishit_np is None:
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 all_dintensity_np.append(this_dintensity_np)
-                all_sbool_np.append(this_sbool_np)
+                all_ishit_np.append(this_ishit_np)
+
+            if len(all_dintensity_np) == 0:
+                return None, None
             
             all_dintensity_np = np.stack(all_dintensity_np)
-            all_sbool_np      = np.stack(all_sbool_np)
-            return all_dintensity_np, all_sbool_np
+            all_ishit_np      = np.stack(all_ishit_np)
+
+            return all_dintensity_np, all_ishit_np
 
         if not self._index.check_data(time, **case.tags):
             return None, None
 
         dintensity = self._index.get_data(time, **case.tags)
-        sbool      = xr.where(dintensity > 0, 1, 0)
-        
-        return dintensity.values.squeeze(), sbool.values.squeeze()
+        ishit      = xr.where(dintensity > 0, 1, 0).astype('int8')
+
+        return dintensity.values.squeeze(), ishit.values.squeeze()
 
     def get_parameters_pooling(self, time: datetime, case) -> dict[str, np.ndarray]:
         parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters_pooling}
@@ -376,18 +533,13 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     def get_index_pooled(self, time: ts.TimeStep, case) -> np.ndarray:
 
-        if not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['intensity']}):
-            return None, None, None
-        elif not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['duration']}):
-            return None, None, None
-        elif not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['interval']}):
-            return None, None, None
+        index_pooled = []
+        for varname in self.pooled_vars.values():
+            if not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: varname}):
+                return [None] * len(self.pooled_vars)
+            index_pooled.append(self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: varname}).values.squeeze())
         
-        intensity = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['intensity']})
-        duration = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['duration']})
-        interval = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: self.pooled_vars['interval']})
-        
-        return intensity.values.squeeze(), duration.values.squeeze(), interval.values.squeeze()
+        return index_pooled
 
     def get_last_ts(self, inputs = False, **kwargs) -> ts.TimeStep:
         index_pooled_cases = self.cases_pooling[-1]
@@ -449,14 +601,14 @@ class HCWI(DRYESThrBasedIndex):
     default_options = {
         'thr_window'   : 11,    # window size for the threshold calculation
         'min_interval' :  1,    # minimum interval between spells
-        #'min_duration' :  3,    # minimum duration of a spell
+        'min_duration' :  3,    # minimum duration of a spell
 
         # options to set the tags for the input data
         'Ttypes'       : {'max' : 'max', 'min' : 'min'}, # the types of temperature data to use
         'Ttype_name'   : 'Ttype', # the name of the Ttype variable in the data
         
         'daily_var_name' : 'dvar',
-        'daily_vars'     : {'dintensity' : 'dintensity', 'sbool' : 'sbool'},
+        'daily_vars'     : {'dintensity' : 'dintensity', 'ishit' : 'ishit'},
     }
 
     def _set_io_tags(self) -> None:
@@ -499,17 +651,19 @@ class HCWI(DRYESThrBasedIndex):
 
         both_deviations = super().calc_index(data, parameters, options, step, **kwargs)
 
-        sbool       = np.logical_and(both_deviations[0] >= 0, both_deviations[1] >= 0) * 1
+        ishit       = np.logical_and(both_deviations[0] >= 0, both_deviations[1] >= 0) * 1
         dintensity  = np.mean(np.where(both_deviations>0, both_deviations, 0), axis = 0)
 
         return [(dintensity, {self.daily_var_name: self.daily_vars['dintensity']}),
-                (sbool,      {self.daily_var_name: self.daily_vars['sbool']})]
+                (ishit,      {self.daily_var_name: self.daily_vars['ishit']})]
 
     def get_data(self, time: ts.TimeStep, case) -> np.ndarray:
 
         # the output here should be 3d with the first dimension being the Ttype in the order [min, max]
+        if not self._data.check_data(time, **case.options):
+            return None
 
-        data_ds = self._data.get_data(time, case)
+        data_ds = self._data.get_data(time, **case.options)
         data_da = data_ds.to_array(self.Ttype_name)   
 
         return data_da.values.squeeze()
@@ -534,13 +688,13 @@ class HCWI(DRYESThrBasedIndex):
 
         if not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']}):
             return None, None
-        elif not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['sbool']}):
+        elif not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}):
             return None, None
         
         dintensity = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']})
-        sbool = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['sbool']})
+        ishit = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}).astype('int8')
         
-        return dintensity.values.squeeze(), sbool.values.squeeze()
+        return dintensity.values.squeeze(), ishit.values.squeeze()
         
 class HWI(HCWI):
     index_name = 'HWI'

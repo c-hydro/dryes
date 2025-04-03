@@ -409,7 +409,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             # a spell is an event if the number of hit days *will* be longer than min_duration at any point in the future
             future_nhits = np.zeros_like(nhits)
             future_nhits_iscertain = np.zeros_like(nhits)
-            if options['look_ahead'] and i < daily_hit.shape[0]:
+            if options['look_ahead'] and i < daily_hit.shape[0]-1:
                 
                 # get the points that we need to look at
                 if options['count_with_pools']:

@@ -391,7 +391,6 @@ class DRYESThrBasedIndex(DRYESIndex):
             this_case[c01] = 1
 
             # if we look ahead, let's check when the next spell begins (to determine if end_of_spell days are pool days)
-            # if we look ahead, let's check when the next spell begins (to determine if end_of_spell days are pool days)
             future_interval = np.zeros_like(daily_hit[i])
             future_interval_iscertain = np.zeros_like(daily_hit[i])
             if options['look_ahead'] and i < daily_hit.shape[0] - 1:
@@ -436,11 +435,11 @@ class DRYESThrBasedIndex(DRYESIndex):
             this_case[c13] = 13
             this_case[c12] = 12 # 12 is a subset of 13 and they have the same outcome, it is still helpful to keep track of it
 
-            # case 14: hot day with nhits + future_nhits < min_duration
+            # case 14: hot day with nhits + future_nhits < min_duration (not an event)
             c14 = np.logical_and(is_hit, nhits + future_nhits < options['min_duration'])
             this_case[c14] = 14
             
-            # case 15: hot day that we don't not yet if it is part of an event (this is actually a subset of 14)
+            # case 15: hot day that we don't not yet if it is part of an event (subset of 14, where we are uncertain)
             c15 = np.logical_and(c14, np.logical_not(future_nhits_iscertain))
             this_case[c15] = 15
             
@@ -452,7 +451,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             this_case[c03] = 3
             this_case[c02] = 2 # 2 is a subset of 3 and they have the same outcome, it is still helpful to keep track of it
 
-            # case 04: pool day with nhits + future_nhits < min_duration (or all pool_days if we don't count with pools)
+            # case 04: pool day with nhits + future_nhits < min_duration (not an event)
             c04 = np.logical_and(is_pool_day, nhits + future_nhits < options['min_duration'])
             this_case[c04] = 4
 
@@ -462,7 +461,7 @@ class DRYESThrBasedIndex(DRYESIndex):
             this_case[c05] = 5
 
             # increase the counters for the spell (sintensity, sduration) in cases 12, 13, 14 and 02, 03, 04, 05 (if count_with_pools)
-            to_increase = np.logical_or(c13, c14) # 12 is subset od 13
+            to_increase = np.logical_or(c13, c14) # 12 is subset of 13
             if options['count_with_pools']:
                 to_increase = np.logical_or.reduce([to_increase, c03, c04, c05]) # 02 is subset of 03
             sintensity[to_increase] += daily_intensity[i][to_increase]

@@ -45,16 +45,16 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                  index_options: dict = {},
                  run_options: Optional[dict] = None) -> None:
 
-        # check the data input options first (to see if there is tiles in the input)
-        self.io_options = io_options
-        self._check_io_data(io_options)
-
         # set the options (using defaults when not specified)
         self.options = copy.deepcopy(self.default_options)
         self.options.update(index_options)
 
+        # check the data input options first (to see if there is tiles in the input)
+        self.io_options = io_options
+        self._check_io_data(io_options)
+
         # set the case tree
-        self.cases = self._get_cases()
+        self._set_cases()
 
         # check the other io options
         self._check_io_parameters(io_options)
@@ -63,6 +63,9 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         if run_options is not None:
             self._set_run_options(run_options)
     
+    def _set_cases(self) -> None:
+        self.cases = self._get_cases()
+
     def _get_cases(self) -> dict:
 
         options = self.options
@@ -190,7 +193,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         index_cases = self.cases[-1]
         last_ts_index = None
         for case in index_cases.values():
-            now = None if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
+            now = kwargs.pop('now', None) if last_ts_index is None else last_ts_index.end + timedelta(days = 1)
             index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
             if index is not None:
                 last_ts_index = index if last_ts_index is None else min(index, last_ts_index)
@@ -206,7 +209,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         for name, ds in {k:v for k,v in self.io_options.items() if k not in self.parameters and k != "index"}.items():
             last_ts_data = None
             for case in data_cases.values():
-                now = None if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
+                now = kwargs.pop('now', None) if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
                 data = ds.get_last_ts(now = now, **case.tags, **kwargs)
                 if data is not None:
                     last_ts_data = data if last_ts_data is None else min(data, last_ts_data)
@@ -239,17 +242,18 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             for time in timesteps:
                 # get the data for the relevant timesteps to calculate the parameters
                 data_times = time.get_history_timesteps(history)
-                all_data_xr = []
+                all_data_np = []
                 for t in data_times:
-                    if not self._data.check_data(t, **data_case.options):
-                        continue #TODO: ADD A WARNING OR SOMETHING
-                    all_data_xr.append(self._data.get_data(t, **data_case.options))
+                    this_data_np = self.get_data(t, data_case)
+                    if this_data_np is None:
+                        continue ##TODO: ADD A WARNING OR SOMETHING
+                    all_data_np.append(this_data_np)
                 
-                all_data_np = np.stack(all_data_xr, axis = 0).squeeze()
+                all_data_stacked = np.stack(all_data_np, axis = 0).squeeze()
 
                 # loop through all parameter layers for this data case
                 step_input = [None] * len(parameter_layers)
-                step_input[0] = all_data_np
+                step_input[0] = all_data_stacked
                 for par_case, case_layer in self.cases.iterate_subtree(data_case_id, len(parameter_layers)):
                     # in this case the number of the case layer returned matches the step of the parameter calculation
                     # (because data = 0 and the first parameter = 1) - this will not be true for the index calculation
@@ -288,18 +292,17 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
             # loop through all the timesteps
             for time in timesteps:
-                if not self._data.check_data(time, **data_case.options):
-                    continue ##TODO: ADD A WARNING OR SOMETHING
-                
+               
                 # get the data for the relevant timesteps to calculate the parameters
-                data_xr = self._data.get_data(time, **data_case.options)
-                data_np = data_xr.values.squeeze()
+                data_np = self.get_data(time, data_case)
+                if data_np is None:
+                    continue ##TODO: ADD A WARNING OR SOMETHING
                 
                 # loop through all parameter layers for this data case
                 for par_case_id, par_case in this_data_par_cases.items():
                     # get the parameters for this case
-                    parameters_xr = {parname: self._parameters[parname].get_data(time, **par_case.tags) for parname in self.parameters}
-                    parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
+                    parameters_np = self.get_parameters(time, par_case)
+
 
                     # loop through all index layers for this parameter case
                     step_input = [None] * len(index_layers)
@@ -315,10 +318,29 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                             metadata = idx_case.options.copy()
                             metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                             tags = idx_case.tags
-                            self._index.write_data(this_index, time = time, metadata = metadata, **tags)
+
+                            if isinstance(this_index, list):
+                                for index, other_tags in this_index:
+                                    self._index.write_data(index, time = time, metadata = metadata, **tags, **other_tags)
+                            else:
+                                self._index.write_data(this_index, time = time, metadata = metadata, **tags)
                         else:
                             step_input[step_n] = this_index
     
+    # make things more flexible, but creating methods to get the data and parameters
+    def get_data(self, time: datetime, case) -> np.ndarray:
+        if not self._data.check_data(time, **case.options):
+            return None
+
+        data_xr = self._data.get_data(time, **case.options)
+        data_np = data_xr.values.squeeze()
+        return data_np
+    
+    def get_parameters(self, time: datetime, case) -> dict[str, np.ndarray]:
+        parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters}
+        parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
+        return parameters_np
+
     # THESE ARE THE METHODS THAT NEED TO BE IMPLEMENTED BY THE SUBCLASSES
     def calc_parameters(self,
                         data: list[np.ndarray]|dict[str, np.ndarray], 

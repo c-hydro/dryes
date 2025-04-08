@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 import shutil
 import copy
+import warnings
 
 from typing import Generator
 
@@ -194,20 +195,13 @@ class DRYESThrBasedIndex(DRYESIndex):
 
     def _make_parameters(self, history: ts.TimeRange, frequency: str|None) -> None:
 
-        for data_case_id, data_case in self.cases['data'].items():
-        
+        for data_case_id, data_case in self.cases['data'].items():       
             self._make_thresholds(history, data_case, data_case_id)
 
-            # get any other parameters
-            other_par = [p for p in self.parameters if p != 'threshold']
-            if len(other_par) == 0:
-                continue
-
-            # loop through the cases for the thresholds
-            thr_cases = self.cases['parameters_thr']
-            for thr_case_id, thr_case in thr_cases.items():
-                if thr_case_id.startswith(data_case_id):
-                    self._make_other_parameters(history, data_case, thr_case)
+        # get any other parameters
+        other_par = [p for p in self.parameters if p != 'threshold']
+        if len(other_par) > 0:
+            self._make_other_parameters(history)
 
     def _make_thresholds(self, history: ts.TimeRange, data_case: dict, data_case_id: str, var = None, var_tags = None) -> None:
         
@@ -217,19 +211,25 @@ class DRYESThrBasedIndex(DRYESIndex):
         days = history.days
         
         data_case.options.update(var_tags)
-        datasets = [var.get_data(day, as_is=True, **data_case.options).squeeze().expand_dims('time').assign_coords(time=[day.start]) for day in days]
-        combined = xr.concat(datasets, dim='time')
-
-        var.set_template(datasets[0])
-
         tmpdir = tempfile.mkdtemp()
 
-        # save the data to a temporary file as netcdf with a time dimension
+        # Create a temporary NetCDF file to store the concatenated data
         data_nc = f'{tmpdir}/data.nc'
 
-        # Specify encoding to ensure correct data types
         import netCDF4
-        combined.to_netcdf(data_nc, format = 'NETCDF4', engine = 'netcdf4')
+
+        da0 = var.get_data(days[0], **data_case.options).squeeze().expand_dims("time").assign_coords(time=[days[0].start])
+        ds0: xr.Dataset = da0.to_dataset(name="data")
+        ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}})
+        unit = f'days since {days[0].start:%Y-%m-%d}'
+
+        # Append data incrementally
+        for day in days[1:]:
+            da = var.get_data(day, as_is = True, **data_case.options).squeeze().expand_dims("time").assign_coords(time=[day.start])
+            with netCDF4.Dataset(data_nc, mode="a") as ncfile:
+                time_index = len(ncfile.variables["time"])
+                ncfile.variables["time"][time_index] = netCDF4.date2num(day.start, units=unit)
+                ncfile.variables["data"][time_index, :, :] = da.values
 
         # get the timesteps for which we need to calculate the parameters - thresholds are always daily (incl. 29th Feb)
         timesteps:list[ts.TimeStep] = ts.TimeRange('1904-01-01', '1904-12-31').days
@@ -271,11 +271,8 @@ class DRYESThrBasedIndex(DRYESIndex):
         
         for index_daily_case_id, index_daily_case in self.cases_pooling['index_daily'].items():
 
-            data_ts_unit = self._data.estimate_timestep(**index_daily_case.options).unit
-            if frequency is not None:
-                if not ts.unit_is_multiple(frequency, data_ts_unit):
-                    raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requested ({frequency}).')
-            else:
+            if frequency is None:
+                data_ts_unit = self._data.estimate_timestep(**index_daily_case.options).unit
                 frequency = data_ts_unit
 
             # get the timesteps for which we need to calculate the index
@@ -525,6 +522,14 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         return dintensity.values.squeeze(), ishit.values.squeeze()
 
+    def get_parameters(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
+
+        # This will only get the threshold, i.e. the only parameter for the daily index
+        parname = 'threshold'
+
+        thr_data = self._parameters[parname].get_data(time, **case.tags)
+        return {'threshold' :thr_data.values.squeeze()}
+
     def get_parameters_pooling(self, time: datetime, case) -> dict[str, np.ndarray]:
         parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters_pooling}
         parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
@@ -569,11 +574,8 @@ class LFI(DRYESThrBasedIndex):
         'min_duration' :  5,     # minimum duration of a spell
         'min_interval' : 10,     # minimum interval between spells
         'min_nevents'  :  5,     # minimum number of events in the historic period to calculate lambda (LFI only)
-    }
 
-    option_cases = {
-        'parameters_thr' : ['thr_quantile', 'thr_window', 'cdo_path'],
-        'index_daily'    : []
+        'look_ahead'        : False,
     }
 
     option_cases_normalising = {
@@ -582,8 +584,36 @@ class LFI(DRYESThrBasedIndex):
 
     direction = -1
 
-    parameters             = ['threshold']
+    parameters             = ['threshold', 'lambda']
     parameters_normalising = ['lambda']
+
+    def _check_io_index(self, io_options, update_existing=False):
+        
+        if not hasattr(self, '_index_norm') or update_existing:
+            # check that we have an output specification for the index
+            if 'index' not in io_options: raise ValueError('No output path specified for the index.')
+            self._index_norm = io_options['index']
+            self._index_norm._template = self.output_template        
+
+        if not hasattr(self, '_index_pooled') or update_existing:
+            # check that we have an output specification for the pooled index
+            self._index_pooled = io_options.get('index_pooled')
+            if self._index_pooled is None:
+                from d3tools.data.memory_dataset import MemoryDataset
+                key_pattern = self._index_norm.key_pattern.replace('.tif', '_pooled.tif')
+                self._index_pooled = MemoryDataset(key_pattern)
+            
+            self._index_pooled._template = self.output_template
+
+        if not hasattr(self, '_index') or update_existing:
+            # check that we have an output specification for the daily components of the index
+            self._index = io_options.get('index_daily')
+            if self._index is None:
+                from d3tools.data.memory_dataset import MemoryDataset
+                key_pattern = self._index_norm.key_pattern.replace('.tif', '_daily.tif')
+                self._index = MemoryDataset(key_pattern)
+            
+            self._index._template = self.output_template
 
     def _check_io_parameters(self, io_options: dict, update_existing = False) -> None:
         super()._check_io_parameters(io_options, update_existing)
@@ -591,9 +621,127 @@ class LFI(DRYESThrBasedIndex):
             if par not in io_options: raise ValueError(f'No source/destination specified for parameter {par}.')
             self._parameters[par] = io_options[par]
             self._parameters[par]._template = self.output_template
-    
-    def _make_other_parameters(self, history: ts.TimeRange, data_case: dict, thr_case: dict) -> None:
-        pass
+
+    def _set_cases(self) -> None:
+        self.cases, self.cases_pooling, self.cases_normalising = self._get_cases()
+
+    def _get_cases(self) -> dict:
+        cases, cases_pooling = super()._get_cases()
+        options = self.options
+        
+        last_options  = cases_pooling.options[-1]
+        cases_normalising = CaseManager(last_options, 'index_pooled')
+
+        for layer, opts in self.option_cases_normalising.items():
+            these_options = {k:options.get(k, self.default_options.get(k)) for k in opts}
+            cases_normalising.add_layer(these_options, layer)
+
+        return cases, cases_pooling, cases_normalising
+
+    def _make_other_parameters(self, history: ts.TimeRange) -> None:
+        # to calculate the lambda:
+        # 1. calculate the daily index for the history period -> this will do it for all the cases
+        DRYESIndex._make_index(self, history, history, 'd')
+
+        # 2. pool the data for the history period, also for all the cases
+        super()._make_index_pooled(history, history, 'd')
+
+        # 3. get the lambdas for each normalising case
+        #    - loop trhought the pooling cases
+        for pooled_case_id, pool_case in self.cases_normalising['index_pooled'].items():
+
+            # loop through the days in the history period (skip the first day and set it as previous)
+            days = history.days
+            pooled_index = self.get_index_pooled(days[0], pool_case)
+            _,_,_,_,sduration_prev,sintensity_prev,_ = pooled_index # we only care about sduration, sintensity
+
+            for i, day in enumerate(days[1:]):
+                pooled_index = self.get_index_pooled(day, pool_case)
+                _,_,_,_,sduration,sintensity,pool_cases = pooled_index
+
+                # get where the spell ends (pool_case == 6), and when the spell was long enough to be an event
+                spell_ends = pool_cases == 6
+                event_ends = np.logical_and(spell_ends, sduration_prev >= pool_case.options['min_duration'])
+
+                if i == 0:
+                    # first day, we need to initialise the cumulative intensity and number of events
+                    cum_intensity = np.zeros_like(pool_cases)
+                    n_events      = np.zeros_like(pool_cases)
+
+                # get the cumulative intensity and number of events for this day
+                cum_intensity[event_ends] += sintensity_prev[event_ends]
+                n_events      += event_ends
+
+                # set the previous values for the next day
+                sduration_prev = sduration
+                sintensity_prev = sintensity
+
+            # now loop through the normalising cases that are under this pooling case
+            for lambda_case_id, lambda_case in self.cases_normalising['parameters_lambda'].items():
+                if not lambda_case_id.startswith(pooled_case_id):
+                    continue
+                    
+                # filter to only calculate the lambda where we have enough events
+                cum_intensity = np.where(n_events >= lambda_case.options['min_nevents'], cum_intensity, np.nan)
+                n_events      = np.where(n_events >= lambda_case.options['min_nevents'], n_events, 1e-6)
+
+                # calculate the lambda (lambda = 1/(avg_intensity) = 1/(cum_intensity/n_events))
+                avg_intensity = cum_intensity / n_events
+                avg_intensity = np.where(avg_intensity <1e-6, 1e-6 , avg_intensity)
+                this_lambda = 1 / avg_intensity
+                this_lambda = np.where(avg_intensity == 1e-6, np.nan, this_lambda)
+
+                # save the lambda
+                metadata = lambda_case.options.copy()
+                metadata.update({'reference': f'{history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}'})
+                tags = lambda_case.tags
+                self._parameters['lambda'].write_data(this_lambda, metadata = metadata, **tags)
+
+    def _make_index(self, current: ts.TimeRange, reference: ts.TimeRange, frequency: str) -> None:
+
+        ## figure out the last daily index, to adjust current if needed
+        last_pooled  = super().get_last_ts(now = current.end, lim = current.start)
+
+        # make the daily and pooled index from the superclass if we have to
+        if last_pooled is None: last_pooled = ts.Day.from_date(current.start) - 1
+        if last_pooled.end < current.end:
+            pool_tr = ts.TimeRange(last_pooled.start + timedelta(days = 1), current.end)
+            super()._make_index(pool_tr, reference, frequency)
+
+        # make the normalisation from here!
+        for pooled_case_id, pooled_case in self.cases_normalising['index_pooled'].items():
+            # get the timesteps for which we need to calculate the index
+            timesteps:list[ts.TimeStep] = current.get_timesteps(frequency)
+
+            # now loop through the normalising cases that are under this pooling case
+            for lambda_case_id, lambda_case in self.cases_normalising['parameters_lambda'].items():
+                if not lambda_case_id.startswith(pooled_case_id):
+                    continue
+
+                # get the parameters for this case (lambda)
+                lambda_data = self._parameters['lambda'].get_data(**lambda_case.tags)
+
+                # loop through all the timesteps
+                for time in timesteps:
+
+                    # get the daily index for this time
+                    this_pooled_index = self.get_index_pooled(time, pooled_case)
+                    intensity = this_pooled_index[0] # we really only care about the intensity here
+                    if intensity is None:
+                        continue
+
+                    # normalise the intensity (Poisson distribution)
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        normal_intensity = 1 - np.exp(-lambda_data * intensity)
+                    normal_intensity = np.where(intensity <= 0, 0, normal_intensity)
+                    normal_intensity = np.where(np.isnan(lambda_data), np.nan, normal_intensity)
+
+                    # save the data
+                    metadata = lambda_case.options.copy()
+                    metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
+                    tags = lambda_case.tags
+                    self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
 
 class HCWI(DRYESThrBasedIndex):
     index_name = 'HCWI'
@@ -713,7 +861,7 @@ class CWI(HCWI):
 
 def calc_thresholds_cdo(data_nc: xr.DataArray,
                         history: ts.TimeRange,
-                        case) -> Generator[tuple[xr.DataArray, dict], None, None]:
+                        case) -> Generator[xr.DataArray, None, None]:
     """
     This will only do the threshold calculation using CDO.
     """
@@ -751,7 +899,7 @@ def calc_thresholds_cdo(data_nc: xr.DataArray,
     thresholds = xr.open_dataset(threshold_nc)
     
     # get the crs and write it to the threshold data
-    thresholds_da = thresholds['__xarray_dataarray_variable__']
+    thresholds_da = thresholds['data']
     # crs = combined.rio.crs
     # thresholds_da = thresholds['__xarray_dataarray_variable__'].rio.write_crs(crs)
 

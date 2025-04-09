@@ -174,6 +174,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                 from d3tools.data.memory_dataset import MemoryDataset
                 key_pattern = self._index_pooled.key_pattern.replace('.tif', '_daily.tif')
                 self._index = MemoryDataset(key_pattern)
+                if self._index.has_tiles: self._index.tile_names = self._data.tile_names
             
             self._index._template = self.output_template
 
@@ -602,6 +603,7 @@ class LFI(DRYESThrBasedIndex):
                 from d3tools.data.memory_dataset import MemoryDataset
                 key_pattern = self._index_norm.key_pattern.replace('.tif', '_pooled.tif')
                 self._index_pooled = MemoryDataset(key_pattern)
+                if self._index_pooled.has_tiles: self._index_pooled.tile_names = self._data.tile_names
             
             self._index_pooled._template = self.output_template
 
@@ -612,6 +614,7 @@ class LFI(DRYESThrBasedIndex):
                 from d3tools.data.memory_dataset import MemoryDataset
                 key_pattern = self._index_norm.key_pattern.replace('.tif', '_daily.tif')
                 self._index = MemoryDataset(key_pattern)
+                if self._index_norm.has_tiles: self._index_norm.tile_names = self._data.tile_names
             
             self._index._template = self.output_template
 
@@ -784,6 +787,7 @@ class HCWI(DRYESThrBasedIndex):
         from d3tools.data.memory_dataset import MemoryDataset
         key_pattern = self._raw_inputs['min'].key_pattern.replace('min', '').replace('.tif', '.nc')
         self._data = MemoryDataset(key_pattern)
+        if self._data.has_tiles: self._data.tile_names = self._raw_inputs['min'].tile_names
  
         self._data.set_parents({'min': self._raw_inputs['min'], 'max': self._raw_inputs['max']},
                                lambda min, max: xr.Dataset({'min': min, 'max': max}))

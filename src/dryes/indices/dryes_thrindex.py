@@ -746,6 +746,13 @@ class LFI(DRYESThrBasedIndex):
                     tags = lambda_case.tags
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
 
+    def calc_index(self,
+                   data: np.ndarray, parameters: dict[str, np.ndarray],
+                   options: dict, step = 1, **kwargs) -> np.ndarray:
+
+        deficit = super().calc_index(data, parameters, options, step, **kwargs)
+        return np.where(deficit < 0, 0, deficit)
+
 class HCWI(DRYESThrBasedIndex):
     index_name = 'HCWI'
     default_options = {

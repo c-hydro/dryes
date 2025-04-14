@@ -37,7 +37,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     index_name = 'dryes_index'
 
     default_options = {
-        'make_parameters': True
+        'make_parameters': False
         }
 
     def __init__(self,

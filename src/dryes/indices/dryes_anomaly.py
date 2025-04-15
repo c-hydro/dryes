@@ -4,6 +4,7 @@ import warnings
 from typing import Optional
 
 from .dryes_index import DRYESIndex
+from ..core.anomalies import calc_anomaly, calc_anomaly_parameters
 
 class DRYESAnomaly(DRYESIndex):
     index_name = 'anomaly'
@@ -59,13 +60,7 @@ class DRYESAnomaly(DRYESIndex):
             # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                # mean
-                mean_data = np.nanmean(data, axis = 0)
-                parameters['mean'] = mean_data
-                # std
-                if options['get_std']:
-                    std_data = np.nanstd(data, axis = 0)
-                    parameters['std'] = std_data
+                parameters = calc_anomaly_parameters(data, get_std = options['get_std'])
 
             # write a parameter for the number of data points used for the fitting
             parameters['n'] = np.sum(~np.isnan(data), axis=0)
@@ -91,16 +86,9 @@ class DRYESAnomaly(DRYESIndex):
         """
 
         if step == 1:
-            mean = parameters['mean']
-            if options['type'] == 'empiricalzscore':
-                std  = parameters['std']
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    anomaly_data = (data - mean) / std
-            elif options['type'] == 'percentdelta':
-                anomaly_data = (data - mean) / mean * 100
-            elif options['type'] == 'absolutedelta':
-                anomaly_data = data - mean
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                anomaly_data = calc_anomaly(data, parameters, options['type'])
 
         elif step == 2:
             anomaly_data = data

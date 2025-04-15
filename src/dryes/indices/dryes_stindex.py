@@ -4,7 +4,7 @@ import warnings
 from typing import Optional
 
 from .dryes_index import DRYESIndex
-from ..utils.stat import compute_distr_parameters, get_pval, get_prob, map_prob_to_normal
+from ..core.standardised_indices import calc_standardised_index, fit_data, get_pval
 
 class DRYESStandardisedIndex(DRYESIndex):
     """
@@ -77,36 +77,30 @@ class DRYESStandardisedIndex(DRYESIndex):
 
         # first step in parameter calculation is the fitting of the distribution
         if step == 1:
-            # if we use the gamma distribution, we need the data to be positive
-            if options['distribution'] == 'gamma':
-                iszero = data <= options['zero_threshold']
-                # reassign NaNs
-                iszero = np.where(np.isnan(data), np.nan, iszero)
-                # we are using a warning catcher here because np.nanmean and np.nanstd will throw a warning if all values are NaN
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    prob0 = np.nanmean(iszero, axis = 0)
-                parameters['prob0'] = prob0
-                data = np.where(iszero, np.nan, data)
-
-            # then we fit the distribution to the data
-            distr_parvalues = np.apply_along_axis(compute_distr_parameters, axis=0, arr=data,
-                                        distribution=options['distribution'])
             
-            # assign names to the parameters
-            parnames = self.distr_par[options['distribution']]
-            for ip, par in enumerate(parnames):
-                parameters[par] = distr_parvalues[ip]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                # fit the distribution to the data
+                parameters = fit_data(data, options['distribution'], zero_threshold = options['zero_threshold'])
+
+            # change the names of the keys to match the distribution
+            for par in self.distr_par[options['distribution']]:
+                pname = par.replace(f'{options["distribution"]}.', '')
+                parameters[par] = parameters.pop(f'{pname}')
 
             # write a parameter for the number of data points used for the fitting
-            parameters['n'] = np.sum(~np.isnan(data), axis=0)
+            if options['distribution'] == 'gamma':
+                parameters['n'] = np.sum(np.logical_and(np.logical_not(np.isnan(data)), data > options['zero_threshold']), axis=0)
+            else:
+                parameters['n'] = np.sum(np.logical_not(np.isnan(data)), axis=0)
 
             # check if we need to calculate the p-values
             if options['pval_check']:
-                to_iterate = np.where(~np.isnan(distr_parvalues[0])) # only iterate over the non-nan values of the parameters
-                pvals = np.zeros(distr_parvalues[0].shape)
+                par_np = np.stack([parameters[par] for par in self.distr_par[options['distribution']]], axis=0)
+                to_iterate = np.where(~np.isnan(par_np[0])) # only iterate over the non-nan values of the parameters
+                pvals = np.zeros(par_np[0].shape)
                 for x,y in zip(*to_iterate):
-                    pvals[x,y] = get_pval(data[:,x,y], options['distribution'], distr_parvalues[:,x,y])
+                    pvals[x,y] = get_pval(data[:,x,y], options['distribution'], par_np[:,x,y], zero_threshold = options['zero_threshold'])
 
                 parameters['pval'] = pvals
         
@@ -132,22 +126,16 @@ class DRYESStandardisedIndex(DRYESIndex):
         Returns the index as a numpy.ndarray and a dictionary of metadata, if any.
         """
 
-        # get the distribution from the options
         distribution = options['distribution']
 
-        if distribution == 'gamma':
-            iszero = data <= options['zero_threshold']
-            iszero = np.where(np.isnan(data), np.nan, iszero)
-            data   = np.where(iszero, np.nan, data)
+        # remove the name of the distribution from the parameters name and only select the ones for this distribution
+        pars = {k.replace(f'{distribution}.', ''):v for k,v in parameters.items() if k.startswith(f'{distribution}.')}
 
-        # calculate the index
-        # we are using a warning catcher here because we will get warnings if there are NaN values in the data
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            probVal = get_prob(data, distribution, parameters)
-            index   = map_prob_to_normal(probVal)
+        # if we use the gamma distribution, we need to add the probability of zero
+        if distribution == 'gamma': pars['prob0'] = parameters['prob0']
 
-        return index
+        # calculate and return the standardised index
+        return calc_standardised_index(data, distribution, pars, options['zero_threshold'])
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI'

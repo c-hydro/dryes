@@ -2,19 +2,16 @@ from datetime import datetime, timedelta
 import numpy as np
 import xarray as xr
 import tempfile
-import subprocess
 import shutil
 import copy
 import warnings
-
-from typing import Generator
 
 from .dryes_index import DRYESIndex
 
 import d3tools.timestepping as ts
 from d3tools.cases import CaseManager
 
-from ..utils.parse import make_case_hierarchy, options_to_cases
+from ..core.threshold_indices import calc_thresholds_cdo, pool_index, calc_dintensity
 
 class DRYESThrBasedIndex(DRYESIndex):
     """
@@ -110,7 +107,6 @@ class DRYESThrBasedIndex(DRYESIndex):
     }
 
     option_cases_pooling = {
-        'parameters'   : [],
         'index_pooled' : ['min_interval', 'min_duration', 'look_ahead', 'pool_if_uncertain', 'count_with_pools'],
     }
 
@@ -241,7 +237,10 @@ class DRYESThrBasedIndex(DRYESIndex):
             if not thr_case_id.startswith(data_case_id):
                 continue
 
-            thresholds = calc_thresholds_cdo(data_nc, history, thr_case)
+            thr_quantile = thr_case.options['thr_quantile']
+            thr_window   = thr_case.options['thr_window']
+            cdo_path     = thr_case.options['cdo_path']
+            thresholds = calc_thresholds_cdo(data_nc, thr_quantile, thr_window, cdo_path, var_name = 'data')
 
             for time, thr_data in zip(timesteps, thresholds):
                 metadata = thr_case.options.copy()
@@ -279,249 +278,94 @@ class DRYESThrBasedIndex(DRYESIndex):
             # get the timesteps for which we need to calculate the index
             timesteps:list[ts.TimeStep] = current.get_timesteps(frequency)
 
-            # get the cases for the last layer of the parameters
-            parameter_layers = [l for l in self.cases_pooling._lyrmap if l.startswith('parameters')]
-            this_data_par_cases = {id:case for id,case in self.cases_pooling[parameter_layers[-1]].items() if id.startswith(index_daily_case_id)}
-
             # loop through all the timesteps
             for time in timesteps:
 
-                # get the daily index for this time
-                this_daily_index = self.get_index_daily(ts.TimeRange(time.start, time.end), index_daily_case)
-
-                # the eventual daily index of the look-ahead period
+                # get the daily index for this time and (if needed) the look-ahead period
                 if self.max_look_ahead == 0:
-                    future_daily_index = (None, None)
+                    daily_index = self.get_index_daily(ts.TimeRange(time.start, time.end), index_daily_case)
                     iscomplete = True
                 else:
-                    lookahead_period = ts.TimeRange(time.end + timedelta(1), time.end + timedelta(days = self.max_look_ahead))
-                    future_daily_index = self.get_index_daily(lookahead_period, index_daily_case)
-                    iscomplete = future_daily_index[0] is not None and future_daily_index[0].shape[0] >= self.max_look_ahead
-                
-                # loop through all parameter layers for this data case
-                for par_case_id, par_case in this_data_par_cases.items():
-                    # get the parameters for this case
-                    parameters_np = self.get_parameters_pooling(time, par_case)
+                    end_time = time.end + timedelta(days = self.max_look_ahead)
+                    daily_index = self.get_index_daily(ts.TimeRange(time.start, end_time), index_daily_case)
+                    iscomplete = daily_index['dintensity'] is not None and daily_index['dintensity'].shape[0] >= self.max_look_ahead
 
-                    # loop through all index layers for this parameter case
-                    input = (this_daily_index, future_daily_index)
-                    for idx_case_id, idx_case in self.cases_pooling[-1].items():
-                        if not idx_case_id.startswith(par_case_id):
-                            continue
-                        
-                        previous_index = self.get_index_pooled(time - 1, idx_case)
+                for idx_case_id, idx_case in self.cases_pooling[-1].items():
+                    if not idx_case_id.startswith(index_daily_case_id):
+                        continue
+                    
+                    previous_index = self.get_index_pooled(time - 1, idx_case)
+                    this_daily_index = copy.deepcopy(daily_index)
 
-                        this_input = copy.deepcopy(input)
-                        this_index = self.pool_index(this_input, parameters_np, previous_index, idx_case.options)
+                    this_index = self.pool_index(this_daily_index, previous_index,
+                                                 options = idx_case.options,
+                                                 n = time.length)
 
-                        metadata = idx_case.options.copy()
-                        metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
-                        metadata.update({'PRELIMINARY': str(not iscomplete).lower()})
+                    metadata = idx_case.options.copy()
+                    metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
+                    metadata.update({'PRELIMINARY': str(not iscomplete).lower()})
 
-                        tags = idx_case.tags
+                    tags = idx_case.tags
 
-                        for index, other_tags in this_index:
-                            self._index_pooled.write_data(index, time = time, metadata = metadata, **tags, **other_tags)
+                    for index, other_tags in this_index:
+                        self._index_pooled.write_data(index, time = time, metadata = metadata, **tags, **other_tags)
 
     def calc_index(self,
                    data: np.ndarray, parameters: dict[str, np.ndarray],
                    options: dict, step = 1, **kwargs) -> np.ndarray:
 
         thresholds = parameters['threshold']
-        return (data - thresholds) * self.direction
+        return calc_dintensity(data, thresholds, self.direction, get_hits=False)['dintensity']
     
     def pool_index(self,
-                   daily_index: tuple[tuple[np.ndarray]], parameters: dict[str:np.ndarray], current_index: tuple[np.ndarray],
-                   options: dict, **kwargs) -> list[tuple[np.ndarray:dict]]:
-        
-        current_daily_index, future_daily_index = daily_index
-        
-        daily_intensity = current_daily_index[0]
-        daily_hit       = current_daily_index[1]
-        n = daily_intensity.shape[0]
+                   daily_index: dict[str:np.ndarray], 
+                   current_pooled_index: dict[str:np.ndarray],
+                   options: dict, n: int = 1) -> tuple[np.ndarray,dict]:
 
-        if options['look_ahead']:
-            future_intensity = future_daily_index[0]
-            future_hit       = future_daily_index[1]
-            if future_intensity is not None:
-                look_ahead_length = (options['min_duration']-1) * (options['min_interval']+1)
-                future_intensity = future_daily_index[0][:look_ahead_length]
-                future_hit       = future_daily_index[1][:look_ahead_length]
-                daily_intensity = np.concatenate((daily_intensity, future_intensity))
-                daily_hit       = np.concatenate((daily_hit, future_hit))
+        pooled_index = pool_index(daily_index, current_pooled_index, n = n,
+                                  min_interval = options['min_interval'],
+                                  min_duration = options['min_duration'],
+                                  look_ahead = options['look_ahead'],
+                                  pool_if_uncertain = options['pool_if_uncertain'],
+                                  count_with_pools = options['count_with_pools'])
 
-        if any([ci is None for ci in current_index]):
-            intensity  = np.zeros_like(current_daily_index[0][0])
-            duration   = np.zeros_like(current_daily_index[0][0])
-            interval   = np.zeros_like(current_daily_index[0][0]) + options['min_interval'] + 1
-            nhits      = np.zeros_like(current_daily_index[0][0])
-            sintensity = np.zeros_like(current_daily_index[0][0])
-            sduration  = np.zeros_like(current_daily_index[0][0])
-        else:
-            intensity, duration, interval, nhits, sintensity, sduration, _ = current_index # _ is the previous case, that we don't really care for
+        output = []
 
-        duration  = duration.astype(int)
-        interval  = interval.astype(int)
-        nhits     = nhits.astype(int)
-        sduration = sduration.astype(int)
+        for key, value in pooled_index.items():
+            output.append((value, {self.pooled_var_name: self.pooled_vars[key]}))
 
-        this_case = np.zeros_like(current_daily_index[0][0])
-        this_case = this_case.astype(int)
+        return output
 
-        for i in range(n):
-            # first check where we have a hit day or not
-            is_hit = daily_hit[i] == 1
-
-            # if this is a hit day, set the interval since the last hit day to 0 and increase the number of hit days in this spell by 1
-            # this is valid for all cases > 10
-            interval[is_hit]  = 0
-            nhits[is_hit]    += 1
-
-            # everywhere else, increase the interval
-            # this is valid for all cases < 10
-            interval[np.logical_not(is_hit)] += 1
-
-            # where we have the end of a spell, we need to check if this is a pool day or not
-            is_end_of_spell = np.logical_and(np.logical_not(is_hit), nhits > 0)
-
-            # case 01: not hit day that is not part or the end of a spell -> do nothing!
-            c01 = np.logical_and(np.logical_not(is_hit), np.logical_not(is_end_of_spell))
-            this_case[c01] = 1
-
-            # if we look ahead, let's check when the next spell begins (to determine if end_of_spell days are pool days)
-            future_interval = np.zeros_like(daily_hit[i])
-            future_interval_iscertain = np.zeros_like(daily_hit[i])
-            if options['look_ahead'] and i < daily_hit.shape[0] - 1:
-                future_interval[is_end_of_spell] = np.argmax(daily_hit[i+1:,is_end_of_spell], axis = 0) # this is the index of next hit day in the future
-                future_interval_iscertain[is_end_of_spell] = daily_hit[i+1:,is_end_of_spell].any(axis = 0)
-                future_interval[np.logical_and(is_end_of_spell,np.logical_not(future_interval_iscertain))] = daily_hit.shape[0] - i - 1
-
-            # pool days are where the interval (past + eventually, future) is less than the minimum interval
-            is_pool_day    = np.logical_and(is_end_of_spell, interval + future_interval <= options['min_interval'])
-            maybe_pool_day = np.logical_and.reduce([is_pool_day, np.logical_not(future_interval_iscertain)])
-            if options['pool_if_uncertain'] != 2: is_pool_day[maybe_pool_day] = False
-            
-            # for all the points that are in a spell (either hit or pool days), we need to check if this spell is an event
-            # (to determine if we increase duration and interval or not)
-            # a spell is an event if the number of hit days *will* be longer than min_duration at any point in the future
-            future_nhits = np.zeros_like(nhits)
-            future_nhits_iscertain = np.zeros_like(nhits)
-            if options['look_ahead'] and i < daily_hit.shape[0]-1:
-                
-                # get the points that we need to look at
-                if options['count_with_pools']:
-                    xx,yy = np.where(np.logical_and(np.logical_or(is_hit, is_pool_day), nhits < options['min_duration']))
-                else:
-                    xx,yy = np.where(np.logical_and(is_hit, nhits < options['min_duration']))
-
-                for x, y in zip(xx, yy):
-                    this_future = daily_hit[i+1:, x, y]
-                    # find the end of the current spell (if it is there), that is a (min_interval+1) long set of zeros
-                    for j in range(len(this_future) - options['min_interval']):
-                        if np.all(this_future[j:j+(options['min_interval']+1)] == 0):
-                            if j > 0: future_nhits[x, y] = np.cumsum(this_future[:j])[-1]
-                            future_nhits_iscertain[x, y] = 1
-                            break
-                    else:
-                        future_nhits[x, y] = np.cumsum(this_future)[-1]
-
-            # case 12 : hot day with nhits >= min_duration (in the past)
-            c12 = np.logical_and(is_hit, nhits >= options['min_duration'])
-            
-            # case 13 : hot day with nhits + future_nhits >= min_duration (in the future)
-            c13 = np.logical_and(is_hit, nhits + future_nhits >= options['min_duration'])
-            this_case[c13] = 13
-            this_case[c12] = 12 # 12 is a subset of 13 and they have the same outcome, it is still helpful to keep track of it
-
-            # case 14: hot day with nhits + future_nhits < min_duration (not an event)
-            c14 = np.logical_and(is_hit, nhits + future_nhits < options['min_duration'])
-            this_case[c14] = 14
-            
-            # case 15: hot day that we don't not yet if it is part of an event (subset of 14, where we are uncertain)
-            c15 = np.logical_and(c14, np.logical_not(future_nhits_iscertain))
-            this_case[c15] = 15
-            
-            # case 02 : pool day with nhits >= min_duration (in the past)
-            c02 = np.logical_and(is_pool_day, nhits >= options['min_duration'])
-
-            # case 03 : pool day with nhits + future_nhits >= min_duration (in the future)
-            c03 = np.logical_and(is_pool_day, nhits + future_nhits >= options['min_duration'])
-            this_case[c03] = 3
-            this_case[c02] = 2 # 2 is a subset of 3 and they have the same outcome, it is still helpful to keep track of it
-
-            # case 04: pool day with nhits + future_nhits < min_duration (not an event)
-            c04 = np.logical_and(is_pool_day, nhits + future_nhits < options['min_duration'])
-            this_case[c04] = 4
-
-            # case 05: potentially a pool day (we don't know yet)
-            # all cases here should have been taken care of
-            c05 = maybe_pool_day
-            this_case[c05] = 5
-
-            # increase the counters for the spell (sintensity, sduration) in cases 12, 13, 14 and 02, 03, 04, 05 (if count_with_pools)
-            to_increase = np.logical_or(c13, c14) # 12 is subset of 13
-            if options['count_with_pools']:
-                to_increase = np.logical_or.reduce([to_increase, c03, c04, c05]) # 02 is subset of 03
-            sintensity[to_increase] += daily_intensity[i][to_increase]
-            sduration[to_increase]  += 1
-
-            # set the final intensity and duration for the events: only in cases 12, 13 and 02, 03 (if count_with_pools)
-            to_set = c13 # 12 is subset of 13
-            if options['count_with_pools']:
-                to_set = np.logical_or(to_set, c03) # 02 is subset of 03
-            intensity[to_set] = sintensity[to_set]
-            duration[to_set]  = sduration[to_set]
-            
-            # case 06: not hot day that is the end of a spell (reset the counters)
-            c06 = np.logical_and.reduce([is_end_of_spell, np.logical_not(is_pool_day), np.logical_not(maybe_pool_day)])
-            sintensity[c06] = 0
-            sduration[c06]  = 0
-            nhits[c06] = 0
-            this_case[c06] = 6
-            if options['pool_if_uncertain'] == 0:
-                c06 = np.logical_or(c06, maybe_pool_day)
-            duration[c06]  = 0
-            intensity[c06] = 0
-
-            output = [(intensity,   {self.pooled_var_name: self.pooled_vars['intensity']}),
-                      (duration,    {self.pooled_var_name: self.pooled_vars['duration']}),
-                      (interval,    {self.pooled_var_name: self.pooled_vars['interval']}),
-                      (nhits,       {self.pooled_var_name: self.pooled_vars['nhits']}),
-                      (sintensity,  {self.pooled_var_name: self.pooled_vars['sintensity']}),
-                      (sduration,   {self.pooled_var_name: self.pooled_vars['sduration']}),
-                      (this_case,   {self.pooled_var_name: self.pooled_vars['case']})
-                    ]
-            
-            return output
-
-    def get_index_daily(self, time: ts.TimeRange, case) -> np.ndarray:
+    def get_index_daily(self, time: ts.TimeRange, case) -> dict[str:np.ndarray]:
         
         if not isinstance(time, ts.Day):
             days_in_time = time.days
             all_dintensity_np = []
             all_ishit_np      = []
             for t in days_in_time:
-                this_dintensity_np, this_ishit_np = self.get_index_daily(t, case)
+                this_daily_index = self.get_index_daily(t, case)
+                this_dintensity_np = this_daily_index['dintensity']
+                this_ishit_np      = this_daily_index['ishit']
                 if this_dintensity_np is None or this_ishit_np is None:
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 all_dintensity_np.append(this_dintensity_np)
                 all_ishit_np.append(this_ishit_np)
 
             if len(all_dintensity_np) == 0:
-                return None, None
+                return {'dintensity' : None, 'ishit' : None}
             
             all_dintensity_np = np.stack(all_dintensity_np)
             all_ishit_np      = np.stack(all_ishit_np)
 
-            return all_dintensity_np, all_ishit_np
+            return {'dintensity' : all_dintensity_np, 'ishit' : all_ishit_np}
 
         if not self._index.check_data(time, **case.tags):
-            return None, None
+            return {'dintensity' : None, 'ishit' : None}
 
         dintensity = self._index.get_data(time, **case.tags)
         ishit      = xr.where(dintensity > 0, 1, 0).astype('int8')
 
-        return dintensity.values.squeeze(), ishit.values.squeeze()
+        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}
 
     def get_parameters(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
 
@@ -531,18 +375,13 @@ class DRYESThrBasedIndex(DRYESIndex):
         thr_data = self._parameters[parname].get_data(time, **case.tags)
         return {'threshold' :thr_data.values.squeeze()}
 
-    def get_parameters_pooling(self, time: datetime, case) -> dict[str, np.ndarray]:
-        parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters_pooling}
-        parameters_np = {parname: par.values.squeeze() for parname, par in parameters_xr.items()}
-        return parameters_np
+    def get_index_pooled(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
 
-    def get_index_pooled(self, time: ts.TimeStep, case) -> np.ndarray:
-
-        index_pooled = []
-        for varname in self.pooled_vars.values():
+        index_pooled = {}
+        for key, varname in self.pooled_vars.items():
             if not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: varname}):
-                return [None] * len(self.pooled_vars)
-            index_pooled.append(self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: varname}).values.squeeze())
+                return {k: None for k in self.pooled_vars.keys()}
+            index_pooled[key] = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: varname}).values.squeeze()
         
         return index_pooled
 
@@ -656,11 +495,14 @@ class LFI(DRYESThrBasedIndex):
             # loop through the days in the history period (skip the first day and set it as previous)
             days = history.days
             pooled_index = self.get_index_pooled(days[0], pool_case)
-            _,_,_,_,sduration_prev,sintensity_prev,_ = pooled_index # we only care about sduration, sintensity
+            sduration_prev = pooled_index['sduration']
+            sintensity_prev = pooled_index['sintensity']
 
             for i, day in enumerate(days[1:]):
                 pooled_index = self.get_index_pooled(day, pool_case)
-                _,_,_,_,sduration,sintensity,pool_cases = pooled_index
+                sduration = pooled_index['sduration']
+                sintensity = pooled_index['sintensity']
+                pool_cases = pooled_index['case']
 
                 # get where the spell ends (pool_case == 6), and when the spell was long enough to be an event
                 spell_ends = pool_cases == 6
@@ -729,7 +571,7 @@ class LFI(DRYESThrBasedIndex):
 
                     # get the daily index for this time
                     this_pooled_index = self.get_index_pooled(time, pooled_case)
-                    intensity = this_pooled_index[0] # we really only care about the intensity here
+                    intensity = this_pooled_index['intensity'] # we really only care about the intensity here
                     if intensity is None:
                         continue
 
@@ -745,13 +587,6 @@ class LFI(DRYESThrBasedIndex):
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                     tags = lambda_case.tags
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
-
-    def calc_index(self,
-                   data: np.ndarray, parameters: dict[str, np.ndarray],
-                   options: dict, step = 1, **kwargs) -> np.ndarray:
-
-        deficit = super().calc_index(data, parameters, options, step, **kwargs)
-        return np.where(deficit < 0, 0, deficit)
 
 class HCWI(DRYESThrBasedIndex):
     index_name = 'HCWI'
@@ -807,13 +642,12 @@ class HCWI(DRYESThrBasedIndex):
                    data: np.ndarray, parameters: dict[str, np.ndarray],
                    options: dict, step = 1, **kwargs) -> list[tuple[np.ndarray, dict]]:
 
-        both_deviations = super().calc_index(data, parameters, options, step, **kwargs)
+        thresholds = parameters['threshold']
+        dindex = calc_dintensity(data, thresholds, self.direction, get_hits=True)
 
-        ishit       = np.logical_and(both_deviations[0] >= 0, both_deviations[1] >= 0) * 1
-        dintensity  = np.mean(np.where(both_deviations>0, both_deviations, 0), axis = 0)
+        output = [(value, {self.daily_var_name: self.daily_vars[key]}) for key, value in dindex.items()]
 
-        return [(dintensity, {self.daily_var_name: self.daily_vars['dintensity']}),
-                (ishit,      {self.daily_var_name: self.daily_vars['ishit']})]
+        return output
 
     def get_data(self, time: ts.TimeStep, case) -> np.ndarray:
 
@@ -839,20 +673,20 @@ class HCWI(DRYESThrBasedIndex):
 
         return {'threshold' :thr_da.values.squeeze()}
 
-    def get_index_daily(self, time: ts.TimeRange, case) -> np.ndarray:
+    def get_index_daily(self, time: ts.TimeRange, case) -> dict[str:np.ndarray]:
 
         if not isinstance(time, ts.Day):
             return super().get_index_daily(time, case)
 
         if not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']}):
-            return None, None
+            return {'dintensity' : None, 'ishit' : None}
         elif not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}):
-            return None, None
+            return {'dintensity' : None, 'ishit' : None}
         
         dintensity = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']})
         ishit = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}).astype('int8')
         
-        return dintensity.values.squeeze(), ishit.values.squeeze()
+        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}
         
 class HWI(HCWI):
     index_name = 'HWI'
@@ -869,62 +703,3 @@ class CWI(HCWI):
     default_options = {
         'thr_quantile' : 0.1, # quantile for the threshold calculation
     }
-
-def calc_thresholds_cdo(data_nc: xr.DataArray,
-                        history: ts.TimeRange,
-                        case) -> Generator[xr.DataArray, None, None]:
-    """
-    This will only do the threshold calculation using CDO.
-    """
-    import os
-
-    tmpdir = os.path.dirname(data_nc)
-
-    # set the number of bins in CDO as an environment variable
-    window_size = case.options['thr_window']
-    history_start = history.start.year
-    history_end = history.end.year
-    
-    CDO_PCTL_NBINS= window_size * (history_end - history_start + 1) * 2 + 2
-    os.environ['CDO_NUMBINS'] = str(CDO_PCTL_NBINS)
-
-    # calculate running max and min of data using CDO
-    datamin_nc = f'{tmpdir}/datamin.nc'
-    datamax_nc = f'{tmpdir}/datamax.nc'
-
-    cdo_path = case.options['cdo_path']
-    cdo_cmd =  f'{cdo_path} ydrunmin,{window_size},rm=c {data_nc} {datamin_nc}'
-    subprocess.run(cdo_cmd, shell = True)
-
-    cdo_cmd = f'{cdo_path} ydrunmax,{window_size},rm=c {data_nc} {datamax_nc}'
-    subprocess.run(cdo_cmd, shell = True)
-
-    # calculate the thresholds
-    threshold_quantile = int(case.options['thr_quantile']*100)
-    threshold_nc = f'{tmpdir}/threshold.nc'
-
-    cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
-    subprocess.run(cdo_cmd, shell = True)
-
-    # read the threshold data
-    thresholds = xr.open_dataset(threshold_nc)
-    
-    # get the crs and write it to the threshold data
-    thresholds_da = thresholds['data']
-    # crs = combined.rio.crs
-    # thresholds_da = thresholds['__xarray_dataarray_variable__'].rio.write_crs(crs)
-
-    # add a 1-d "band" dimension
-    thresholds_da = thresholds_da.expand_dims('band')
-    
-    # loop over the timesteps and yield the threshold
-    days = thresholds_da.time.values
-    for i, date in enumerate(days):
-        time = datetime.fromtimestamp(date.astype('O') / 1e9)
-        if time.month == 2 and time.day == 29:
-            # do the average between the thresholds for 28th of Feb and 1st of Mar
-            threshold_data = (thresholds_da.isel(time = i-1) + thresholds_da.isel(time = i+1)) / 2
-        else:
-            threshold_data = thresholds_da.isel(time = i).drop_vars('time')
-
-        yield threshold_data

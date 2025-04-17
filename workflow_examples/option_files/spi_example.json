@@ -7,35 +7,27 @@
     },
     "DATASETS":{
         "__defaults__" : {"type" : "local"},
-        "prec_10d" : {
-            "path" : "{DATA_in}/%Y",
-            "filename" : "CHIRPS-PREC10d_ITA-LI_%Y%m%d.tif"
-        },
         "prec_agg" : {
-            "path" : "{DATA_out}/prec/{agg_fn}m/%Y",
-            "filename" : "CHIRPS-PREC{agg_fn}m_ITA-LI_%Y%m%d.tif"
+            "path" : "{DATA_in}/{agg_window}/%Y",
+            "filename" : "CHIRPS-PREC{agg_window}_ITA-LI_%Y%m%d.tif"
         },
         "parameters" : {
-            "path" : "{DATA_out}/parameters/{agg_fn}m/{par_name}",
-            "filename" : "{par_name}_CHIRPS-PREC{agg_fn}m_ITA-LI_%m%d.tif"
+            "path" : "{DATA_out}/parameters/{agg_window}m/{par_name}",
+            "filename" : "{par_name}_CHIRPS-PREC{agg_window}m_ITA-LI_%m%d.tif"
         },
         "spi" : {
-            "path" : "{DATA_out}/spi/{agg_fn}m/%Y",
-            "filename" : "CHIRPS-SPI{agg_fn}_ITA-LI_%Y%m%d.tif"
+            "path" : "{DATA_out}/spi/{agg_window}m/%Y",
+            "filename" : "CHIRPS-SPI{agg_window}_ITA-LI_%Y%m%d.tif"
         }
     },
     "DRYES_INDEX":{
         "index_options" : {
             "index"  : "SPI",
-            "agg_fn" : {"1" : {"fun": "sum_of_window", "size": 1,  "unit": "month"},
-                        "3" : {"fun": "sum_of_window", "size": 3,  "unit": "month"},
-                        "6" : {"fun": "sum_of_window", "size": 6,  "unit": "month"},
-                        "12": {"fun": "sum_of_window", "size": 12, "unit": "month"}},
+            "agg_window" : {"1" : "1m", "3" : "3m", "6" : "6m", "12" : "12m"},
             "min_reference"  : 10,
             "zero_threshold" : 0.01
             },
         "io_options":{
-            "data_raw" : "{DATASETS.prec_10d}",
             "data"     : "{DATASETS.prec_agg}",
             "gamma.a"    : "{DATASETS.parameters , par_name = 'gamma.a'}",
             "gamma.loc"  : "{DATASETS.parameters , par_name = 'gamma.loc'}",

@@ -256,7 +256,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         extended_current = current.extend(ts.TimeWindow(self.max_look_ahead, 'd'))
 
         ## figure out the last daily index, to adjust current if needed
-        last_daily  = super().get_last_ts(now = extended_current.end, lim = current.start)
+        last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
 
         # make the daily index here:
         if last_daily is None: last_daily = ts.Day.from_date(current.start) - 1
@@ -385,24 +385,47 @@ class DRYESThrBasedIndex(DRYESIndex):
         
         return index_pooled
 
-    def get_last_ts(self, inputs = False, **kwargs) -> ts.TimeStep:
+    def get_last_ts_index(self, **kwargs) -> ts.TimeStep:
         index_pooled_cases = self.cases_pooling[-1]
         last_ts_pooled_index = None
         for case in index_pooled_cases.values():
-            now = kwargs.pop('now', None) if last_ts_pooled_index is None else last_ts_pooled_index.end + timedelta(days = 1)
-            index = self._index_pooled.get_last_ts(now = now, **case.tags, **kwargs)
-            if index is not None:
-                last_ts_pooled_index = index if last_ts_pooled_index is None else min(index, last_ts_pooled_index)
-            else:
-                last_ts_pooled_index = None
-                break
+            for var in self.pooled_vars.values():
+                now = kwargs.pop('now', None) if last_ts_pooled_index is None else last_ts_pooled_index.end + timedelta(days = 1)
+                index = self._index_pooled.get_last_ts(now = now, **case.tags, **{self.pooled_var_name:var}, **kwargs)
+                if index is not None:
+                    last_ts_pooled_index = index if last_ts_pooled_index is None else min(index, last_ts_pooled_index)
+                else:
+                    last_ts_pooled_index = None
+                    break
         
-        if not inputs:
-            return last_ts_pooled_index
+        return last_ts_pooled_index
+
+    def get_last_ts_index_daily(self, **kwargs) -> ts.TimeStep:
+        index_daily_cases = self.cases[-1]
+        last_ts_daily_index = None
+        for case in index_daily_cases.values():
+            for var in self.daily_vars.values():
+                now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
+                index = self._index.get_last_ts(now = now, **case.tags, **{self.daily_var_name:var}, **kwargs)
+                if index is not None:
+                    last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
+                else:
+                    last_ts_daily_index = None
+                    break
         
-        last_ts_index, other = super().get_last_ts(inputs = True, **kwargs)
-        other['index_daily'] = last_ts_index
-        return last_ts_pooled_index, other
+        return last_ts_daily_index
+
+    def get_last_ts_available(self, **kwargs) -> ts.TimeStep:
+        last_ts_daily_index = self.get_last_ts_index_daily(**kwargs)
+        last_ts_data = super().get_last_ts_available(**kwargs)
+        
+        # Get the largest non-None value
+        last_ts_available = max(
+            filter(None, [last_ts_daily_index, last_ts_data]),
+            default=None
+        )
+        
+        return last_ts_available
 
 class LFI(DRYESThrBasedIndex):
     index_name = 'LFI'
@@ -545,7 +568,7 @@ class LFI(DRYESThrBasedIndex):
     def _make_index(self, current: ts.TimeRange, reference: ts.TimeRange, frequency: str) -> None:
 
         ## figure out the last daily index, to adjust current if needed
-        last_pooled  = super().get_last_ts(now = current.end, lim = current.start)
+        last_pooled  = super().get_last_ts_index(now = current.end, lim = current.start)
 
         # make the daily and pooled index from the superclass if we have to
         if last_pooled is None: last_pooled = ts.Day.from_date(current.start) - 1
@@ -587,6 +610,33 @@ class LFI(DRYESThrBasedIndex):
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                     tags = lambda_case.tags
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
+
+    def get_last_ts_index(self, **kwargs) -> ts.TimeStep:
+        index_norm_cases = self.self.cases_normalising[-1]
+        last_ts_norm_index = None
+        for case in index_norm_cases.values():
+            now = kwargs.pop('now', None) if last_ts_norm_index is None else last_ts_norm_index.end + timedelta(days = 1)
+            index = self._index_norm.get_last_ts(now = now, **case.tags, **kwargs)
+            if index is not None:
+                last_ts_norm_index = index if last_ts_norm_index is None else min(index, last_ts_norm_index)
+            else:
+                last_ts_norm_index = None
+                break
+        
+        return last_ts_norm_index
+
+    def get_last_ts_available(self, **kwargs) -> ts.TimeStep:
+        last_ts_pooled_index = super().get_last_ts_index(**kwargs)
+        last_ts_daily_index  = self.get_last_ts_index_daily(**kwargs)
+        last_ts_data         = super().get_last_ts_available(**kwargs)
+        
+        # Get the largest non-None value
+        last_ts_available = max(
+            filter(None, [last_ts_pooled_index, last_ts_daily_index, last_ts_data]),
+            default=None
+        )
+        
+        return last_ts_available
 
 class HCWI(DRYESThrBasedIndex):
     index_name = 'HCWI'
@@ -687,7 +737,7 @@ class HCWI(DRYESThrBasedIndex):
         ishit = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}).astype('int8')
         
         return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}
-        
+
 class HWI(HCWI):
     index_name = 'HWI'
     direction = 1

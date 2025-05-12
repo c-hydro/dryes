@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Sequence
+from typing import Sequence, Optional
 from copy import deepcopy
+import xarray as xr
+import numpy as np
 
-from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
-from d3tools.timestepping.timerange import TimeRange
+from d3tools import timestepping as ts
 
 from .dryes_index import DRYESIndex
 from ..index_combination import COMBINATION_ALGORITHMS
@@ -15,180 +16,157 @@ class DRYESCombinedIndicator(DRYESIndex):
         'args': {}
     }
 
-    @property
-    def parameters(self):
-        input_data, previous_data, static_data, output_data = self.algorithm()
-        input_keys = list(k for k in input_data)
-        previous_keys = list(k for k in previous_data)
-        static_keys = list(k for k in static_data)
-        output_keys = list(k for k in output_data)
-        return static_keys + input_keys + previous_keys + output_keys[1:]
+    # we need to have these defined for the code in DRYESIndex to work, but they are not used for this class
+    option_cases = {}
+    parameters = []
 
-    def _check_index_options(self, options: dict) -> None:
-        super()._check_index_options(options)
-        self.algorithm = COMBINATION_ALGORITHMS.get(self.options.pop('algorithm'))
-        self.args = self.options.pop('args', {})
+    def __init__(self,
+                 io_options: dict,
+                 index_options: dict = {},
+                 run_options: Optional[dict] = None) -> None:
 
-    def compute(self, current:   Sequence[datetime]|TimeRange|None = None,
-                      timesteps_per_year: int|None = None,
-                      **kwargs) -> None:
+        # set the algorithm 
+        algorithm = index_options.pop('algorithm', self.default_options['algorithm'])
+        self.algorithm = COMBINATION_ALGORITHMS.get(algorithm)
+        self.args      = index_options.pop('args', self.default_options['args'])
 
-        # set current and reference periods
-        current   = self.as_time_range(current, 'current')
-        if current is None:
-            raise ValueError('No current period specified.')
-
+        # set the various keys that the algorithm needs
+        self.input_keys    = self.algorithm.input
+        self.output_keys   = self.algorithm.output
+        self.previous_keys = self.algorithm.previous if hasattr(self.algorithm, 'previous') else []
+        self.static_keys   = self.algorithm.static   if hasattr(self.algorithm, 'static')   else []
         
-        # set timesteps per year
-        if timesteps_per_year is None:
-            if hasattr(self, 'timesteps_per_year'):
-                timesteps_per_year = self.timesteps_per_year
-            else:
-                raise ValueError('No timesteps per year specified.')
+        # run the super init for everything else
+        super().__init__(io_options, index_options, run_options)
 
-        if len(self._tiles) == 0:
-            self._compute_tile(current, timesteps_per_year)
-        else:
-            for tile in self._tiles:
-                new_self = self.update_io(tile = tile)
-                new_self._compute_tile(current, timesteps_per_year)
+    def _check_io_data(self, io_options: dict, update_existing = False) -> None:
 
-    def _compute_tile(self, current: TimeRange, timesteps_per_year: int) -> None:
-        # calculate the index
-        if current is not None:
-            self.make_index(current, timesteps_per_year)
+        # ensure that all keys that are needed are present
+        for key in self.input_keys + self.previous_keys + self.static_keys:
+            if key not in io_options:
+                raise ValueError(f'Input data {key} not found in io_options.')
 
-    def _check_io_options(self, io_options: dict, update_existing = False) -> None:
+        # raw_inputs are only the input keys, the previous keys are most likely the output of the algorithm
+        # this is important to note because self.raw_inputs is used to find the last available timestep to run the algorithm
+        self._raw_inputs       = {k:io_options[k] for k in self.input_keys}
+        self._raw_previnputs   = {k:io_options[k] for k in self.previous_keys}
+        self._raw_staticinputs = {k:io_options[k] for k in self.static_keys}
 
-        self.io_options = io_options
-        self._tiles = []
+        # ensure that we have the same template for all datasets
+        self.output_template = self._raw_inputs[self.input_keys[0]]._template
+        for i in [self._raw_inputs, self._raw_previnputs, self._raw_staticinputs]:
+            for k in i:
+                i[k]._template = self.output_template
 
-        # get a template from any of the input datasets
-        io_names = self.parameters
-        for name in io_names:
-            ds       = io_options.get(name)
-            if ds.has_tiles: self._tiles = ds.tile_names #TODO: check that all datasets have the same tiles
-            template = ds.get_template_dict(**self.cases['opt'][0]['options'])
-            #template = ds.get_template(**self.cases['opt'][0]['options'])
-            if template is not None:
-                self.output_template = template
-                break
+        self._data = self._raw_inputs[self.input_keys[0]]
 
-        # check that we have all the necessary options
-        self._check_io_parameters(io_options, update_existing)
-        self._check_io_index(io_options, update_existing)
-
-    def make_input_data(self, timesteps: list[FixedNTimeStep]):
-        # input data should be done already (i.e. no need to aggregate anything)
-        pass
-
-    def make_parameters(self,
-                        history: TimeRange|Sequence[datetime],
-                        timesteps_per_year: int) -> None:
-        
-        self.log.warning('No parameters to calculate for this index.')
-        return
-
-    def calc_index(self,
-                   time: FixedNTimeStep,
-                   case: dict) -> tuple:
-        
-        input_data, previous_data, static_data, output_data = self.algorithm()
-        input_keys    = list(k for k in input_data)
-        previous_keys = list(k for k in previous_data)
-        static_keys   = list(k for k in static_data)
-
-        this_input_data    = {k:self._parameters[k].get_data(time, **case['tags']) for k in input_keys}
-
-        this_previous_data = {}
-        for k in previous_keys:
-            try:
-                this_previous_data[k] = self._parameters[k].get_data(time-1, **case['tags'])
-            except ValueError:
-                this_previous_data[k] = self._parameters[k].build_templatearray(self.output_template)
-
-        this_static_data = {}
-        for k in static_keys:
-            try:
-                this_static_data[k] = self._parameters[k].get_data(**case['tags'])
-            except ValueError:
-                this_static_data[k] = None
-
-        this_output_data = self.algorithm(this_input_data, this_previous_data, this_static_data, **self.args)
-        self.save_output_data(this_output_data, time, case['options'], **case['options'])
-
-        index_name = output_data[0]
-        index_data = this_output_data[index_name]
-        index_info = case['options']
-
-        parents = this_input_data
-        parents.update(this_previous_data)
-
-        index_info['parents'] = parents
-
-        return index_data, index_info
+    def _check_io_index(self, io_options: dict, update_existing = False) -> None:
     
-    def save_output_data(self,
-                         data: dict,
-                         time: FixedNTimeStep,
-                         metadata: dict, **tags) -> None:
+        # check that all the output keys are present
+        self._raw_outputs = {}
+        for i, key in enumerate(self.output_keys):
+            if key in io_options:
+                self._raw_outputs[key] = io_options[key]
+            else:
+                if i == 0: # the first key might be substituted by "index" and it should still work
+                    if 'index' in io_options:
+                        self._raw_outputs[key] = io_options['index']
+                    else:
+                        raise ValueError(f'Output data "{key}" or "index" not found in io_options.')
+                else:  
+                    raise ValueError(f'Output data "{key}" not found in io_options.')
+
+        self._index = self._raw_outputs[self.output_keys[0]]
+
+        # # make the self._index attribute a MemoryDataset, with the {outkey} in the pattern
+        # # then we will handle how to write the data in the save_output_data method later
+        # from d3tools.data.memory_dataset import MemoryDataset
+        # key_pattern = self._raw_outputs[self.output_keys[0]].key_pattern.replace(self.output_keys[0], '{outkey}')
+        # self._index = MemoryDataset(key_pattern)
+        # if self._index.has_tiles: self._index.tile_names = self._raw_outputs[self.output_keys[0]].tile_names
+        # self._index._template = self.output_template
+
+    def _set_run_options(self, run_options: dict) -> None:
+
+        # reference period is not used in this class, but it is set to None
+        if 'history_start' in run_options or 'history_end' in run_options:
+            run_options.pop('history_start', None)
+            run_options.pop('history_end', None)
         
-        _, _, _, ouptut_data = self.algorithm()
-        output_keys = list(k for k in ouptut_data)
+        super()._set_run_options(run_options)
+        self.reference = None
 
-        for key in output_keys:
-            if key not in self._parameters:
-                continue
-            this_ds = self._parameters[key]
-            this_ds.write_data(data[key], time = time, metadata = metadata, **tags)
+    # THESE ARE THE METHODS THAT ARE CALLED IN PRACTICE BY THE USER
+    def compute(self, current:   Sequence[datetime]|ts.TimeRange|None = None,
+                      reference: Sequence[datetime]|ts.TimeRange|None = None,
+                      frequency: int|str|None = None,
+                      make_parameters: bool|None = None) -> None:
+        
+        # the reference period is not used and there is no parameters here
+        super().compute(current, None, frequency, False)
 
-    def make_index(self,
-                   current:   TimeRange|Sequence[datetime],
-                   timesteps_per_year: int) -> None:
+    def _make_index(self, current: ts.TimeRange, reference: ts.TimeRange, frequency: str) -> None:
 
-        if isinstance(current, tuple) or isinstance(current, list):
-            current = TimeRange(current[0], current[1])
-        self.log.info(f'Calculating index for {current.start:%d/%m/%Y}-{current.end:%d/%m/%Y}...')
+        for data_case in self.cases['data'].values():
 
-        timesteps:list[FixedNTimeStep] = self.make_data_timesteps(current, timesteps_per_year)
+            data_ts_unit = self._data.estimate_timestep(**data_case.options).unit
+            if frequency is not None:
+                if not ts.unit_is_multiple(frequency, data_ts_unit):
+                    raise ValueError(f'The data timestep unit ({data_ts_unit}) is not a multiple of the frequency requeested ({frequency}).')
+            else:
+                frequency = data_ts_unit
 
-        # check if anything has been calculated already
-        for case_ in self.cases['opt']:
-            case = case_.copy()
-            case['tags']['post_fn'] = ""
-            case['name'] = case['name']
+            # get the timesteps for which we need to calculate the index
+            timesteps:list[ts.TimeStep] = current.get_timesteps(frequency)
 
-            ts_todo = self._index.find_times(timesteps, rev = True, **case['tags'])
+            # get the static data for this case
+            static_data = self.get_static_data(data_case)
 
-            if len(ts_todo) == 0:
-                self.log.info(f' #Case {case["name"]}: already calculated.')
-            else:        
-                self.log.info(f' #Case {case["name"]}: {len(timesteps) - len(ts_todo)}/{len(timesteps)} timesteps already computed.')
-                for time in ts_todo:
-                    self.log.info(f'   {time}')     
-                    index_data, index_info = self.calc_index(time, case)
-                    metadata = case['options']
-                    metadata.update(index_info)
-                    if 'time' in metadata: metadata.pop('time')
-                    self._index.write_data(index_data, time = time,  metadata = metadata, **case['tags'])
+            # loop through all the timesteps
+            for time in timesteps:
+               
+                # get the data for the relevant timesteps to calculate the parameters
+                input_data = self.get_data(time, data_case)
+                if input_data is None:
+                    continue ##TODO: ADD A WARNING OR SOMETHING
+                
+                previous_data = self.get_previous_data(time, data_case)
 
-                # now do the post-processing
-                for post_case in self.cases['post']:
-                    pre_case = deepcopy(case)
-                    case['tags'].update(post_case['tags'])
-                    ts_todo = self._index.find_times(timesteps, rev = True, **case['tags'])
-                    if len(ts_todo) == 0:
-                        self.log.info(f'  Post-processing {post_case["name"]}: already calculated.')
-                        continue
-                    self.log.info(f'  Post-processing {post_case["name"]}: {len(timesteps) - len(ts_todo)}/{len(timesteps)} timesteps already computed.')
-                    for time in ts_todo:
-                        self.log.info(f'   {time}')
-                        index_data = self._index.get_data(time, **pre_case['tags'])
-                        post_fn = post_case['post_fn']
-                        ppindex_data, ppindex_info = post_fn(index_data)
+                args = {'input_data': input_data, 'previous_data': previous_data, 'static_data': static_data}
+                index_outputs = self.algorithm(**args, **self.args)
 
-                        metadata = case['options']
-                        metadata.update(ppindex_info)
-                        metadata.update(index_data.attrs)
-                        if 'time' in metadata: metadata.pop('time')
-                        self._index.write_data(ppindex_data, time = time, metadata = metadata, **case['tags'])
+                for i, k in enumerate(self.output_keys):
+                    self._raw_outputs[k].write_data(index_outputs[k], time = time, metadata = data_case.options, **data_case.tags)
+
+    def get_data(self, time: ts.TimeStep, case):
+        # get the data for the relevant timesteps to calculate the parameters
+        input_data = {}
+        for k,d in self._raw_inputs.items():
+            if d.check_data(time, **case.tags):
+                input_data[k] = d.get_data(time, **case.tags)
+            else:
+                input_data[k] = None
+
+        return input_data
+
+    def get_previous_data(self, time: ts.TimeStep, case):
+        # get the static data for this case
+        previous_data = {}
+        for k,d in self._raw_previnputs.items():
+            if d.check_data(time - 1, **case.tags):
+                previous_data[k] = d.get_data(time - 1,**case.tags)
+            else:
+                previous_data[k] = None
+
+        return previous_data 
+
+    def get_static_data(self, case):
+        # get the static data for this case
+        static_data = {}
+        for k,d in self._raw_staticinputs.items():
+            if d.check_data(**case.tags):
+                static_data[k] = d.get_data(**case.tags)
+            else:
+                static_data[k] = None
+
+        return static_data  

@@ -117,8 +117,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         #TODO: check if we can improve/remove some parts of this
         if 'history_start' in run_options and 'history_end' in run_options:
             self.reference = TimeRange(run_options['history_start'], run_options['history_end'])
-        else:
-            self.reference = None
         
         if 'frequency' in run_options:
             self.freq = find_unit_of_time(run_options['frequency'])
@@ -312,7 +310,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 for par_case_id, par_case in this_data_par_cases.items():
                     # get the parameters for this case
                     parameters_np = self.get_parameters(time, par_case)
-
 
                     # loop through all index layers for this parameter case
                     step_input = [None] * len(index_layers)

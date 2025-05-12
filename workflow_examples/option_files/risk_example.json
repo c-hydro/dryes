@@ -1,0 +1,37 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/risk-components_sample", 
+        "DATA_out" : "output/risk"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local"},
+        "hazard" : {
+            "path" : "{DATA_in}/cdi/%Y/%m",
+            "filename" : "CDI_%Y%m%d.tif"
+        },
+        "expvuln" : {
+            "path" : "{DATA_in}",
+            "filename" : "{expvuln}.tif"
+        },
+        "risk" : {
+            "path" : "{DATA_out}/%Y",
+            "filename" : "RISK_Volta_%Y%m%d.tif"
+        }
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "indicator",
+            "algorithm" : "risk_computation",
+            "args" : {"exponent" : 0.5}
+            },
+        "io_options":{
+            "hazard"        : "{DATASETS.hazard}",
+            "exposure"      : "{DATASETS.expvuln, expvuln = 'dexpi.agr'}",
+            "vulnerability" : "{DATASETS.expvuln, expvuln = 'dvi.agr.norm'}",
+            "index"    : "{DATASETS.risk}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 36
+        }
+    }
+}

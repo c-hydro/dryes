@@ -15,7 +15,8 @@
         },
         "cdi" : {
             "path" : "{DATA_out}/cdi/%Y",
-            "filename" : "CDI_ITA-SI_%Y%m%d.tif"
+            "filename" : "CDI_ITA-SI_%Y%m%d.tif",
+            "nan_value" : 8
         },
         "counts" : {
             "path" : "{DATA_out}/counts-rec/{var}/%Y",
@@ -39,9 +40,9 @@
             "cdi_p"    : "{DATASETS.cdi}",
             "count_fapar_recovery" : "{DATASETS.counts, var = 'fapar'}",
             "count_sma_recovery"   : "{DATASETS.counts, var = 'sma'}",
-            "cases"  : "{DATASETS.cases}",
-            "index"  : "{DATASETS.cdi}",
-            "domain" : "{DATASETS.domain}"
+            "cases"    : "{DATASETS.cases}",
+            "index"    : "{DATASETS.cdi}",
+            "domain"   : "{DATASETS.domain}"
         },
         "run_options" : {
             "timesteps_per_year": 36

@@ -16,8 +16,8 @@
             "filename" : "ERA5-T{Ttype}90_ITA-LA_%m%d.tif"
         },
         "hw_daily" : {
-            "path" : "{DATA_out}/hw/{var}/%Y",
-            "filename" : "ERA5-HW_{var}_ITA-LA_%Y%m%d.tif"
+            "path" : "{DATA_out}/hw/{dvar}/%Y",
+            "filename" : "ERA5-HW_{dvar}_ITA-LA_%Y%m%d.tif"
         },
         "hw_pooled" : {
             "path" : "{DATA_out}/pooled/hw-{count_with_pools}/{var}/%Y",
@@ -33,8 +33,8 @@
         "io_options":{
             "data"        : "{DATASETS.temperature}",
             "threshold"   : "{DATASETS.thresholds, percentile = '90'}",
-            "index_daily" : "{DATASETS.hw}",
-            "index"       : "{DATASETS.hw}"
+            "index_daily" : "{DATASETS.hw_daily}",
+            "index"       : "{DATASETS.hw_pooled}"
         },
         "run_options" : {
             "timesteps_per_year": 365,

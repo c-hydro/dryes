@@ -117,8 +117,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         #TODO: check if we can improve/remove some parts of this
         if 'history_start' in run_options and 'history_end' in run_options:
             self.reference = TimeRange(run_options['history_start'], run_options['history_end'])
-        else:
-            self.reference = None
         
         if 'frequency' in run_options:
             self.freq = find_unit_of_time(run_options['frequency'])
@@ -189,7 +187,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         
         self.compute(current = None, reference = reference, frequency = frequency, make_parameters = True)
 
-    def get_last_ts(self, inputs = False, **kwargs) -> TimeStep:
+    def get_last_ts_index(self, **kwargs) -> TimeStep:
         index_cases = self.cases[-1]
         last_ts_index = None
         for case in index_cases.values():
@@ -200,25 +198,35 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             else:
                 last_ts_index = None
                 break
-        
-        if not inputs:
-            return last_ts_index
-        
-        other = {}
+
+    def get_last_ts_available(self, **kwargs) -> TimeStep:
+        other = []
         data_cases = self.cases['data']
-        for name, ds in {k:v for k,v in self.io_options.items() if k not in self.parameters and k != "index"}.items():
+        data_ds = self._raw_inputs.values() if hasattr(self, '_raw_inputs') else [self._data]
+        for ds in data_ds:#[v for k,v in self.io_options.items() if k not in self.parameters and k != "index"]:
             last_ts_data = None
             for case in data_cases.values():
                 now = kwargs.pop('now', None) if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
                 data = ds.get_last_ts(now = now, **case.tags, **kwargs)
+                if data is None:
+                    data = ds.get_last_ts(now = now, **case.options, **kwargs)
+                
                 if data is not None:
                     last_ts_data = data if last_ts_data is None else min(data, last_ts_data)
                 else:
                     last_ts_data = None
                     break
-            other[name] = last_ts_data
+            other.append(last_ts_data)
+        
+        return min(filter(None, other),default=None)
 
-        return last_ts_index, other
+    def get_last_ts(self, inputs = True, **kwargs) -> TimeStep|tuple[TimeStep, TimeStep]:
+        last_ts_index = self.get_last_ts_index(**kwargs)
+        if not inputs: return last_ts_index
+        
+        last_ts_available = self.get_last_ts_available(**kwargs)
+        
+        return last_ts_index, last_ts_available
 
     # THESE ARE METHODS THAT HANDLE THE CASES, THE DATA, THE PARAMETERS AND THE OUTPUT
     def _make_parameters(self, history: TimeRange, frequency: str|None) -> None:
@@ -302,7 +310,6 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 for par_case_id, par_case in this_data_par_cases.items():
                     # get the parameters for this case
                     parameters_np = self.get_parameters(time, par_case)
-
 
                     # loop through all index layers for this parameter case
                     step_input = [None] * len(index_layers)

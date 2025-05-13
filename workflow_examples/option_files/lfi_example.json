@@ -1,0 +1,35 @@
+{
+    "TAGS" : {
+        "DATA_in"  : "sample_data/discharge_sample", 
+        "DATA_out" : "output/lfi",
+        "history_start" : "2009-09-01",
+        "history_end"   : "2019-08-31"
+    },
+    "DATASETS":{
+        "__defaults__" : {"type" : "local"},
+        "discharge"   : {"path" : "{DATA_in}/%Y/%m/%d",         "filename" : "discharge_%Y%m%d.tif"},
+        "thresholds" : {"path" : "{DATA_out}/thresholds",      "filename" : "Q05_ITA-PO_%m%d.tif"},
+        "lambda"     : {"path" : "{DATA_out}/lambda",          "filename" : "lambda_LFI_ITA-PO.tif"},
+        "daily"      : {"path" : "{DATA_out}/deficit/%Y",      "filename" : "LF_deficit_ITA-PO_%Y%m%d.tif"},
+        "pooled"     : {"path" : "{DATA_out}/pooled/{var}/%Y", "filename" : "LF_{var}_ITA-PO_%Y%m%d.tif"},
+        "normalised" : {"path" : "{DATA_out}/lfi/%Y",          "filename" : "LFI_ITA-PO_%Y%m%d.tif"}
+    },
+    "DRYES_INDEX":{
+        "index_options" : {
+            "index"  : "LFI"
+        },
+        "io_options":{
+            "data"        : "{DATASETS.discharge}",
+            "threshold"   : "{DATASETS.thresholds}",
+            "lambda"      : "{DATASETS.lambda}",
+            "index_daily" : "{DATASETS.daily}",
+            "index_pooled": "{DATASETS.pooled}",
+            "index"       : "{DATASETS.normalised}"
+        },
+        "run_options" : {
+            "timesteps_per_year": 36,
+            "history_start": "{history_start:%Y-%m-%d}",
+            "history_end"  : "{history_end:%Y-%m-%d}"
+        }
+    }
+}

@@ -15,8 +15,12 @@
             "path" : "{DATA_out}/thresholds/T{Ttype}",
             "filename" : "ERA5-T{Ttype}90_ITA-LA_%m%d.tif"
         },
-        "hw" : {
-            "path" : "{DATA_out}/hw-{count_with_pools}/{var}/%Y",
+        "hw_daily" : {
+            "path" : "{DATA_out}/hw/{dvar}/%Y",
+            "filename" : "ERA5-HW_{dvar}_ITA-LA_%Y%m%d.tif"
+        },
+        "hw_pooled" : {
+            "path" : "{DATA_out}/pooled/hw-{count_with_pools}/{var}/%Y",
             "filename" : "ERA5-HW-{count_with_pools}_{var}_ITA-LA_%Y%m%d.tif"
         }
     },
@@ -27,13 +31,10 @@
             "count_with_pools" : {"withpools" : true, "nopools" : false}
         },
         "io_options":{
-            "data_raw"    : "{DATASETS.temperature}",
+            "data"        : "{DATASETS.temperature}",
             "threshold"   : "{DATASETS.thresholds, percentile = '90'}",
-            "intensity"   : "{DATASETS.hw, var = 'raw_intensity'}",
-            "duration"    : "{DATASETS.hw, var = 'duration'}",
-            "interval_length"    : "{DATASETS.hw, var = 'interval-length'}",
-            "interval_intensity" : "{DATASETS.hw, var = 'interval-intensity'}",
-            "index"       : "{DATASETS.hw, var = 'intensity'}"
+            "index_daily" : "{DATASETS.hw_daily}",
+            "index"       : "{DATASETS.hw_pooled}"
         },
         "run_options" : {
             "timesteps_per_year": 365,

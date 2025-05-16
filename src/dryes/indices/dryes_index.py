@@ -226,7 +226,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         
         last_ts_available = self.get_last_ts_available(**kwargs)
         
-        return last_ts_index, last_ts_available
+        return last_ts_available, last_ts_index
 
     # THESE ARE METHODS THAT HANDLE THE CASES, THE DATA, THE PARAMETERS AND THE OUTPUT
     def _make_parameters(self, history: TimeRange, frequency: str|None) -> None:

@@ -37,7 +37,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     index_name = 'dryes_index'
 
     default_options = {
-        'make_parameters': False
+        'make_parameters': False,
+        'propagate_metadata': [],
         }
 
     def __init__(self,
@@ -48,6 +49,10 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         # set the options (using defaults when not specified)
         self.options = copy.deepcopy(self.default_options)
         self.options.update(index_options)
+
+        # ensure that the "propagate_metadata" option is a list
+        if self.options.get('propagate_metadata') is not None and isinstance(self.options['propagate_metadata'], str):
+            self.options['propagate_metadata'] = [self.options['propagate_metadata']]
 
         # check the data input options first (to see if there is tiles in the input)
         self.io_options = io_options
@@ -198,6 +203,8 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             else:
                 last_ts_index = None
                 break
+        
+        return last_ts_index
 
     def get_last_ts_available(self, **kwargs) -> TimeStep:
         other = []
@@ -207,10 +214,10 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             last_ts_data = None
             for case in data_cases.values():
                 now = kwargs.pop('now', None) if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
-                data = ds.get_last_ts(now = now, **case.tags, **kwargs)
+                data = ds.get_last_ts(now = now, **case.options, **kwargs)
                 if data is None:
-                    data = ds.get_last_ts(now = now, **case.options, **kwargs)
-                
+                    data = ds.get_last_ts(now = now, **case.tags, **kwargs)
+                    
                 if data is not None:
                     last_ts_data = data if last_ts_data is None else min(data, last_ts_data)
                 else:
@@ -302,7 +309,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
             for time in timesteps:
                
                 # get the data for the relevant timesteps to calculate the parameters
-                data_np = self.get_data(time, data_case)
+                data_np, metadata = self.get_data(time, data_case)
                 if data_np is None:
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 
@@ -322,7 +329,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                         this_index = self.calc_index(this_input, parameters_np, idx_case.options, step = step_n)
 
                         if step_n == len(index_layers):
-                            metadata = idx_case.options.copy()
+                            metadata.update(idx_case.options.copy())
                             metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                             tags = idx_case.tags
 
@@ -335,13 +342,19 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                             step_input[step_n] = this_index
     
     # make things more flexible, but creating methods to get the data and parameters
-    def get_data(self, time: datetime, case) -> np.ndarray:
+    def get_data(self, time: datetime, case) -> tuple[np.ndarray, dict]:
         if not self._data.check_data(time, **case.options):
             return None
 
         data_xr = self._data.get_data(time, **case.options)
         data_np = data_xr.values.squeeze()
-        return data_np
+
+        metadata = {}
+        for key in self.options['propagate_metadata']:
+            if key in data_xr.attrs:
+                metadata[key] = data_xr.attrs[key]
+        metadata.update(case.options.copy())
+        return data_np, metadata
     
     def get_parameters(self, time: datetime, case) -> dict[str, np.ndarray]:
         parameters_xr = {parname: self._parameters[parname].get_data(time, **case.tags) for parname in self.parameters}

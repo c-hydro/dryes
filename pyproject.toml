@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dryes"
-version = "3.2.0"
+version = "3.2.4"
 description = "A package to compute operational indicators for drought risk assessment, developed by CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" },

@@ -126,7 +126,7 @@ class DRYESCombinedIndicator(DRYESIndex):
             for time in timesteps:
                
                 # get the data for the relevant timesteps to calculate the parameters
-                input_data = self.get_data(time, data_case)
+                input_data, metadata = self.get_data(time, data_case)
                 if input_data is None:
                     continue ##TODO: ADD A WARNING OR SOMETHING
                 
@@ -136,18 +136,27 @@ class DRYESCombinedIndicator(DRYESIndex):
                 index_outputs = self.algorithm(**args, **self.args)
 
                 for i, k in enumerate(self.output_keys):
-                    self._raw_outputs[k].write_data(index_outputs[k], time = time, metadata = data_case.options, **data_case.tags)
+                    self._raw_outputs[k].write_data(index_outputs[k], time = time, metadata = metadata, **data_case.tags)
 
     def get_data(self, time: ts.TimeStep, case):
         # get the data for the relevant timesteps to calculate the parameters
         input_data = {}
+        metadata = {}
         for k,d in self._raw_inputs.items():
             if d.check_data(time, **case.tags):
                 input_data[k] = d.get_data(time, **case.tags)
+                for key in self.options['propagate_metadata']:
+                    if key in d.attrs:
+                        if key not in metadata:
+                            metadata[key] = [d.attrs[key]]
+                        else:
+                            metadata[key].append(d.attrs[key])
             else:
                 input_data[k] = None
 
-        return input_data
+        metadata = {k:','.join(v) for k,v in metadata.items()}
+        metadata.update(case.options.copy())
+        return input_data, metadata
 
     def get_previous_data(self, time: ts.TimeStep, case):
         # get the static data for this case

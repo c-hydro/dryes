@@ -283,27 +283,27 @@ class DRYESThrBasedIndex(DRYESIndex):
 
                 # get the daily index for this time and (if needed) the look-ahead period
                 if self.max_look_ahead == 0:
-                    daily_index = self.get_index_daily(ts.TimeRange(time.start, time.end), index_daily_case)
+                    daily_index, metadata = self.get_index_daily(ts.TimeRange(time.start, time.end), index_daily_case)
                     iscomplete = True
                 else:
                     end_time = time.end + timedelta(days = self.max_look_ahead)
-                    daily_index = self.get_index_daily(ts.TimeRange(time.start, end_time), index_daily_case)
+                    daily_index, metadata = self.get_index_daily(ts.TimeRange(time.start, end_time), index_daily_case)
                     iscomplete = daily_index['dintensity'] is not None and daily_index['dintensity'].shape[0] >= self.max_look_ahead
 
                 for idx_case_id, idx_case in self.cases_pooling[-1].items():
                     if not idx_case_id.startswith(index_daily_case_id):
                         continue
                     
-                    previous_index = self.get_index_pooled(time - 1, idx_case)
+                    previous_index, _ = self.get_index_pooled(time - 1, idx_case)
                     this_daily_index = copy.deepcopy(daily_index)
 
                     this_index = self.pool_index(this_daily_index, previous_index,
                                                  options = idx_case.options,
-                                                 n = time.length)
+                                                 n = time.length())
 
-                    metadata = idx_case.options.copy()
+                    metadata.update(idx_case.options.copy())
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
-                    metadata.update({'PRELIMINARY': str(not iscomplete).lower()})
+                    metadata.update({'COMPLETE': str(iscomplete).lower()})
 
                     tags = idx_case.tags
 
@@ -336,14 +336,15 @@ class DRYESThrBasedIndex(DRYESIndex):
 
         return output
 
-    def get_index_daily(self, time: ts.TimeRange, case) -> dict[str:np.ndarray]:
+    def get_index_daily(self, time: ts.TimeRange, case) -> tuple[dict[str:np.ndarray], dict]:
         
         if not isinstance(time, ts.Day):
             days_in_time = time.days
             all_dintensity_np = []
             all_ishit_np      = []
+            all_metadata      = {}
             for t in days_in_time:
-                this_daily_index = self.get_index_daily(t, case)
+                this_daily_index, this_metadata = self.get_index_daily(t, case)
                 this_dintensity_np = this_daily_index['dintensity']
                 this_ishit_np      = this_daily_index['ishit']
                 if this_dintensity_np is None or this_ishit_np is None:
@@ -351,21 +352,37 @@ class DRYESThrBasedIndex(DRYESIndex):
                 all_dintensity_np.append(this_dintensity_np)
                 all_ishit_np.append(this_ishit_np)
 
+                for key in self.options['propagate_metadata']:
+                    if key in this_metadata:
+                        if key not in all_metadata:
+                            all_metadata[key] = [this_metadata[key]]
+                        else:
+                            all_metadata[key].append(this_metadata[key])
+
+            all_metadata = {k:','.join(v) for k,v in all_metadata.items()}
+            all_metadata.update(case.options.copy())
+
             if len(all_dintensity_np) == 0:
-                return {'dintensity' : None, 'ishit' : None}
+                return {'dintensity' : None, 'ishit' : None}, {}
             
             all_dintensity_np = np.stack(all_dintensity_np)
             all_ishit_np      = np.stack(all_ishit_np)
 
-            return {'dintensity' : all_dintensity_np, 'ishit' : all_ishit_np}
+            return {'dintensity' : all_dintensity_np, 'ishit' : all_ishit_np}, all_metadata
 
         if not self._index.check_data(time, **case.tags):
-            return {'dintensity' : None, 'ishit' : None}
+            return {'dintensity' : None, 'ishit' : None}, {}
 
         dintensity = self._index.get_data(time, **case.tags)
         ishit      = xr.where(dintensity > 0, 1, 0).astype('int8')
 
-        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}
+        metadata = {}
+        for key in self.options['propagate_metadata']:
+            if key in dintensity.attrs:
+                metadata[key] = dintensity.attrs[key]
+        metadata.update(case.options.copy())
+
+        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}, metadata
 
     def get_parameters(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
 
@@ -375,15 +392,28 @@ class DRYESThrBasedIndex(DRYESIndex):
         thr_data = self._parameters[parname].get_data(time, **case.tags)
         return {'threshold' :thr_data.values.squeeze()}
 
-    def get_index_pooled(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
+    def get_index_pooled(self, time: ts.TimeStep, case) -> tuple[dict[str: np.ndarray], dict]:
 
         index_pooled = {}
+        metadata     = {}
         for key, varname in self.pooled_vars.items():
             if not self._index_pooled.check_data(time, **case.tags, **{self.pooled_var_name: varname}):
-                return {k: None for k in self.pooled_vars.keys()}
-            index_pooled[key] = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: varname}).values.squeeze()
+                return {k: None for k in self.pooled_vars.keys()}, {}
+            
+            this_index = self._index_pooled.get_data(time, **case.tags, **{self.pooled_var_name: varname})
+            index_pooled[key] = this_index.values.squeeze()
+
+            for key in self.options['propagate_metadata']:
+                if key in this_index.attrs:
+                    if key not in metadata:
+                        metadata[key] = [this_index.attrs[key]]
+                    else:
+                        metadata[key].append(this_index.attrs[key])
         
-        return index_pooled
+        metadata = {k:','.join(v) for k,v in metadata.items()}
+        metadata.update(case.options.copy())
+
+        return index_pooled, metadata
 
     def get_last_ts_index(self, **kwargs) -> ts.TimeStep:
         index_pooled_cases = self.cases_pooling[-1]
@@ -404,14 +434,13 @@ class DRYESThrBasedIndex(DRYESIndex):
         index_daily_cases = self.cases[-1]
         last_ts_daily_index = None
         for case in index_daily_cases.values():
-            for var in self.daily_vars.values():
-                now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
-                index = self._index.get_last_ts(now = now, **case.tags, **{self.daily_var_name:var}, **kwargs)
-                if index is not None:
-                    last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
-                else:
-                    last_ts_daily_index = None
-                    break
+            now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
+            index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
+            if index is not None:
+                last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
+            else:
+                last_ts_daily_index = None
+                break
         
         return last_ts_daily_index
 
@@ -517,12 +546,12 @@ class LFI(DRYESThrBasedIndex):
 
             # loop through the days in the history period (skip the first day and set it as previous)
             days = history.days
-            pooled_index = self.get_index_pooled(days[0], pool_case)
+            pooled_index, _ = self.get_index_pooled(days[0], pool_case)
             sduration_prev = pooled_index['sduration']
             sintensity_prev = pooled_index['sintensity']
 
             for i, day in enumerate(days[1:]):
-                pooled_index = self.get_index_pooled(day, pool_case)
+                pooled_index, _ = self.get_index_pooled(day, pool_case)
                 sduration = pooled_index['sduration']
                 sintensity = pooled_index['sintensity']
                 pool_cases = pooled_index['case']
@@ -593,7 +622,7 @@ class LFI(DRYESThrBasedIndex):
                 for time in timesteps:
 
                     # get the daily index for this time
-                    this_pooled_index = self.get_index_pooled(time, pooled_case)
+                    this_pooled_index, metadata = self.get_index_pooled(time, pooled_case)
                     intensity = this_pooled_index['intensity'] # we really only care about the intensity here
                     if intensity is None:
                         continue
@@ -606,7 +635,7 @@ class LFI(DRYESThrBasedIndex):
                     normal_intensity = np.where(np.isnan(lambda_data), np.nan, normal_intensity)
 
                     # save the data
-                    metadata = lambda_case.options.copy()
+                    metadata.update(lambda_case.options.copy())
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
                     tags = lambda_case.tags
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
@@ -680,7 +709,7 @@ class HCWI(DRYESThrBasedIndex):
         key_pattern = self._raw_inputs['min'].key_pattern.replace('min', '').replace('.tif', '.nc')
         self._data = MemoryDataset(key_pattern)
         if self._data.has_tiles: self._data.tile_names = self._raw_inputs['min'].tile_names
- 
+
         self._data.set_parents({'min': self._raw_inputs['min'], 'max': self._raw_inputs['max']},
                                lambda min, max: xr.Dataset({'min': min, 'max': max}))
 
@@ -699,7 +728,7 @@ class HCWI(DRYESThrBasedIndex):
 
         return output
 
-    def get_data(self, time: ts.TimeStep, case) -> np.ndarray:
+    def get_data(self, time: ts.TimeStep, case) -> tuple[np.ndarray, dict]:
 
         # the output here should be 3d with the first dimension being the Ttype in the order [min, max]
         if not self._data.check_data(time, **case.options):
@@ -708,7 +737,18 @@ class HCWI(DRYESThrBasedIndex):
         data_ds = self._data.get_data(time, **case.options)
         data_da = data_ds.to_array(self.Ttype_name)   
 
-        return data_da.values.squeeze()
+        metadata = {}
+        for key in self.options['propagate_metadata']:
+            for var in data_ds.data_vars:
+                data = data_ds[var]
+                if key in data.attrs:
+                    if key in metadata:
+                        metadata[key].append(data.attrs[key])
+                    else:
+                        metadata[key] = [data.attrs[key]]
+            metadata = {k: ','.join(v) for k, v in metadata.items()}
+
+        return data_da.values.squeeze(), metadata
 
     def get_parameters(self, time: ts.TimeStep, case) -> dict[str: np.ndarray]:
 
@@ -723,20 +763,47 @@ class HCWI(DRYESThrBasedIndex):
 
         return {'threshold' :thr_da.values.squeeze()}
 
-    def get_index_daily(self, time: ts.TimeRange, case) -> dict[str:np.ndarray]:
+    def get_index_daily(self, time: ts.TimeRange, case) -> tuple[dict[str:np.ndarray], dict]:
 
         if not isinstance(time, ts.Day):
             return super().get_index_daily(time, case)
 
         if not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']}):
-            return {'dintensity' : None, 'ishit' : None}
+            return {'dintensity' : None, 'ishit' : None}, {}
         elif not self._index.check_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}):
-            return {'dintensity' : None, 'ishit' : None}
+            return {'dintensity' : None, 'ishit' : None}, {}
         
         dintensity = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['dintensity']})
         ishit = self._index.get_data(time, **case.tags, **{self.daily_var_name: self.daily_vars['ishit']}).astype('int8')
+
+        metadata = {}
+        for key in self.options['propagate_metadata']:
+            for data in [dintensity, ishit]:
+                if key in data.attrs:
+                    if key in metadata:
+                        metadata[key].append(data.attrs[key])
+                    else:
+                        metadata[key] = [data.attrs[key]]
+
+        metadata = {k: ','.join(v) for k, v in metadata.items()}
+        metadata.update(case.options.copy())
+
+        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}, metadata
+
+    def get_last_ts_index_daily(self, **kwargs) -> ts.TimeStep:
+        index_daily_cases = self.cases[-1]
+        last_ts_daily_index = None
+        for case in index_daily_cases.values():
+            for var in self.daily_vars.values():
+                now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
+                index = self._index.get_last_ts(now = now, **case.tags, **{self.daily_var_name:var}, **kwargs)
+                if index is not None:
+                    last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
+                else:
+                    last_ts_daily_index = None
+                    break
         
-        return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}
+        return last_ts_daily_index
 
 class HWI(HCWI):
     index_name = 'HWI'

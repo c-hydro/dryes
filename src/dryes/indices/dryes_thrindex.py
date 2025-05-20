@@ -299,7 +299,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
                     this_index = self.pool_index(this_daily_index, previous_index,
                                                  options = idx_case.options,
-                                                 n = time.length)
+                                                 n = time.length())
 
                     metadata.update(idx_case.options.copy())
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
@@ -434,14 +434,13 @@ class DRYESThrBasedIndex(DRYESIndex):
         index_daily_cases = self.cases[-1]
         last_ts_daily_index = None
         for case in index_daily_cases.values():
-            for var in self.daily_vars.values():
-                now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
-                index = self._index.get_last_ts(now = now, **case.tags, **{self.daily_var_name:var}, **kwargs)
-                if index is not None:
-                    last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
-                else:
-                    last_ts_daily_index = None
-                    break
+            now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
+            index = self._index.get_last_ts(now = now, **case.tags, **kwargs)
+            if index is not None:
+                last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
+            else:
+                last_ts_daily_index = None
+                break
         
         return last_ts_daily_index
 
@@ -711,25 +710,6 @@ class HCWI(DRYESThrBasedIndex):
         self._data = MemoryDataset(key_pattern)
         if self._data.has_tiles: self._data.tile_names = self._raw_inputs['min'].tile_names
 
-        # def make_ds(min, max):
-        #     # make a dataset with the min and max data
-        #     ds = xr.Dataset({'min': min, 'max': max})
-        #     attrs = {}
-        #     for key in self.options['propagate_metadata']:
-        #         attrs[key] = []
-        #         if key in min.attrs:
-        #             attrs[key].append(min.attrs[key])
-        #         if key in max.attrs:
-        #             attrs[key].append(max.attrs[key])
-                
-        #         if len(attrs[key]) > 0:
-        #             attrs[key] = ','.join(attrs[key])
-        #         else:
-        #             attrs.pop(key)
-            
-        #     ds.attrs = attrs
-        #     return ds
-
         self._data.set_parents({'min': self._raw_inputs['min'], 'max': self._raw_inputs['max']},
                                lambda min, max: xr.Dataset({'min': min, 'max': max}))
 
@@ -809,6 +789,21 @@ class HCWI(DRYESThrBasedIndex):
         metadata.update(case.options.copy())
 
         return {'dintensity' : dintensity.values.squeeze(), 'ishit' : ishit.values.squeeze()}, metadata
+
+    def get_last_ts_index_daily(self, **kwargs) -> ts.TimeStep:
+        index_daily_cases = self.cases[-1]
+        last_ts_daily_index = None
+        for case in index_daily_cases.values():
+            for var in self.daily_vars.values():
+                now = kwargs.pop('now', None) if last_ts_daily_index is None else last_ts_daily_index.end + timedelta(days = 1)
+                index = self._index.get_last_ts(now = now, **case.tags, **{self.daily_var_name:var}, **kwargs)
+                if index is not None:
+                    last_ts_daily_index = index if last_ts_daily_index is None else min(index, last_ts_daily_index)
+                else:
+                    last_ts_daily_index = None
+                    break
+        
+        return last_ts_daily_index
 
 class HWI(HCWI):
     index_name = 'HWI'

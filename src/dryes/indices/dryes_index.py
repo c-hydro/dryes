@@ -259,7 +259,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
                 data_times = time.get_history_timesteps(history)
                 all_data_np = []
                 for t in data_times:
-                    this_data_np = self.get_data(t, data_case)
+                    this_data_np, _ = self.get_data(t, data_case)
                     if this_data_np is None:
                         continue ##TODO: ADD A WARNING OR SOMETHING
                     all_data_np.append(this_data_np)
@@ -344,7 +344,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     # make things more flexible, but creating methods to get the data and parameters
     def get_data(self, time: datetime, case) -> tuple[np.ndarray, dict]:
         if not self._data.check_data(time, **case.options):
-            return None
+            return None, {}
 
         data_xr = self._data.get_data(time, **case.options)
         data_np = data_xr.values.squeeze()

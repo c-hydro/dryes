@@ -344,7 +344,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
     # make things more flexible, but creating methods to get the data and parameters
     def get_data(self, time: datetime, case) -> tuple[np.ndarray, dict]:
         if not self._data.check_data(time, **case.options):
-            return None
+            return None, {}
 
         data_xr = self._data.get_data(time, **case.options)
         data_np = data_xr.values.squeeze()

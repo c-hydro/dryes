@@ -609,6 +609,7 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
                        cdi_p: np.ndarray|None = None,
                        count_sma_recovery:   np.ndarray|None = None,
                        count_fapar_recovery: np.ndarray|None = None,
+                       cascade_nans: bool = True
                        ) -> tuple[np.ndarray]: 
     """
     Prepare the inputs for the CDI calculation by masking and setting nodata values.
@@ -616,7 +617,7 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
     For the SPI1, SPI3, SMA and fAPAR inputs:
     1. If the input is missing or None, all values are set to 255.
     2. If the input is not None, the missing (nodata) values are set to 255.
-    3. The missign inputs are cascaded:
+    3. The missign inputs are cascaded if cascade_nans is True:
         meaning that where SPI1 is missing, SPI3 is also set to 255, and so on.
         the cascading order is SPI1 -> SPI3 -> SMA -> fAPAR.
 
@@ -632,6 +633,7 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
         cdi_p (np.ndarray|None): Previous CDI values.
         count_sma_recovery   (np.ndarray|None): Count of SMA recovery periods.
         count_fapar_recovery (np.ndarray|None): Count of fAPAR recovery periods.
+        cascade_nans (bool): If True, cascade the nodata values from SPI1 to SPI3, SMA, and fAPAR.
     Returns:
         tuple: A tuple containing:
             - spi1  (np.ndarray): The SPI1 values with nodata values set to 255.
@@ -653,22 +655,28 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
     # for these:
     # 1. check if input is None, if it is, set all to nan_value = 255
     # 2. if not, set the nodata values to nan_value
-    # 3. cascade nans (i.e. set SPI3 to nan_value where SPI1 is nan_value, set SMA to nan_value where SPI3 is nan_value, etc.)
+    # 3. cascade nans if cascade_nans = True (i.e. set SPI3 to nan_value where SPI1 is nan_value, set SMA to nan_value where SPI3 is nan_value, etc.)
 
     if spi3 is None:
         spi3 = np.full_like(spi1, nan_value)
     else:
-        spi3 = np.where(np.logical_or(np.isnan(spi1), np.isnan(spi1)), nan_value, spi3)
+        spi3 = np.where(np.isnan(spi3), nan_value, spi3)
+        if cascade_nans:
+            spi3 = np.where(np.isclose(spi1, nan_value), nan_value, spi3)
 
     if sma is None:
         sma = np.full_like(spi1, nan_value)
     else:
-        sma = np.where(np.logical_or(np.isnan(spi3), np.isnan(sma)), nan_value, sma)
+        sma = np.where(np.isnan(sma), nan_value, sma)
+        if cascade_nans:
+            sma = np.where(np.isclose(spi3, nan_value), nan_value, sma)
     
     if fapar is None:
         fapar = np.full_like(spi1, nan_value)
     else:
-        fapar = np.where(np.logical_or(np.isnan(sma), np.isnan(fapar)), nan_value, fapar)
+        fapar = np.where(np.isnan(fapar), nan_value, fapar)
+        if cascade_nans:
+            fapar = np.where(np.isclose(sma, nan_value), nan_value, fapar)
 
     # Do the same for cdi_p but no cascade here
     cdi_nanval = 8

@@ -14,6 +14,7 @@ from .register_algorithm import as_DRYES_algorithm
 def cdi_jrc(input_data:    dict[str,xr.DataArray],
             previous_data: Optional[dict[str,xr.DataArray]] = None,
             static_data:   Optional[dict[str,xr.DataArray]] = None,
+            cascade_nans:  bool = True
             ) -> dict[str,xr.DataArray]:
 
     # get the xr_template from the spi1 (the only mandatory input)
@@ -23,7 +24,7 @@ def cdi_jrc(input_data:    dict[str,xr.DataArray],
     # prepare the inputs
     input_data = {k:v.values for k,v in input_data.items() if v is not None}
     previous_data = {k:v.values for k,v in previous_data.items() if v is not None}
-    all_inputs = prepare_cdi_inputs(**input_data, **previous_data)
+    all_inputs = prepare_cdi_inputs(**input_data, **previous_data, cascade_nans=cascade_nans)
 
     # get the domain
     domain = static_data['domain'].values
@@ -63,7 +64,8 @@ def cdi_jrc(input_data:    dict[str,xr.DataArray],
 def cdi_jrc_norecovery(
             input_data:    dict[str,xr.DataArray],
             previous_data: Optional[dict[str,xr.DataArray]] = None,
-            static_data:   Optional[dict[str,xr.DataArray]] = None
+            static_data:   Optional[dict[str,xr.DataArray]] = None,
+            cascade_nans: bool = True
             ) -> dict[str,xr.DataArray]:
 
     # get the xr_template from the spi1 (the only mandatory input)
@@ -71,7 +73,7 @@ def cdi_jrc_norecovery(
     xr_template.attrs = {}
 
     # prepare the inputs
-    all_inputs = prepare_cdi_inputs(**input_data, **previous_data)
+    all_inputs = prepare_cdi_inputs(**input_data, **previous_data, cascade_nans = cascade_nans)
 
     # get the domain
     domain = static_data['domain'].values

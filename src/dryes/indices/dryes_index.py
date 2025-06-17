@@ -213,6 +213,7 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
         for ds in data_ds:#[v for k,v in self.io_options.items() if k not in self.parameters and k != "index"]:
             last_ts_data = None
             for case in data_cases.values():
+                if (not ds.has_time and ds.check_data(**case.options)) or '%Y' not in ds.key_pattern: continue
                 now = kwargs.pop('now', None) if last_ts_data is None else last_ts_data.end + timedelta(days = 1)
                 data = ds.get_last_ts(now = now, **case.options, **kwargs)
                 if data is None:

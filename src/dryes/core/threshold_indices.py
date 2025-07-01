@@ -39,7 +39,7 @@ def calc_dintensity(data: np.ndarray, threshold: np.ndarray, direction: int = 1,
         raise ValueError("The data and threshold arrays must have the same shape.")
 
     # calculate the intensity
-    intensity = np.maximum(0, data - threshold * direction)
+    intensity = np.maximum(0, (data - threshold) * direction)
 
     # get the hits
     if get_hits:

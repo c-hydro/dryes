@@ -299,7 +299,7 @@ class DRYESThrBasedIndex(DRYESIndex):
 
                     this_index = self.pool_index(this_daily_index, previous_index,
                                                  options = idx_case.options,
-                                                 n = time.length())
+                                                 n = time.get_length())
 
                     metadata.update(idx_case.options.copy())
                     metadata.update({'reference': f'{reference.start:%d/%m/%Y}-{reference.end:%d/%m/%Y}'})
@@ -550,6 +550,10 @@ class LFI(DRYESThrBasedIndex):
             sduration_prev = pooled_index['sduration']
             sintensity_prev = pooled_index['sintensity']
 
+            # initialise the cumulative intensity and number of events
+            cum_intensity = np.zeros_like(sduration_prev, dtype=np.float32)
+            n_events      = np.zeros_like(sduration_prev, dtype=np.int32)
+
             for i, day in enumerate(days[1:]):
                 pooled_index, _ = self.get_index_pooled(day, pool_case)
                 sduration = pooled_index['sduration']
@@ -559,11 +563,6 @@ class LFI(DRYESThrBasedIndex):
                 # get where the spell ends (pool_case == 6), and when the spell was long enough to be an event
                 spell_ends = pool_cases == 6
                 event_ends = np.logical_and(spell_ends, sduration_prev >= pool_case.options['min_duration'])
-
-                if i == 0:
-                    # first day, we need to initialise the cumulative intensity and number of events
-                    cum_intensity = np.zeros_like(pool_cases)
-                    n_events      = np.zeros_like(pool_cases)
 
                 # get the cumulative intensity and number of events for this day
                 cum_intensity[event_ends] += sintensity_prev[event_ends]
@@ -579,7 +578,7 @@ class LFI(DRYESThrBasedIndex):
                     continue
                     
                 # filter to only calculate the lambda where we have enough events
-                cum_intensity = np.where(n_events >= lambda_case.options['min_nevents'], cum_intensity, np.nan)
+                cum_intensity = np.where(n_events >= lambda_case.options['min_nevents'], cum_intensity, 0)
                 n_events      = np.where(n_events >= lambda_case.options['min_nevents'], n_events, 1e-6)
 
                 # calculate the lambda (lambda = 1/(avg_intensity) = 1/(cum_intensity/n_events))
@@ -732,7 +731,7 @@ class HCWI(DRYESThrBasedIndex):
 
         # the output here should be 3d with the first dimension being the Ttype in the order [min, max]
         if not self._data.check_data(time, **case.options):
-            return None
+            return None, {}
 
         data_ds = self._data.get_data(time, **case.options)
         data_da = data_ds.to_array(self.Ttype_name)   

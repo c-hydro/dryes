@@ -97,4 +97,8 @@ class DRYESAnomaly(DRYESIndex):
                 mask = np.where(parameters['std'] < options['min_std'], True, False)
                 anomaly_data = np.where(mask, np.nan, anomaly_data)
 
+            elif options['type'] == 'percentdelta':
+                mask = np.where(parameters['mean'] < options['min_std'], True, False)
+                anomaly_data = np.where(mask, np.nan, anomaly_data)
+
         return anomaly_data

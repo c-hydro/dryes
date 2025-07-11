@@ -288,7 +288,7 @@ class DRYESThrBasedIndex(DRYESIndex):
                 else:
                     end_time = time.end + timedelta(days = self.max_look_ahead)
                     daily_index, metadata = self.get_index_daily(ts.TimeRange(time.start, end_time), index_daily_case)
-                    iscomplete = daily_index['dintensity'] is not None and daily_index['dintensity'].shape[0] >= self.max_look_ahead
+                    iscomplete = daily_index['dintensity'] is not None and daily_index['dintensity'].shape[0] >= self.max_look_ahead + 1
 
                 for idx_case_id, idx_case in self.cases_pooling[-1].items():
                     if not idx_case_id.startswith(index_daily_case_id):

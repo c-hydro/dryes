@@ -330,25 +330,20 @@ def pool_index(daily_index: dict[str:np.ndarray],
 def calc_thresholds_cdo(data_nc: str,
                         thr_quantile: float,
                         window_size: int,
-                        cdo_path: str = '/usr/bin/cdo',
-                        var_name: str = 'data') -> Generator[xr.DataArray, None, None]:
+                        cdo_path: str = '/usr/bin/cdo') -> str:
     """
     Calculate thresholds using the Climate Data Operators (CDO) tool.
     This function computes thresholds based on a given quantile and window size 
     using CDO commands. It processes the input NetCDF data file to calculate 
     running minimum, running maximum, and the quantile-based thresholds. The 
-    thresholds are returned as a generator of xarray DataArray objects.
+    thresholds are returned as paths to a NetCDF file.
     Parameters:
         data_nc (str): Path to the input NetCDF file containing the data.
         thr_quantile (float): Quantile value (between 0 and 1) used for threshold calculation.
         window_size (int): Size of the moving window for running calculations.
         cdo_path (str, optional): Path to the CDO executable. Defaults to '/usr/bin/cdo'.
-        var_name (str, optional): Name of the variable in the NetCDF file to process. 
-            Defaults to 'data'.
-    Yields:
-        xr.DataArray: Threshold values for each day of the year as an xarray DataArray. 
-        The threshold corresponding to February 29th is calculated as the average of the
-        thresholds for February 28th and March 1st.
+    Returns:
+        str: Path to the NetCDF file containing the calculated thresholds.
     Notes:
         - The function uses subprocess to execute CDO commands, so the CDO tool 
             must be installed and accessible via the specified `cdo_path`.
@@ -368,8 +363,8 @@ def calc_thresholds_cdo(data_nc: str,
     os.environ['CDO_NUMBINS'] = str(CDO_PCTL_NBINS)
 
     # calculate running max and min of data using CDO
-    datamin_nc = f'{tmpdir}/datamin.nc'
-    datamax_nc = f'{tmpdir}/datamax.nc'
+    datamin_nc = data_nc.replace('.nc', '_min.nc')
+    datamax_nc = data_nc.replace('.nc', '_max.nc')
 
     cdo_cmd =  f'{cdo_path} ydrunmin,{window_size},rm=c {data_nc} {datamin_nc}'
     subprocess.run(cdo_cmd, shell = True)
@@ -379,14 +374,35 @@ def calc_thresholds_cdo(data_nc: str,
 
     # calculate the thresholds
     threshold_quantile = int(thr_quantile*100)
-    threshold_nc = f'{tmpdir}/threshold.nc'
+    threshold_nc = data_nc.replace('.nc', '_threshold.nc')
 
     cdo_cmd = f'{cdo_path} ydrunpctl,{threshold_quantile},{window_size},rm=c,pm=r8 {data_nc} {datamin_nc} {datamax_nc} {threshold_nc}'
     subprocess.run(cdo_cmd, shell = True)
 
+    return threshold_nc
+
+def get_thresholds_from_files(thr_files:str|list, var_name='data'):
+    """
+    Extract thresholds from a (list of) NetCDF files. 
+    Thresholds are returned as a generator of xarray DataArray objects.
+    Parameters:
+        thr_files (str or list): Path to the input NetCDF file(s) containing the data.
+        var_name (str, optional): Name of the variable in the NetCDF file to process. 
+            Defaults to 'data'.
+    Yields:
+        xr.DataArray: Threshold values for each day of the year as an xarray DataArray. 
+        The threshold corresponding to February 29th is calculated as the average of the
+        thresholds for February 28th and March 1st.
+    Notes:
+        - If the input is a list of files, the files are merged along the spatial dimensions.
+    """
+
     # read the threshold data as Dataset
-    thresholds = xr.open_dataset(threshold_nc)
-    
+    if isinstance(thr_files, list):
+        thresholds = xr.open_mfdataset(thr_files, combine='by_coords')
+    else:
+        thresholds = xr.open_dataset(thr_files)
+
     # extract the data as DataArray
     thresholds_da = thresholds[var_name]
 

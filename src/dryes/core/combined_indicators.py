@@ -536,6 +536,7 @@ def cdi_norec(spi1:  np.ndarray,
     #w2 case
     mask_case_w2a = cdi_p_3 & (fapar_gtth & fapar_lt0) & zspi_0 & sma_gtm1
     cdi[mask_case_w2a]= 2
+    cases[mask_case_w2a] = 1236
 
     #w8 case
     mask_case_w7a = cdi_p_3 & fapar_gt0 & sma_gtm1 & zspi_0   

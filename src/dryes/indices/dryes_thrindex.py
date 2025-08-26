@@ -209,9 +209,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         days = history.days
         
         data_case.options.update(var_tags)
-        #tmpdir = tempfile.mkdtemp()
-
-        tmpdir = 'test'
+        tmpdir = tempfile.mkdtemp()
 
         import netCDF4
 

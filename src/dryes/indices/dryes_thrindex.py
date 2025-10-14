@@ -665,7 +665,7 @@ class LFI(DRYESThrBasedIndex):
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
 
     def get_last_ts_index(self, **kwargs) -> ts.TimeStep:
-        index_norm_cases = self.self.cases_normalising[-1]
+        index_norm_cases = self.cases_normalising[-1]
         last_ts_norm_index = None
         for case in index_norm_cases.values():
             now = kwargs.pop('now', None) if last_ts_norm_index is None else last_ts_norm_index.end + timedelta(days = 1)

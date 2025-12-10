@@ -120,11 +120,11 @@ def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dic
         if par not in parameters.keys():
             raise ValueError(f"Missing parameter {par} for {distribution} distribution.")
 
-    # remove the zeros, if we have a gamma distribution
-    if distribution == 'gamma':
-        iszero = data <= zero_threshold
-        iszero = np.where(np.isnan(data), np.nan, iszero)
-        data   = np.where(iszero, 0, data)
+    # # remove the zeros, if we have a gamma distribution
+    # if distribution == 'gamma':
+    #     iszero = data <= zero_threshold
+    #     iszero = np.where(np.isnan(data), np.nan, iszero)
+    #     data   = np.where(iszero, 0, data)
 
     # get the probability of the data to be in the fitted distribution
     probVal = get_prob(data, distribution, parameters)

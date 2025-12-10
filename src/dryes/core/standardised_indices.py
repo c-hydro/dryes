@@ -232,8 +232,8 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
     # correct for the probability of zero, if needed
     probVal = prob0 + ((1 - prob0) * probVal)
 
-    probVal = np.where(probVal == 0, corr_extremes, probVal)
-    probVal = np.where(probVal == 1, 1 - corr_extremes, probVal)
+    probVal = np.where(probVal < corr_extremes, corr_extremes, probVal)
+    probVal = np.where(probVal > 1 - corr_extremes, 1 - corr_extremes, probVal)
 
     return probVal
 

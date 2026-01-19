@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dryes"
-version = "3.2.4"
+version = "3.3.0"
 description = "A package to compute operational indicators for drought risk assessment, developed by CIMA Research Foundation"
 authors = [
     { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" },
@@ -16,34 +16,24 @@ maintainers = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: ECPL License",
     "Operating System :: OS Independent",
 ]
+# Note: d3tools uses version pinning for compatibility
+# For development: uv pip install -e ../d3tools
+# For production: Install d3tools from git+https://github.com/c-hydro/d3tools@main first
 dependencies = [
-    "d3tools@git+https://github.com/c-hydro/d3tools",
-    "numpy>=1.21.5",
-    "python_dateutil>=2.8.1",
-    "xarray>=2024.3.0",
-    "astropy>=6.1.2",
-    "scipy>=1.8.0",
-    "lmoments3>=1.0.6",
-    "netCDF4>=1.5.8",
+    "numpy~=2.3.5",
+    "xarray~=2025.11.0",
+    "astropy~=7.2.0",
+    "scipy~=1.17.0",
+    "lmoments3~=1.0.8",
+    "netCDF4~=1.7.3",
+    "h5netcdf~=1.7.3",
+    "d3tools>=2.3.0,<3.0.0"
 ]
-
 [project.urls]
 Repository = "https://github.com/c-hydro/dryes"
-
-[project.optional-dependencies]
-
-# dependencies for creating thumbnails
-thumbnails = [
-    "d3tools[thumbnails]@git+https://github.com/c-hydro/d3tools"
-]
-
-# dependencies for reading and writing remote data
-remote-data = [
-    "d3tools[remote-data]@git+https://github.com/c-hydro/d3tools"
-]

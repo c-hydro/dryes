@@ -130,11 +130,29 @@ class DRYESIndex(ABC, metaclass=MetaDRYESIndex):
 
     # CLASS METHODS FOR FACTORY
     @classmethod
-    def from_options(cls, index_options: dict, io_options: dict, run_options: dict) -> 'DRYESIndex':
-        index_name = index_options.pop('index_name', None) or index_options.pop('index', None)
+    def from_options(
+        cls,
+        index_options: dict,
+        io_options: dict,
+        run_options: Optional[dict] = None,
+    ) -> 'DRYESIndex':
+        if not isinstance(index_options, dict):
+            raise TypeError("'index_options' must be a mapping")
+        if not isinstance(io_options, dict):
+            raise TypeError("'io_options' must be a mapping")
+        if run_options is None:
+            run_options = {}
+        elif not isinstance(run_options, dict):
+            raise TypeError("'run_options' must be a mapping or None")
+
+        parsed_index_options = index_options.copy()
+        index_name = parsed_index_options.pop('index_name', None) or parsed_index_options.pop('index', None)
+        if index_name is None and cls is DRYESIndex:
+            raise ValueError("Missing required 'index_name' or 'index' in index options")
+
         index_name = cls.get_index_name(index_name)
         Subclass: 'DRYESIndex' = cls.get_subclass(index_name)
-        return Subclass(io_options, index_options, run_options)
+        return Subclass(io_options, parsed_index_options, run_options)
 
     @classmethod
     def get_subclass(cls, index_name: str):

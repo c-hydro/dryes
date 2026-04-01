@@ -839,7 +839,7 @@ class CWI(HCWI):
     }
 
 import h5py
-def append_one_day_h5(file_path, da_day, time, origin=np.datetime64('1900-01-01')):
+def append_one_day_h5(file_path: str, val_day: np.ndarray, time: datetime, origin: datetime=datetime(1900,1,1)) -> None:
     # da_day is 2D (y, x) for one day (or one chunk slice)
     with h5py.File(file_path, "a") as f:
         t = f["time"]
@@ -850,6 +850,6 @@ def append_one_day_h5(file_path, da_day, time, origin=np.datetime64('1900-01-01'
         d.resize((i + 1, d.shape[1], d.shape[2]))
 
         # numeric days since origin (no netCDF4.date2num needed)
-        t_val = (np.datetime64(time, "ns") - origin) / np.timedelta64(1, "D")
+        t_val = (np.datetime64(time, "ns") - np.datetime64(origin, "ns")) / np.timedelta64(1, "D")
         t[i] = float(t_val)
-        d[i, :, :] = da_day.values
+        d[i, :, :] = val_day

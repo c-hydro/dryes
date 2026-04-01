@@ -355,7 +355,7 @@ def calc_thresholds_cdo(data_nc: str,
     tmpdir = os.path.dirname(data_nc)
 
     # set the number of bins in CDO as an environment variable   
-    data_ds = xr.open_dataset(data_nc)
+    data_ds = xr.open_dataset(data_nc, engine = 'h5netcdf')
     history_start = data_ds.time.min().values
     history_end = data_ds.time.max().values
     data_ds.close() 
@@ -399,9 +399,9 @@ def get_thresholds_from_files(thr_files:str|list, var_name='data'):
 
     # read the threshold data as Dataset
     if isinstance(thr_files, list):
-        thresholds = xr.open_mfdataset(thr_files, combine='by_coords')
+        thresholds = xr.open_mfdataset(thr_files, combine='by_coords', engine = 'h5netcdf')
     else:
-        thresholds = xr.open_dataset(thr_files)
+        thresholds = xr.open_dataset(thr_files, engine = 'h5netcdf')
 
     # extract the data as DataArray
     thresholds_da = thresholds[var_name]

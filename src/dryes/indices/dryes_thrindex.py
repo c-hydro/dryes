@@ -226,12 +226,12 @@ class DRYESThrBasedIndex(DRYESIndex):
             for sl, file in zip(slices, data_nc):
                 c_da0 = da0.isel({da0.rio.x_dim: sl})
                 c_ds0: xr.Dataset = c_da0.to_dataset(name = 'data')
-                c_ds0.to_netcdf(file, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}})
+                c_ds0.to_netcdf(file, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}}, engine = 'h5netcdf')
         else:
             n_chunks = 1
             data_nc = f'{tmpdir}/data.nc'
             ds0: xr.Dataset = da0.to_dataset(name="data")
-            ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}})
+            ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}}, engine = 'h5netcdf')
         
         unit = f'days since {days[0].start:%Y-%m-%d}'
         # Append data incrementally

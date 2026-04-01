@@ -211,8 +211,6 @@ class DRYESThrBasedIndex(DRYESIndex):
         data_case.options.update(var_tags)
         tmpdir = tempfile.mkdtemp()
 
-        import netCDF4
-
         da0 = var.get_data(days[0], **data_case.options).squeeze().expand_dims("time").assign_coords(time=[days[0].start])
         
         size = da0.size * len(days)
@@ -233,21 +231,16 @@ class DRYESThrBasedIndex(DRYESIndex):
             ds0: xr.Dataset = da0.to_dataset(name="data")
             ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}}, engine = 'h5netcdf')
         
-        unit = f'days since {days[0].start:%Y-%m-%d}'
+        origin = days[0].start
         # Append data incrementally
         for day in days[1:]:
             da = var.get_data(day, as_is = True, **data_case.options).squeeze().expand_dims("time").assign_coords(time=[day.start])
             if n_chunks > 1:
                 for sl, file in zip(slices, data_nc):
-                    with netCDF4.Dataset(file, mode="a") as ncfile:
-                        time_index = len(ncfile.variables["time"])
-                        ncfile.variables["time"][time_index] = netCDF4.date2num(day.start, units=unit)
-                        ncfile.variables["data"][time_index, :, :] = da.isel({da.rio.x_dim: sl}).values
+                    da_day = da.isel({da.rio.x_dim: sl})
+                    append_one_day_h5(file, da_day.values, day.start, origin)
             else:
-                with netCDF4.Dataset(data_nc, mode="a") as ncfile:
-                    time_index = len(ncfile.variables["time"])
-                    ncfile.variables["time"][time_index] = netCDF4.date2num(day.start, units=unit)
-                    ncfile.variables["data"][time_index, :, :] = da.values
+                append_one_day_h5(data_nc, da.values, day.start, origin)
 
         # get the timesteps for which we need to calculate the parameters - thresholds are always daily (incl. 29th Feb)
         timesteps:list[ts.TimeStep] = ts.TimeRange('1904-01-01', '1904-12-31').days
@@ -844,3 +837,19 @@ class CWI(HCWI):
     default_options = {
         'thr_quantile' : 0.1, # quantile for the threshold calculation
     }
+
+import h5py
+def append_one_day_h5(file_path, da_day, time, origin=np.datetime64('1900-01-01')):
+    # da_day is 2D (y, x) for one day (or one chunk slice)
+    with h5py.File(file_path, "a") as f:
+        t = f["time"]
+        d = f["data"]
+
+        i = t.shape[0]
+        t.resize((i + 1,))
+        d.resize((i + 1, d.shape[1], d.shape[2]))
+
+        # numeric days since origin (no netCDF4.date2num needed)
+        t_val = (np.datetime64(time, "ns") - origin) / np.timedelta64(1, "D")
+        t[i] = float(t_val)
+        d[i, :, :] = da_day.values

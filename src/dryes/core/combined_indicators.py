@@ -609,7 +609,8 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
                        cdi_p: np.ndarray|None = None,
                        count_sma_recovery:   np.ndarray|None = None,
                        count_fapar_recovery: np.ndarray|None = None,
-                       cascade_nans: bool = True
+                       cascade_nans: bool = True,
+                       correct_overwetting: bool = False
                        ) -> tuple[np.ndarray]: 
     """
     Prepare the inputs for the CDI calculation by masking and setting nodata values.
@@ -634,6 +635,7 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
         count_sma_recovery   (np.ndarray|None): Count of SMA recovery periods.
         count_fapar_recovery (np.ndarray|None): Count of fAPAR recovery periods.
         cascade_nans (bool): If True, cascade the nodata values from SPI1 to SPI3, SMA, and fAPAR.
+        correct_overwetting (bool): If True, correct the over-wetting issue in the FAPAR layer by setting FAPAR to 255 also where SPI1 is >= 1.5.
     Returns:
         tuple: A tuple containing:
             - spi1  (np.ndarray): The SPI1 values with nodata values set to 255.
@@ -649,6 +651,7 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
     nan_value = 255
 
     # start with SPI1, which is the only mandatory input
+    spi1_overwet_mask = spi1>=1.5 # extract the mask for the over-wetting issue before correcting the nans
     spi1 = np.where(np.isnan(spi1),  nan_value, spi1)
 
     # continue with SPI3, SMA and fAPAR
@@ -677,6 +680,8 @@ def prepare_cdi_inputs(spi1:  np.ndarray,
         fapar = np.where(np.isnan(fapar), nan_value, fapar)
         if cascade_nans:
             fapar = np.where(np.isclose(sma, nan_value), nan_value, fapar)
+        if correct_overwetting:
+            fapar = np.where(spi1_overwet_mask, nan_value, fapar)
 
     # Do the same for cdi_p but no cascade here
     cdi_nanval = 8

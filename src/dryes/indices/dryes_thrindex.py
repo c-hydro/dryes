@@ -88,6 +88,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         'pool_if_uncertain' : 1,      # 0: False, reset the counters;
                                       # 1: True, but don't increase intensity and duration even if count_with_pools;
                                       # 2: True, increase intensity and duration if count_with_pools.
+        'repeat_daily'      : False,  # if True, the calculatopm of the daily index will be repeated even if the data already exists, this is useful if the daily index depends on the pooling.
 
         'cdo_path'     :  '/usr/bin/cdo', # path to the cdo executable, to calculate the thresholds
 
@@ -273,11 +274,12 @@ class DRYESThrBasedIndex(DRYESIndex):
         # adjust the current considering we might need some look-ahead time
         extended_current = current.extend(ts.TimeWindow(self.max_look_ahead, 'd'))
 
-        ## figure out the last daily index, to adjust current if needed
-        last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
+        last_daily = ts.Day.from_date(current.start) - 1
+        if not self.options.get('repeat_daily', False):
+            ## figure out the last daily index, to adjust current if needed
+            last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
 
         # make the daily index here:
-        if last_daily is None: last_daily = ts.Day.from_date(current.start) - 1
         if last_daily.end < extended_current.end:
             daily_tr = ts.TimeRange(last_daily.start + timedelta(days = 1), extended_current.end)
             super()._make_index(daily_tr, reference, 'd')
@@ -838,10 +840,11 @@ class CWI(HCWI):
         'thr_quantile' : 0.1, # quantile for the threshold calculation
     }
 
-import h5py
+
 def append_one_day_h5(file_path: str, val_day: np.ndarray, time: datetime, origin: datetime=datetime(1900,1,1)) -> None:
+    from h5py import File
     # da_day is 2D (y, x) for one day (or one chunk slice)
-    with h5py.File(file_path, "a") as f:
+    with File(file_path, "a") as f:
         t = f["time"]
         d = f["data"]
 

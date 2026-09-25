@@ -15,7 +15,7 @@ PARAMETERS = {
     'genlog':   ['loc', 'scale', 'k']
 }
 
-def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01) -> np.ndarray:
+def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01, corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculate the SPI of the given (precipitation) data.
     Parameters:
@@ -30,7 +30,7 @@ def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01) -
     Returns:
         np.ndarray: The calculated SPI values.
     """
-    return calc_standardised_index(data, 'gamma', parameters, zero_threshold)
+    return calc_standardised_index(data, 'gamma', parameters, zero_threshold, corr_extremes)
 
 def fit_spi(data: np.ndarray, min_n: int = 0, zero_threshold: float = 0.01) -> dict:
     """
@@ -56,7 +56,7 @@ def fit_spi(data: np.ndarray, min_n: int = 0, zero_threshold: float = 0.01) -> d
     """
     return fit_data(data, 'gamma', min_n, zero_threshold)
 
-def calc_spei(data: np.ndarray, parameters: dict) -> np.ndarray:
+def calc_spei(data: np.ndarray, parameters: dict, corr_extremes: float = 0) -> np.ndarray:
     """
     Calculate the SPEI of the given (water balance) data.
     Parameters:
@@ -69,7 +69,7 @@ def calc_spei(data: np.ndarray, parameters: dict) -> np.ndarray:
     Returns:
         np.ndarray: The calculated SPEI values.
     """
-    return calc_standardised_index(data, 'genlog', parameters)
+    return calc_standardised_index(data, 'genlog', parameters, corr_extremes=corr_extremes)
 
 def fit_spei(data: np.ndarray, min_n: int = 0):
     """
@@ -217,10 +217,10 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
         # genlog distribution is not in scipy.stats, so we use lmoments3
         probVal = distr.glo.cdf(data, **pars)
 
-        # distr.glo.cdf returns NaN for values outside the support of the distribution
+        # distr.glo.cdf returns values above 1 or below 0 where the data is outside the support of the distribution
         # these should be set to 0 or 1 depending on the sign of the shape parameter 'k'
-        probVal = np.where(np.isnan(probVal) & (np.sign(pars['k']) < 0), 0, probVal)
-        probVal = np.where(np.isnan(probVal) & (np.sign(pars['k']) > 0), 1, probVal)
+        probVal = np.where(((probVal < 0) | (probVal > 1)) & (np.sign(pars['k']) < 0), 0, probVal)
+        probVal = np.where(((probVal < 0) | (probVal > 1)) & (np.sign(pars['k']) > 0), 1, probVal)
     
     else:
         if distribution == 'gamma':

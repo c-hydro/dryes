@@ -27,7 +27,7 @@ class DRYESStandardisedIndex(DRYESIndex):
     option_cases = {
         'parameters_1' : ['distribution', 'zero_threshold', 'pval_check'],
         'parameters_2' : ['pval_threshold', 'min_reference'],
-        'index'        : ['zero_threshold'],
+        'index'        : ['zero_threshold', 'corr_extremes'],
     }
     
     distr_par = {

@@ -5,13 +5,14 @@ import tempfile
 import shutil
 import copy
 import warnings
+import os
 
 from .dryes_index import DRYESIndex
 
 import d3tools.timestepping as ts
 from d3tools.cases import CaseManager
 
-from ..core.threshold_indices import calc_thresholds_cdo, pool_index, calc_dintensity
+from ..core.threshold_indices import calc_thresholds_cdo, get_thresholds_from_files, pool_index, calc_dintensity
 
 class DRYESThrBasedIndex(DRYESIndex):
     """
@@ -87,6 +88,7 @@ class DRYESThrBasedIndex(DRYESIndex):
         'pool_if_uncertain' : 1,      # 0: False, reset the counters;
                                       # 1: True, but don't increase intensity and duration even if count_with_pools;
                                       # 2: True, increase intensity and duration if count_with_pools.
+        'repeat_daily'      : False,  # if True, the calculatopm of the daily index will be repeated even if the data already exists, this is useful if the daily index depends on the pooling.
 
         'cdo_path'     :  '/usr/bin/cdo', # path to the cdo executable, to calculate the thresholds
 
@@ -210,23 +212,36 @@ class DRYESThrBasedIndex(DRYESIndex):
         data_case.options.update(var_tags)
         tmpdir = tempfile.mkdtemp()
 
-        # Create a temporary NetCDF file to store the concatenated data
-        data_nc = f'{tmpdir}/data.nc'
-
-        import netCDF4
-
         da0 = var.get_data(days[0], **data_case.options).squeeze().expand_dims("time").assign_coords(time=[days[0].start])
-        ds0: xr.Dataset = da0.to_dataset(name="data")
-        ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}})
-        unit = f'days since {days[0].start:%Y-%m-%d}'
-
+        
+        size = da0.size * len(days)
+        max_size = int(os.getenv('MAX_SIZE_THR', 1e9))
+        if size > max_size:
+            xsize = da0[da0.rio.x_dim].size
+            n_chunks = int(size / max_size) + 1
+            chunk_size = int(xsize / n_chunks)
+            slices  = [slice(n*chunk_size, (n+1)*chunk_size if n < n_chunks-1 else xsize) for n in range(n_chunks)]
+            data_nc = [f'{tmpdir}/data_{n}.nc' for n in range(n_chunks)]
+            for sl, file in zip(slices, data_nc):
+                c_da0 = da0.isel({da0.rio.x_dim: sl})
+                c_ds0: xr.Dataset = c_da0.to_dataset(name = 'data')
+                c_ds0.to_netcdf(file, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}}, engine = 'h5netcdf')
+        else:
+            n_chunks = 1
+            data_nc = f'{tmpdir}/data.nc'
+            ds0: xr.Dataset = da0.to_dataset(name="data")
+            ds0.to_netcdf(data_nc, mode="w", unlimited_dims = ['time'], encoding={'data': {'zlib' : True, 'complevel': 4}}, engine = 'h5netcdf')
+        
+        origin = days[0].start
         # Append data incrementally
         for day in days[1:]:
             da = var.get_data(day, as_is = True, **data_case.options).squeeze().expand_dims("time").assign_coords(time=[day.start])
-            with netCDF4.Dataset(data_nc, mode="a") as ncfile:
-                time_index = len(ncfile.variables["time"])
-                ncfile.variables["time"][time_index] = netCDF4.date2num(day.start, units=unit)
-                ncfile.variables["data"][time_index, :, :] = da.values
+            if n_chunks > 1:
+                for sl, file in zip(slices, data_nc):
+                    da_day = da.isel({da.rio.x_dim: sl})
+                    append_one_day_h5(file, da_day.values, day.start, origin)
+            else:
+                append_one_day_h5(data_nc, da.values, day.start, origin)
 
         # get the timesteps for which we need to calculate the parameters - thresholds are always daily (incl. 29th Feb)
         timesteps:list[ts.TimeStep] = ts.TimeRange('1904-01-01', '1904-12-31').days
@@ -240,8 +255,12 @@ class DRYESThrBasedIndex(DRYESIndex):
             thr_quantile = thr_case.options['thr_quantile']
             thr_window   = thr_case.options['thr_window']
             cdo_path     = thr_case.options['cdo_path']
-            thresholds = calc_thresholds_cdo(data_nc, thr_quantile, thr_window, cdo_path, var_name = 'data')
+            if n_chunks > 1:
+                thr_files = [calc_thresholds_cdo(data_file, thr_quantile, thr_window, cdo_path) for data_file in data_nc]
+            else:
+                thr_files = calc_thresholds_cdo(data_nc, thr_quantile, thr_window, cdo_path)
 
+            thresholds = get_thresholds_from_files(thr_files, var_name = 'data')
             for time, thr_data in zip(timesteps, thresholds):
                 metadata = thr_case.options.copy()
                 metadata.update({'reference': f'{history.start:%d/%m/%Y}-{history.end:%d/%m/%Y}'})
@@ -255,11 +274,12 @@ class DRYESThrBasedIndex(DRYESIndex):
         # adjust the current considering we might need some look-ahead time
         extended_current = current.extend(ts.TimeWindow(self.max_look_ahead, 'd'))
 
-        ## figure out the last daily index, to adjust current if needed
-        last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
+        last_daily = ts.Day.from_date(current.start) - 1
+        if not self.options.get('repeat_daily', False):
+            ## figure out the last daily index, to adjust current if needed
+            last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
 
         # make the daily index here:
-        if last_daily is None: last_daily = ts.Day.from_date(current.start) - 1
         if last_daily.end < extended_current.end:
             daily_tr = ts.TimeRange(last_daily.start + timedelta(days = 1), extended_current.end)
             super()._make_index(daily_tr, reference, 'd')
@@ -640,7 +660,7 @@ class LFI(DRYESThrBasedIndex):
                     self._index_norm.write_data(normal_intensity, time = time, metadata = metadata, **tags)
 
     def get_last_ts_index(self, **kwargs) -> ts.TimeStep:
-        index_norm_cases = self.self.cases_normalising[-1]
+        index_norm_cases = self.cases_normalising[-1]
         last_ts_norm_index = None
         for case in index_norm_cases.values():
             now = kwargs.pop('now', None) if last_ts_norm_index is None else last_ts_norm_index.end + timedelta(days = 1)
@@ -819,3 +839,20 @@ class CWI(HCWI):
     default_options = {
         'thr_quantile' : 0.1, # quantile for the threshold calculation
     }
+
+
+def append_one_day_h5(file_path: str, val_day: np.ndarray, time: datetime, origin: datetime=datetime(1900,1,1)) -> None:
+    from h5py import File
+    # da_day is 2D (y, x) for one day (or one chunk slice)
+    with File(file_path, "a") as f:
+        t = f["time"]
+        d = f["data"]
+
+        i = t.shape[0]
+        t.resize((i + 1,))
+        d.resize((i + 1, d.shape[1], d.shape[2]))
+
+        # numeric days since origin (no netCDF4.date2num needed)
+        t_val = (np.datetime64(time, "ns") - np.datetime64(origin, "ns")) / np.timedelta64(1, "D")
+        t[i] = float(t_val)
+        d[i, :, :] = val_day

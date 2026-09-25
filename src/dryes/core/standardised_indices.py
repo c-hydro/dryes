@@ -93,7 +93,7 @@ def fit_spei(data: np.ndarray, min_n: int = 0):
     """
     return fit_data(data, 'genlog', min_n)
 
-def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dict, zero_threshold: float = 0.01) -> np.ndarray:
+def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dict, zero_threshold: float = 0.01, corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculate the fitted standardised anomaly of the given data using the specified method.
     Parameters:
@@ -129,7 +129,7 @@ def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dic
         data   = np.where(iszero, np.nan, data)
 
     # get the probability of the data to be in the fitted distribution
-    probVal = get_prob(data, distribution, parameters)
+    probVal = get_prob(data, distribution, parameters, corr_extremes)
 
     # map the probability values to a standard normal distribution
     return map_prob_to_normal(probVal)
@@ -178,7 +178,7 @@ def fit_data(data: np.ndarray, distribution: str, min_n: int = 0, zero_threshold
 
     return parameters
 
-def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes = None) -> np.ndarray:
+def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculates the probability of the data to be in a fitted distribution.
     Parameters:
@@ -194,7 +194,7 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
                             - 'beta': ['a', 'b']
                             - 'genlog': ['loc', 'scale', 'k']
                             Additionally, 'prob0' can be included to correct for the probability of zero.
-        corr_extremes (float): A small value to correct extreme probabilities. Can be set with environment variable DRYES_CORR_EXTREMES or defaults to 1e-7.
+        corr_extremes (float): A small value to correct extreme probabilities. Defaults to 1e-7.
     Returns:
         np.ndarray: The calculated probability values.
     Raises:
@@ -203,9 +203,6 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
 
     if distribution not in PARAMETERS.keys():
         raise ValueError(f"Unknown distribution {distribution}.")
-
-    if corr_extremes is None:
-        corr_extremes = float(os.getenv('DRYES_CORR_EXTREMES', 1e-7))
 
     # extract only the parameters for this distribution
     pars = {k:parameters[k] for k in PARAMETERS[distribution]}

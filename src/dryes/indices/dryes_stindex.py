@@ -18,6 +18,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         'pval_threshold' : None,
         'min_reference'  : 5,
         'zero_threshold' : 0.0001,
+        'corr_extremes'  : 1e-7,
         
         # derived options
         'pval_check'     : False
@@ -135,7 +136,7 @@ class DRYESStandardisedIndex(DRYESIndex):
         if distribution == 'gamma': pars['prob0'] = parameters['prob0']
 
         # calculate and return the standardised index
-        return calc_standardised_index(data, distribution, pars, options['zero_threshold'])
+        return calc_standardised_index(data, distribution, pars, options['zero_threshold'], options['corr_extremes'])
     
 class SPI(DRYESStandardisedIndex):
     index_name = 'SPI'

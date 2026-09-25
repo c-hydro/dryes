@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from lmoments3 import distr
 import scipy.stats as stat
@@ -176,7 +178,7 @@ def fit_data(data: np.ndarray, distribution: str, min_n: int = 0, zero_threshold
 
     return parameters
 
-def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes = 1e-7) -> np.ndarray:
+def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes = None) -> np.ndarray:
     """
     Calculates the probability of the data to be in a fitted distribution.
     Parameters:
@@ -192,7 +194,7 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
                             - 'beta': ['a', 'b']
                             - 'genlog': ['loc', 'scale', 'k']
                             Additionally, 'prob0' can be included to correct for the probability of zero.
-        corr_extremes (float): A small value to correct extreme probabilities. Defaults to 1e-7.
+        corr_extremes (float): A small value to correct extreme probabilities. Can be set with environment variable DRYES_CORR_EXTREMES or defaults to 1e-7.
     Returns:
         np.ndarray: The calculated probability values.
     Raises:
@@ -201,6 +203,9 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
 
     if distribution not in PARAMETERS.keys():
         raise ValueError(f"Unknown distribution {distribution}.")
+
+    if corr_extremes is None:
+        corr_extremes = float(os.getenv('DRYES_CORR_EXTREMES', 1e-7))
 
     # extract only the parameters for this distribution
     pars = {k:parameters[k] for k in PARAMETERS[distribution]}
@@ -214,6 +219,11 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
     if distribution == 'genlog':
         # genlog distribution is not in scipy.stats, so we use lmoments3
         probVal = distr.glo.cdf(data, **pars)
+
+        # distr.glo.cdf returns NaN for values outside the support of the distribution
+        # these should be set to 0 or 1 depending on the sign of the shape parameter 'k'
+        probVal = np.where(np.isnan(probVal) & (np.sign(pars['k']) < 0), 0, probVal)
+        probVal = np.where(np.isnan(probVal) & (np.sign(pars['k']) > 0), 1, probVal)
     
     else:
         if distribution == 'gamma':
@@ -229,8 +239,8 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
 
         probVal = randvar.cdf(data, **pars)
 
-    # correct for the probability of zero, if needed
-    probVal = prob0 + ((1 - prob0) * probVal)
+        # correct for the probability of zero, if needed
+        probVal = prob0 + ((1 - prob0) * probVal)
 
     probVal = np.where(probVal == 0, corr_extremes, probVal)
     probVal = np.where(probVal == 1, 1 - corr_extremes, probVal)

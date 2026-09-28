@@ -217,10 +217,11 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
         # genlog distribution is not in scipy.stats, so we use lmoments3
         probVal = distr.glo.cdf(data, **pars)
 
-        # distr.glo.cdf returns values above 1 or below 0 where the data is outside the support of the distribution
+        # distr.glo.cdf returns nan or values above 1 or below 0 where the data is outside the support of the distribution
+        invalid_prob = (np.isnan(probVal) | (probVal < 0) | (probVal > 1)) & ~np.isnan(data)
         # these should be set to 0 or 1 depending on the sign of the shape parameter 'k'
-        probVal = np.where(((probVal < 0) | (probVal > 1)) & (np.sign(pars['k']) < 0), 0, probVal)
-        probVal = np.where(((probVal < 0) | (probVal > 1)) & (np.sign(pars['k']) > 0), 1, probVal)
+        probVal = np.where(invalid_prob & (np.sign(pars['k']) < 0), 0, probVal)
+        probVal = np.where(invalid_prob & (np.sign(pars['k']) > 0), 1, probVal)
     
     else:
         if distribution == 'gamma':

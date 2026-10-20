@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from lmoments3 import distr
 import scipy.stats as stat
@@ -13,7 +15,7 @@ PARAMETERS = {
     'genlog':   ['loc', 'scale', 'k']
 }
 
-def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01) -> np.ndarray:
+def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01, corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculate the SPI of the given (precipitation) data.
     Parameters:
@@ -28,7 +30,7 @@ def calc_spi(data: np.ndarray, parameters: dict, zero_threshold: float = 0.01) -
     Returns:
         np.ndarray: The calculated SPI values.
     """
-    return calc_standardised_index(data, 'gamma', parameters, zero_threshold)
+    return calc_standardised_index(data, 'gamma', parameters, zero_threshold, corr_extremes)
 
 def fit_spi(data: np.ndarray, min_n: int = 0, zero_threshold: float = 0.01) -> dict:
     """
@@ -54,7 +56,7 @@ def fit_spi(data: np.ndarray, min_n: int = 0, zero_threshold: float = 0.01) -> d
     """
     return fit_data(data, 'gamma', min_n, zero_threshold)
 
-def calc_spei(data: np.ndarray, parameters: dict) -> np.ndarray:
+def calc_spei(data: np.ndarray, parameters: dict, corr_extremes: float = 0) -> np.ndarray:
     """
     Calculate the SPEI of the given (water balance) data.
     Parameters:
@@ -67,7 +69,7 @@ def calc_spei(data: np.ndarray, parameters: dict) -> np.ndarray:
     Returns:
         np.ndarray: The calculated SPEI values.
     """
-    return calc_standardised_index(data, 'genlog', parameters)
+    return calc_standardised_index(data, 'genlog', parameters, corr_extremes=corr_extremes)
 
 def fit_spei(data: np.ndarray, min_n: int = 0):
     """
@@ -91,7 +93,7 @@ def fit_spei(data: np.ndarray, min_n: int = 0):
     """
     return fit_data(data, 'genlog', min_n)
 
-def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dict, zero_threshold: float = 0.01) -> np.ndarray:
+def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dict, zero_threshold: float = 0.01, corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculate the fitted standardised anomaly of the given data using the specified method.
     Parameters:
@@ -127,7 +129,7 @@ def calc_standardised_index(data: np.ndarray, distribution: str, parameters: dic
         data   = np.where(iszero, np.nan, data)
 
     # get the probability of the data to be in the fitted distribution
-    probVal = get_prob(data, distribution, parameters)
+    probVal = get_prob(data, distribution, parameters, corr_extremes)
 
     # map the probability values to a standard normal distribution
     return map_prob_to_normal(probVal)
@@ -176,7 +178,7 @@ def fit_data(data: np.ndarray, distribution: str, min_n: int = 0, zero_threshold
 
     return parameters
 
-def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes = 1e-7) -> np.ndarray:
+def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarray], corr_extremes: float = 1e-7) -> np.ndarray:
     """
     Calculates the probability of the data to be in a fitted distribution.
     Parameters:
@@ -214,6 +216,12 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
     if distribution == 'genlog':
         # genlog distribution is not in scipy.stats, so we use lmoments3
         probVal = distr.glo.cdf(data, **pars)
+
+        # distr.glo.cdf returns nan or values above 1 or below 0 where the data is outside the support of the distribution
+        invalid_prob = (np.isnan(probVal) | (probVal < 0) | (probVal > 1)) & ~np.isnan(data)
+        # these should be set to 0 or 1 depending on the sign of the shape parameter 'k'
+        probVal = np.where(invalid_prob & (np.sign(pars['k']) < 0), 0, probVal)
+        probVal = np.where(invalid_prob & (np.sign(pars['k']) > 0), 1, probVal)
     
     else:
         if distribution == 'gamma':
@@ -229,8 +237,8 @@ def get_prob(data: np.ndarray, distribution: str, parameters: dict[str:np.ndarra
 
         probVal = randvar.cdf(data, **pars)
 
-    # correct for the probability of zero, if needed
-    probVal = prob0 + ((1 - prob0) * probVal)
+        # correct for the probability of zero, if needed
+        probVal = prob0 + ((1 - prob0) * probVal)
 
     probVal = np.where(probVal == 0, corr_extremes, probVal)
     probVal = np.where(probVal == 1, 1 - corr_extremes, probVal)

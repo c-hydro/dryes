@@ -277,7 +277,9 @@ class DRYESThrBasedIndex(DRYESIndex):
         last_daily = ts.Day.from_date(current.start) - 1
         if not self.options.get('repeat_daily', False):
             ## figure out the last daily index, to adjust current if needed
-            last_daily  = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
+            last_daily_found = self.get_last_ts_index_daily(now = extended_current.end, lim = current.start)
+            if last_daily_found is not None:
+                last_daily = last_daily_found
 
         # make the daily index here:
         if last_daily.end < extended_current.end:
